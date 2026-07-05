@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import { TrendingUp, TrendingDown } from 'lucide-react';
+import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 
 interface PriceTickerProps {
   price: number;
