@@ -136,18 +136,34 @@ export async function fetchYahooQuote(
 
 export async function fetchYahooOHLCV(
   symbol: string, 
-  marketType: 'stocks' | 'forex' | 'crypto'
+  marketType: 'stocks' | 'forex' | 'crypto',
+  timeframe: string = '1D'
 ): Promise<OHLCV[]> {
   try {
     const yahooSymbol = mapSymbolToYahoo(symbol, marketType);
     
-    // Fetch last 1 year of daily data
+    let interval = '1d';
+    let range = '1y'; // default range
+    
+    if (timeframe === '1m') { interval = '1m'; range = '7d'; }
+    else if (timeframe === '5m') { interval = '5m'; range = '60d'; }
+    else if (timeframe === '15m') { interval = '15m'; range = '60d'; }
+    else if (timeframe === '1H') { interval = '60m'; range = '730d'; }
+    else if (timeframe === '4H') { interval = '60m'; range = '730d'; } // fallback to 1h
+    else if (timeframe === '1D') { interval = '1d'; range = '1y'; }
+    else if (timeframe === '1W') { interval = '1wk'; range = '5y'; }
+    
+    // Convert range to period1
     const period1 = new Date();
-    period1.setFullYear(period1.getFullYear() - 1);
+    if (range === '7d') period1.setDate(period1.getDate() - 7);
+    else if (range === '60d') period1.setDate(period1.getDate() - 60);
+    else if (range === '730d') period1.setFullYear(period1.getFullYear() - 2);
+    else if (range === '5y') period1.setFullYear(period1.getFullYear() - 5);
+    else period1.setFullYear(period1.getFullYear() - 1); // 1y default
     
     const chartResult = await yahooFinance.chart(yahooSymbol, {
       period1,
-      interval: '1d'
+      interval: interval as any
     });
 
     if (!chartResult || !chartResult.quotes) return [];

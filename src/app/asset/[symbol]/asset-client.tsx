@@ -30,7 +30,7 @@ export default function AssetClientPage({ symbol }: { symbol: string }) {
       setLoading(true);
       try {
         const [marketRes, analysisRes] = await Promise.all([
-          fetch(`/api/market/${encodeURIComponent(symbol)}?chart=true`),
+          fetch(`/api/market/${encodeURIComponent(symbol)}?chart=true&timeframe=${timeframe}`),
           fetch(`/api/analysis/${encodeURIComponent(symbol)}`)
         ]);
 

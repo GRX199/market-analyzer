@@ -13,6 +13,7 @@ export async function GET(
     const symbol = decodeURIComponent(resolvedParams.symbol);
     const { searchParams } = new URL(request.url);
     const includeChart = searchParams.get('chart') === 'true';
+    const timeframe = searchParams.get('timeframe') || '1D';
 
     const asset = await getAssetPrice(symbol);
     
@@ -26,7 +27,7 @@ export async function GET(
     let result: any = { asset };
 
     if (includeChart) {
-      const ohlcv = await getOHLCV(symbol);
+      const ohlcv = await getOHLCV(symbol, timeframe);
       result.chart = ohlcv;
     }
 

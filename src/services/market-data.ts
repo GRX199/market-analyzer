@@ -72,16 +72,16 @@ export async function getAssetPrice(symbol: string): Promise<AssetData | null> {
 /**
  * Get OHLCV candlestick data
  */
-export async function getOHLCV(symbol: string): Promise<OHLCV[]> {
+export async function getOHLCV(symbol: string, timeframe: string = '1D'): Promise<OHLCV[]> {
   try {
     if (isCryptoSymbol(symbol)) {
-      return await fetchYahooOHLCV(symbol, 'crypto');
+      return await fetchYahooOHLCV(symbol, 'crypto', timeframe);
     }
     if (isStockSymbol(symbol)) {
-      return await fetchYahooOHLCV(symbol, 'stocks');
+      return await fetchYahooOHLCV(symbol, 'stocks', timeframe);
     }
     if (isForexSymbol(symbol)) {
-      return await fetchYahooOHLCV(symbol, 'forex');
+      return await fetchYahooOHLCV(symbol, 'forex', timeframe);
     }
   } catch (error) {
     console.error(`[Market Data] OHLCV failed for ${symbol}:`, error);
