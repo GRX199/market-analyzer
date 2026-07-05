@@ -1,12 +1,10 @@
 // ============================================================
-// Market Data Service — YAHOO FINANCE (No API Key needed)
+// Market Data Service — YAHOO FINANCE HTTP (No npm package needed)
 // ============================================================
 
 import { AssetData, OHLCV, MarketType, MarketOverview } from '@/types/market';
-import { fetchCryptoAssets, fetchCryptoAssetDetail, fetchCryptoOHLCV, isCryptoSymbol } from './api/coingecko';
-import { fetchYahooQuote, fetchYahooOHLCV, mapSymbolToYahoo } from './api/yahoo-finance';
+import { fetchYahooBatchQuotes, fetchYahooQuote, fetchYahooOHLCV, mapSymbolToYahoo } from './api/yahoo-finance';
 import { STOCK_SYMBOLS, FOREX_SYMBOLS, CRYPTO_SYMBOLS } from '@/lib/constants';
-import yahooFinance from 'yahoo-finance2';
 
 function isForexSymbol(symbol: string) {
   return FOREX_SYMBOLS.some(s => s.symbol === symbol);
@@ -16,10 +14,12 @@ function isStockSymbol(symbol: string) {
   return STOCK_SYMBOLS.some(s => s.symbol === symbol);
 }
 
-
+function isCryptoSymbol(symbol: string) {
+  return CRYPTO_SYMBOLS.some(s => s.symbol === symbol);
+}
 
 /**
- * Get list of assets — ONLY uses real API, returns empty array if unconfigured
+ * Get list of assets — uses Yahoo Finance HTTP API directly
  */
 export async function getAssetList(marketType?: MarketType): Promise<AssetData[]> {
   if (!marketType) {
@@ -32,78 +32,19 @@ export async function getAssetList(marketType?: MarketType): Promise<AssetData[]
   }
 
   try {
+    let symbolsList = STOCK_SYMBOLS;
+    if (marketType === 'forex') symbolsList = FOREX_SYMBOLS;
+    if (marketType === 'crypto') symbolsList = CRYPTO_SYMBOLS;
 
-
-    if (marketType === 'stocks' || marketType === 'forex' || marketType === 'crypto') {
-      let symbolsList = STOCK_SYMBOLS;
-      if (marketType === 'forex') symbolsList = FOREX_SYMBOLS;
-      if (marketType === 'crypto') symbolsList = CRYPTO_SYMBOLS;
-      
-      const yahooSymbols = symbolsList.map(s => mapSymbolToYahoo(s.symbol, marketType));
-      
-      try {
-        // Fetch individually to prevent one bad symbol from failing the batch
-        const quotePromises = yahooSymbols.map(sym => yahooFinance.quote(sym));
-        const results = await Promise.allSettled(quotePromises);
-        
-        const quotes = results
-          .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled' && !!r.value)
-          .map(r => r.value);
-        
-        return symbolsList.map(s => {
-          const ySymbol = mapSymbolToYahoo(s.symbol, marketType);
-          const quote = quotes.find(q => q.symbol === ySymbol);
-          
-          if (!quote) {
-            return {
-              symbol: s.symbol,
-              name: s.name,
-              marketType,
-              price: 0,
-              previousClose: 0,
-              change: 0,
-              changePercent: 0,
-              high24h: 0,
-              low24h: 0,
-              volume: 0,
-              trend: 'sideways'
-            };
-          }
-
-          const price = quote.regularMarketPrice || 0;
-          const previousClose = quote.regularMarketPreviousClose || price;
-          const change = quote.regularMarketChange || (price - previousClose);
-          const changePercent = quote.regularMarketChangePercent || (previousClose ? (change / previousClose) * 100 : 0);
-
-          return {
-            symbol: s.symbol,
-            name: s.name,
-            marketType,
-            price,
-            previousClose,
-            change,
-            changePercent,
-            high24h: quote.regularMarketDayHigh || price,
-            low24h: quote.regularMarketDayLow || price,
-            volume: quote.regularMarketVolume || 0,
-            marketCap: quote.marketCap || undefined,
-            trend: change >= 0 ? 'bullish' : 'bearish',
-          };
-        });
-      } catch (err) {
-        console.error(`[Yahoo] Batch fetch failed for ${marketType}:`, err);
-        return [];
-      }
-    }
+    return await fetchYahooBatchQuotes(symbolsList, marketType);
   } catch (error) {
-    console.error(`[Market Data] ⚠️ Real API failed for ${marketType}:`, error);
+    console.error(`[Market Data] Failed for ${marketType}:`, error);
+    return [];
   }
-
-  return [];
 }
 
 /**
- * Get single asset price — strictly real API
+ * Get single asset price
  */
 export async function getAssetPrice(symbol: string): Promise<AssetData | null> {
   try {
@@ -122,32 +63,28 @@ export async function getAssetPrice(symbol: string): Promise<AssetData | null> {
       return await fetchYahooQuote(symbol, meta?.name || symbol, 'forex');
     }
   } catch (error) {
-    console.error(`[Market Data] ⚠️ Real API failed for ${symbol}:`, error);
-    throw error;
+    console.error(`[Market Data] Failed for ${symbol}:`, error);
   }
 
   return null;
 }
 
 /**
- * Get OHLCV candlestick data — strictly real API
+ * Get OHLCV candlestick data
  */
 export async function getOHLCV(symbol: string): Promise<OHLCV[]> {
   try {
     if (isCryptoSymbol(symbol)) {
       return await fetchYahooOHLCV(symbol, 'crypto');
     }
-
     if (isStockSymbol(symbol)) {
       return await fetchYahooOHLCV(symbol, 'stocks');
     }
-
     if (isForexSymbol(symbol)) {
       return await fetchYahooOHLCV(symbol, 'forex');
     }
   } catch (error) {
-    console.error(`[Market Data] ⚠️ Real OHLCV failed for ${symbol}:`, error);
-    throw error; 
+    console.error(`[Market Data] OHLCV failed for ${symbol}:`, error);
   }
 
   return [];
@@ -158,8 +95,6 @@ export async function getOHLCV(symbol: string): Promise<OHLCV[]> {
  */
 export async function getMarketOverview(marketType: MarketType): Promise<MarketOverview> {
   const assets = await getAssetList(marketType);
-  
-  // Filter out the zero-price assets from calculations
   const activeAssets = assets.filter(a => a.price > 0);
 
   return {
@@ -182,3 +117,6 @@ export function getMarketTypeForSymbol(symbol: string): MarketType {
   if (isForexSymbol(symbol)) return 'forex';
   return 'stocks';
 }
+
+// Re-export for backward compatibility
+export { isCryptoSymbol };
