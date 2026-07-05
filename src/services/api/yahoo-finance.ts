@@ -3,7 +3,7 @@ import { AssetData, OHLCV } from '@/types/market';
 import { StockFundamentals, NewsItem } from '@/types/analysis';
 
 // Initialize the v3 instance and suppress the survey notice
-const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
+const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey', 'ripHistorical'] });
 
 // ==========================================
 // SYMBOL MAPPING UTILITIES
@@ -141,19 +141,21 @@ export async function fetchYahooOHLCV(
     const period1 = new Date();
     period1.setFullYear(period1.getFullYear() - 1);
     
-    const historical = await yahooFinance.historical(yahooSymbol, {
+    const chartResult = await yahooFinance.chart(yahooSymbol, {
       period1,
       interval: '1d'
     });
 
-    return historical.map((item: any) => ({
+    if (!chartResult || !chartResult.quotes) return [];
+
+    return chartResult.quotes.map((item: any) => ({
       time: Math.floor(new Date(item.date).getTime() / 1000),
-      open: item.open,
-      high: item.high,
-      low: item.low,
+      open: item.open || item.close, // Fallback if open is null
+      high: item.high || item.close,
+      low: item.low || item.close,
       close: item.close,
       volume: item.volume || 0,
-    }));
+    })).filter(c => c.close !== null && c.close !== undefined);
   } catch (error) {
     console.error(`[Yahoo] Failed to fetch OHLCV for ${symbol}:`, error);
     return [];
