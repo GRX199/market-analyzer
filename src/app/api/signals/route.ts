@@ -18,6 +18,7 @@ export async function GET(request: Request) {
     const symbol = searchParams.get('symbol');
     const marketParam = searchParams.get('market');
     const timeframe = searchParams.get('timeframe') || '1D';
+    const mode = searchParams.get('mode') || 'combined';
     const targetMarket = (marketParam === 'all' || !marketParam) ? undefined : marketParam as MarketType;
 
     if (symbol) {
@@ -33,30 +34,42 @@ export async function GET(request: Request) {
       
       const technical = calculateTechnicalScore(ohlcv);
       
-      let fundamental;
-      if (marketType === 'forex') fundamental = analyzeForexFundamentals(fundamentalData as any);
-      else if (marketType === 'stocks') fundamental = analyzeStockFundamentals(fundamentalData as any);
-      else fundamental = analyzeCryptoFundamentals(fundamentalData as any);
-
-      const sentiment = analyzeSentiment(newsData);
+      let finalScore = technical.score;
+      let finalSignal = technical.signal || 'hold';
       
-      const finalAnalysis = calculateFinalScore(
-        symbol,
-        marketType,
-        technical,
-        fundamental,
-        sentiment
-      );
+      if (mode === 'combined') {
+        let fundamental;
+        if (marketType === 'forex') fundamental = analyzeForexFundamentals(fundamentalData as any);
+        else if (marketType === 'stocks') fundamental = analyzeStockFundamentals(fundamentalData as any);
+        else fundamental = analyzeCryptoFundamentals(fundamentalData as any);
+
+        const sentiment = analyzeSentiment(newsData);
+        
+        const finalAnalysis = calculateFinalScore(
+          symbol,
+          marketType,
+          technical,
+          fundamental,
+          sentiment
+        );
+        finalScore = finalAnalysis.finalScore;
+        finalSignal = finalAnalysis.signal;
+      } else {
+        if (technical.score >= 80) finalSignal = 'strong_buy';
+        else if (technical.score >= 60) finalSignal = 'buy';
+        else if (technical.score <= 20) finalSignal = 'strong_sell';
+        else if (technical.score <= 40) finalSignal = 'sell';
+      }
 
       return NextResponse.json({
         success: true,
         data: [{
           id: symbol,
           symbol,
-          type: finalAnalysis.signal,
+          type: finalSignal,
           priceAtSignal: ohlcv[ohlcv.length - 1].close,
           date: new Date().toISOString(),
-          score: finalAnalysis.finalScore
+          score: finalScore
         }]
       });
     }
@@ -77,32 +90,46 @@ export async function GET(request: Request) {
         
         const technical = calculateTechnicalScore(ohlcv);
         
-        let fundamental;
-        if (asset.marketType === 'forex') fundamental = analyzeForexFundamentals(fundamentalData as any);
-        else if (asset.marketType === 'stocks') fundamental = analyzeStockFundamentals(fundamentalData as any);
-        else fundamental = analyzeCryptoFundamentals(fundamentalData as any);
-
-        const sentiment = analyzeSentiment(newsData);
+        let finalScore = technical.score;
+        let finalSignal = technical.signal || 'hold';
+        let finalReasons = technical.reasons;
         
-        const finalAnalysis = calculateFinalScore(
-          asset.symbol,
-          asset.marketType,
-          technical,
-          fundamental,
-          sentiment
-        );
+        if (mode === 'combined') {
+          let fundamental;
+          if (asset.marketType === 'forex') fundamental = analyzeForexFundamentals(fundamentalData as any);
+          else if (asset.marketType === 'stocks') fundamental = analyzeStockFundamentals(fundamentalData as any);
+          else fundamental = analyzeCryptoFundamentals(fundamentalData as any);
 
-        // Only return actionable signals based on Overall Score
-        if (finalAnalysis.signal === 'hold') return null;
+          const sentiment = analyzeSentiment(newsData);
+          
+          const finalAnalysis = calculateFinalScore(
+            asset.symbol,
+            asset.marketType,
+            technical,
+            fundamental,
+            sentiment
+          );
+          finalScore = finalAnalysis.finalScore;
+          finalSignal = finalAnalysis.signal;
+          finalReasons = finalAnalysis.reasons;
+        } else {
+          if (technical.score >= 80) finalSignal = 'strong_buy';
+          else if (technical.score >= 60) finalSignal = 'buy';
+          else if (technical.score <= 20) finalSignal = 'strong_sell';
+          else if (technical.score <= 40) finalSignal = 'sell';
+        }
+
+        // Only return actionable signals
+        if (finalSignal === 'hold') return null;
 
         return {
           id: `${asset.symbol}-${Date.now()}`,
           symbol: asset.symbol,
-          type: finalAnalysis.signal,
+          type: finalSignal,
           priceAtSignal: ohlcv[ohlcv.length - 1].close,
           date: new Date().toISOString(),
-          score: finalAnalysis.finalScore,
-          reasons: finalAnalysis.reasons
+          score: finalScore,
+          reasons: finalReasons
         };
       } catch (err) {
         return null;

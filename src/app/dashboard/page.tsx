@@ -8,13 +8,14 @@ import { MarketSelector } from '@/components/market/market-selector';
 import { MarketOverview, MarketType, AssetData } from '@/types/market';
 import { useMarketStore } from '@/stores/market-store';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowUpRight, ArrowDownRight, Activity, TrendingUp, TrendingDown, Clock } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, Activity, TrendingUp, TrendingDown, Clock, Settings2 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TIMEFRAMES } from '@/lib/constants';
 import Link from 'next/link';
 
 export default function DashboardPage() {
-  const { selectedMarket, selectedTimeframe, setSelectedTimeframe } = useMarketStore();
+  const { selectedMarket, selectedTimeframe, setSelectedTimeframe, analysisMode, setAnalysisMode } = useMarketStore();
   const [overview, setOverview] = useState<MarketOverview | null>(null);
   const [signals, setSignals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,10 +31,11 @@ export default function DashboardPage() {
         const response = await fetch(`/api/market${selectedMarket ? `?type=${selectedMarket}` : ''}`);
         const result = await response.json();
         
-        // Load signals in parallel with timeframe
+        // Load signals in parallel with timeframe and mode
         const signalQuery = new URLSearchParams();
         if (selectedMarket && selectedMarket !== 'all') signalQuery.append('market', selectedMarket);
         if (selectedTimeframe) signalQuery.append('timeframe', selectedTimeframe);
+        if (analysisMode) signalQuery.append('mode', analysisMode);
         
         fetch(`/api/signals?${signalQuery.toString()}`)
           .then(res => res.json())
@@ -68,7 +70,7 @@ export default function DashboardPage() {
       }
     }
     loadData();
-  }, [selectedMarket, selectedTimeframe]);
+  }, [selectedMarket, selectedTimeframe, analysisMode]);
 
   if (loading) {
     return (
@@ -239,17 +241,31 @@ export default function DashboardPage() {
             <h2 className="text-2xl font-bold flex items-center gap-2">
               <Activity className="h-6 w-6 text-primary" /> Entry Opportunities (Trading Signals)
             </h2>
-            <div className="flex items-center gap-2 bg-muted/30 p-1 rounded-lg border w-fit">
-              <Clock className="h-4 w-4 text-muted-foreground ml-2" />
-              <Tabs value={selectedTimeframe} onValueChange={(v) => setSelectedTimeframe(v as any)}>
-                <TabsList className="h-8 bg-transparent">
-                  {TIMEFRAMES.map(tf => (
-                    <TabsTrigger key={tf.value} value={tf.value} className="text-xs px-2 h-6 data-[state=active]:bg-background data-[state=active]:shadow-sm">
-                      {tf.label}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </Tabs>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-2 bg-muted/30 p-1 rounded-lg border w-fit">
+                <Settings2 className="h-4 w-4 text-muted-foreground ml-2" />
+                <Select value={analysisMode} onValueChange={(v) => setAnalysisMode(v as any)}>
+                  <SelectTrigger className="h-8 border-0 bg-transparent shadow-none text-xs w-[130px]">
+                    <SelectValue placeholder="Mode" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="combined">Combined (Overall)</SelectItem>
+                    <SelectItem value="technical">Technical Only</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center gap-2 bg-muted/30 p-1 rounded-lg border w-fit">
+                <Clock className="h-4 w-4 text-muted-foreground ml-2" />
+                <Tabs value={selectedTimeframe} onValueChange={(v) => setSelectedTimeframe(v as any)}>
+                  <TabsList className="h-8 bg-transparent">
+                    {TIMEFRAMES.map(tf => (
+                      <TabsTrigger key={tf.value} value={tf.value} className="text-xs px-2 h-6 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                        {tf.label}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </Tabs>
+              </div>
             </div>
           </div>
           <p className="text-muted-foreground text-sm max-w-3xl">
@@ -293,7 +309,7 @@ export default function DashboardPage() {
                   {signal.reasons && signal.reasons.length > 0 && (
                     <div className="mt-4 pt-4 border-t border-border/50">
                       <p className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1">
-                        <Activity className="w-3 h-3" /> Overall Analysis (Combined)
+                        <Activity className="w-3 h-3" /> {analysisMode === 'combined' ? 'Overall Analysis (Combined)' : 'Technical Analysis'}
                       </p>
                       <ul className="text-xs space-y-1.5">
                         {signal.reasons.slice(0, 3).map((reason: string, idx: number) => (

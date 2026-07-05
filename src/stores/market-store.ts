@@ -7,10 +7,12 @@ interface MarketState {
   selectedSymbol: string | null;
   selectedTimeframe: Timeframe;
   searchQuery: string;
+  analysisMode: 'technical' | 'combined';
   setSelectedMarket: (market: MarketType | 'all') => void;
   setSelectedSymbol: (symbol: string | null) => void;
   setSelectedTimeframe: (timeframe: Timeframe) => void;
   setSearchQuery: (query: string) => void;
+  setAnalysisMode: (mode: 'technical' | 'combined') => void;
 }
 
 export const useMarketStore = create<MarketState>()(
@@ -20,10 +22,12 @@ export const useMarketStore = create<MarketState>()(
       selectedSymbol: null,
       selectedTimeframe: '1D',
       searchQuery: '',
+      analysisMode: 'combined',
       setSelectedMarket: (market) => set({ selectedMarket: market }),
       setSelectedSymbol: (symbol) => set({ selectedSymbol: symbol }),
       setSelectedTimeframe: (timeframe) => set({ selectedTimeframe: timeframe }),
       setSearchQuery: (query) => set({ searchQuery: query }),
+      setAnalysisMode: (mode) => set({ analysisMode: mode }),
     }),
     { name: 'market-store' }
   )

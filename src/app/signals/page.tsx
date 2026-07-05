@@ -7,12 +7,13 @@ import { Activity, Radio, TrendingUp, TrendingDown, Target, Zap, AlertTriangle }
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useMarketStore } from '@/stores/market-store';
 import { TIMEFRAMES } from '@/lib/constants';
 import Link from 'next/link';
 
 export default function SignalScannerPage() {
-  const { selectedMarket, selectedTimeframe, setSelectedTimeframe } = useMarketStore();
+  const { selectedMarket, selectedTimeframe, setSelectedTimeframe, analysisMode, setAnalysisMode } = useMarketStore();
   const [signals, setSignals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -25,6 +26,7 @@ export default function SignalScannerPage() {
         const query = new URLSearchParams();
         if (selectedMarket && selectedMarket !== 'all') query.append('market', selectedMarket);
         if (selectedTimeframe) query.append('timeframe', selectedTimeframe);
+        if (analysisMode) query.append('mode', analysisMode);
 
         const res = await fetch(`/api/signals?${query.toString()}`);
         const result = await res.json();
@@ -47,7 +49,7 @@ export default function SignalScannerPage() {
     // Auto-refresh every 60 seconds
     const interval = setInterval(scanMarkets, 60000);
     return () => clearInterval(interval);
-  }, [selectedMarket, selectedTimeframe]);
+  }, [selectedMarket, selectedTimeframe, analysisMode]);
 
   return (
     <DashboardLayout>
@@ -62,6 +64,19 @@ export default function SignalScannerPage() {
           </p>
           
           <div className="mt-6 flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2 bg-muted/30 p-1 rounded-lg border w-fit">
+              <span className="text-sm text-muted-foreground ml-2 font-medium">Mode:</span>
+              <Select value={analysisMode} onValueChange={(v) => setAnalysisMode(v as any)}>
+                <SelectTrigger className="h-8 border-0 bg-transparent shadow-none text-xs w-[140px]">
+                  <SelectValue placeholder="Analysis Mode" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="combined">Combined (Overall)</SelectItem>
+                  <SelectItem value="technical">Technical Only</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
             <div className="flex items-center gap-2 bg-muted/30 p-1 rounded-lg border w-fit">
               <span className="text-sm text-muted-foreground ml-2 font-medium">Timeframe:</span>
               <Tabs value={selectedTimeframe} onValueChange={(v) => setSelectedTimeframe(v as any)}>
