@@ -153,10 +153,10 @@ export async function fetchYahooOHLCV(
     if (!chartResult || !chartResult.quotes) return [];
 
     return chartResult.quotes.map((item: any) => {
-      // Return YYYY-MM-DD string to ensure correct date display in Lightweight Charts
-      const dateString = new Date(item.date).toISOString().split('T')[0];
+      // Return UNIX timestamp in seconds for exact intraday times
+      const timeInSeconds = Math.floor(new Date(item.date).getTime() / 1000);
       return {
-        time: dateString,
+        time: timeInSeconds,
         open: item.open || item.close, // Fallback if open is null
         high: item.high || item.close,
         low: item.low || item.close,
