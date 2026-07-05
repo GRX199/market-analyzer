@@ -11,6 +11,8 @@ const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey', 'ripHis
 
 export function mapSymbolToYahoo(symbol: string, marketType: 'stocks' | 'forex' | 'crypto'): string {
   if (marketType === 'forex') {
+    if (symbol === 'XAU/USD') return 'GC=F';
+    if (symbol === 'XAG/USD') return 'SI=F';
     return `${symbol.replace('/', '')}=X`;
   }
   

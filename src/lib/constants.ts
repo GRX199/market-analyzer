@@ -91,6 +91,9 @@ export const FOREX_SYMBOLS = [
   { symbol: 'USD/MXN', name: 'US Dollar / Mexican Peso' },
   { symbol: 'USD/TRY', name: 'US Dollar / Turkish Lira' },
   { symbol: 'USD/IDR', name: 'US Dollar / Indonesian Rupiah' },
+  // Metals / Commodities (Traded as Forex pairs)
+  { symbol: 'XAU/USD', name: 'Gold / US Dollar' },
+  { symbol: 'XAG/USD', name: 'Silver / US Dollar' },
 ];
 
 export const STOCK_SYMBOLS = [
