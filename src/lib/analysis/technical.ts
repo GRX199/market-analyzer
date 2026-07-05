@@ -584,6 +584,30 @@ export function calculateTechnicalScore(candles: OHLCV[]): TechnicalAnalysis {
     reasons.push(`Bearish pattern: ${bearishPatterns[0].name}.`);
   }
 
+  // Trend Alignment (Confluence Check)
+  // Check where price is relative to the 200 SMA
+  const ma200Data = maData.find(m => m.period === 200);
+  if (ma200Data) {
+    if (ma200Data.signal === 'buy') {
+      // Long-term uptrend
+      if (score > 50) {
+        score += 10; // Boost buy signals in an uptrend
+        reasons.push('Signal aligns with the long-term uptrend (Price > 200 SMA).');
+      } else {
+        score += 5; // Soften sell signals in an uptrend
+      }
+    } else {
+      // Long-term downtrend
+      if (score < 50) {
+        score -= 10; // Boost sell signals in a downtrend
+        reasons.push('Signal aligns with the long-term downtrend (Price < 200 SMA).');
+      } else {
+        score -= 5; // Soften buy signals in a downtrend
+        reasons.push('Warning: Buy signal is against the long-term downtrend (Price < 200 SMA).');
+      }
+    }
+  }
+
   // Clamp score to 0-100
   score = Math.max(0, Math.min(100, Math.round(score)));
 

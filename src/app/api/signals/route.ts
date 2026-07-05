@@ -41,7 +41,7 @@ export async function GET(request: Request) {
 
     // Analyze top assets in the market to find opportunities
     const assets = await getAssetList(marketParam);
-    const topAssets = assets.slice(0, 12); // Take first 12 to provide more opportunities
+    const topAssets = assets.slice(0, 20); // Take first 20 to provide more opportunities
 
     const signalsPromises = topAssets.map(async (asset) => {
       const ohlcv = await getOHLCV(asset.symbol, '1D');
