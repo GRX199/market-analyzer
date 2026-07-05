@@ -89,6 +89,11 @@ export default function AssetClientPage({ symbol }: { symbol: string }) {
           <div className="flex items-center gap-3">
             <h1 className="text-3xl font-bold">{asset.symbol}</h1>
             <span className="text-muted-foreground text-lg">{asset.name}</span>
+            {asset.marketState && asset.marketState !== 'REGULAR' && (
+              <Badge variant="secondary" className="uppercase text-xs tracking-wider">
+                {asset.marketState}
+              </Badge>
+            )}
             <Button variant="outline" size="icon" onClick={handleWatchlist} className="ml-2">
               <Star className={`h-4 w-4 ${isWatched ? 'fill-yellow-400 text-yellow-400' : ''}`} />
             </Button>

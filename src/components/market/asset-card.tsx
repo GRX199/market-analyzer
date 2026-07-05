@@ -71,6 +71,11 @@ export function AssetCard({ asset, showWatchlistButton = true }: AssetCardProps)
                   <TrendIcon className="h-2.5 w-2.5" />
                   {asset.trend}
                 </Badge>
+                {asset.marketState && asset.marketState !== 'REGULAR' && (
+                  <Badge variant="secondary" className="text-[9px] px-1.5 py-0 uppercase">
+                    {asset.marketState}
+                  </Badge>
+                )}
               </div>
               <p className="text-xs text-muted-foreground">{asset.name}</p>
             </div>

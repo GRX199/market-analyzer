@@ -77,6 +77,7 @@ export async function fetchYahooBatchQuotes(
         volume: quote.regularMarketVolume || 0,
         marketCap: quote.marketCap || undefined,
         trend: change >= 0 ? 'bullish' : 'bearish',
+        marketState: quote.marketState,
       };
     });
   } catch (error) {
@@ -119,6 +120,7 @@ export async function fetchYahooQuote(
       volume: quote.regularMarketVolume || 0,
       marketCap: quote.marketCap || undefined,
       trend: change >= 0 ? 'bullish' : 'bearish',
+      marketState: quote.marketState,
     };
   } catch (error) {
     console.error(`[Yahoo] Failed to fetch quote for ${symbol}:`, error);
@@ -148,14 +150,18 @@ export async function fetchYahooOHLCV(
 
     if (!chartResult || !chartResult.quotes) return [];
 
-    return chartResult.quotes.map((item: any) => ({
-      time: Math.floor(new Date(item.date).getTime() / 1000),
-      open: item.open || item.close, // Fallback if open is null
-      high: item.high || item.close,
-      low: item.low || item.close,
-      close: item.close,
-      volume: item.volume || 0,
-    })).filter(c => c.close !== null && c.close !== undefined);
+    return chartResult.quotes.map((item: any) => {
+      // Return YYYY-MM-DD string to ensure correct date display in Lightweight Charts
+      const dateString = new Date(item.date).toISOString().split('T')[0];
+      return {
+        time: dateString,
+        open: item.open || item.close, // Fallback if open is null
+        high: item.high || item.close,
+        low: item.low || item.close,
+        close: item.close,
+        volume: item.volume || 0,
+      };
+    }).filter(c => c.close !== null && c.close !== undefined);
   } catch (error) {
     console.error(`[Yahoo] Failed to fetch OHLCV for ${symbol}:`, error);
     return [];

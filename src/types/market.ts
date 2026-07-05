@@ -5,7 +5,7 @@ export type Timeframe = '1m' | '5m' | '15m' | '1H' | '4H' | '1D' | '1W';
 export type TrendDirection = 'bullish' | 'bearish' | 'sideways';
 
 export interface OHLCV {
-  time: number;
+  time: string | number;
   open: number;
   high: number;
   low: number;
@@ -29,6 +29,7 @@ export interface AssetData {
   totalSupply?: number;
   fullyDilutedValuation?: number;
   trend: TrendDirection;
+  marketState?: string;
 }
 
 export interface MarketOverview {
