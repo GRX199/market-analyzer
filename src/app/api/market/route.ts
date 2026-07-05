@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { getAssetList } from '@/services/market-data';
 import { MarketType } from '@/types/market';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);

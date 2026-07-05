@@ -1,17 +1,47 @@
 'use client';
 
+import { useState } from 'react';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useUserStore } from '@/stores/user-store';
 import { MarketSelector } from '@/components/market/market-selector';
-import { Moon, Sun, Monitor, Bell, Shield, LogOut } from 'lucide-react';
+import { Moon, Sun, Monitor, Bell, Shield, User, Save, CheckCircle } from 'lucide-react';
 import { DisclaimerBanner } from '@/components/common/disclaimer-banner';
 
 export default function SettingsPage() {
-  const { theme, toggleTheme, user } = useUserStore();
+  const { theme, toggleTheme, user, setUser } = useUserStore();
+  
+  // Profile form state
+  const [displayName, setDisplayName] = useState(user?.displayName || 'Admin');
+  const [email, setEmail] = useState(user?.email || 'admin@marketanalyzer.app');
+  const [saved, setSaved] = useState(false);
+
+  const handleSaveProfile = () => {
+    setUser({
+      id: user?.id || 'local-user-1',
+      email,
+      username: displayName.toLowerCase().replace(/\s/g, '_'),
+      displayName,
+      avatarUrl: null,
+      preferredMarket: user?.preferredMarket || 'crypto',
+      theme: theme,
+      disclaimerAccepted: true,
+      disclaimerAcceptedAt: user?.disclaimerAcceptedAt || new Date().toISOString(),
+      createdAt: user?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  const initials = displayName
+    ? displayName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+    : 'U';
 
   return (
     <DashboardLayout>
@@ -27,16 +57,55 @@ export default function SettingsPage() {
           {/* Profile Settings */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><LogOut className="h-5 w-5" /> Account Profile</CardTitle>
-              <CardDescription>Your personal information and session.</CardDescription>
+              <CardTitle className="flex items-center gap-2"><User className="h-5 w-5" /> Account Profile</CardTitle>
+              <CardDescription>Your personal information. Data is stored locally in your browser.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Email Address</p>
-                  <p className="text-sm text-muted-foreground">{user?.email || 'demo@example.com'}</p>
+            <CardContent className="space-y-6">
+              {/* Avatar & Name */}
+              <div className="flex items-center gap-6">
+                <Avatar className="h-20 w-20">
+                  <AvatarFallback className="bg-gradient-to-br from-blue-600 to-indigo-600 text-white text-2xl font-bold">
+                    {initials}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 space-y-1">
+                  <p className="text-lg font-semibold">{displayName || 'User'}</p>
+                  <p className="text-sm text-muted-foreground">{email}</p>
+                  <p className="text-xs text-muted-foreground">Member since {new Date(user?.createdAt || Date.now()).toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
                 </div>
-                <Button variant="outline">Sign Out</Button>
+              </div>
+
+              <div className="border-t pt-4 space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="displayName">Display Name</Label>
+                  <Input
+                    id="displayName"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    placeholder="Your name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email Address</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="your@email.com"
+                  />
+                </div>
+                <Button onClick={handleSaveProfile} className="gap-2">
+                  {saved ? (
+                    <>
+                      <CheckCircle className="h-4 w-4" /> Saved!
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4" /> Save Profile
+                    </>
+                  )}
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -104,19 +173,27 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
-          {/* Legal */}
+          {/* Security */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Shield className="h-5 w-5" /> Legal & Compliance</CardTitle>
+              <CardTitle className="flex items-center gap-2"><Shield className="h-5 w-5" /> Security & Legal</CardTitle>
+              <CardDescription>Authentication is managed via Basic Auth in the proxy middleware.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">Authentication</p>
+                  <p className="text-sm text-muted-foreground">Protected via Basic Auth (configured in environment variables)</p>
+                </div>
+                <span className="text-xs font-medium text-green-500 bg-green-500/10 px-3 py-1 rounded-full">Active</span>
+              </div>
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-medium">Risk Disclaimer</p>
                   <p className="text-sm text-muted-foreground">Accepted on {new Date(user?.disclaimerAcceptedAt || Date.now()).toLocaleDateString()}</p>
                 </div>
                 <a href="/disclaimer">
-                  <Button variant="outline">View Document</Button>
+                  <Button variant="outline" size="sm">View Document</Button>
                 </a>
               </div>
             </CardContent>

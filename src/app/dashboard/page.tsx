@@ -14,10 +14,12 @@ export default function DashboardPage() {
   const { selectedMarket } = useMarketStore();
   const [overview, setOverview] = useState<MarketOverview | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadData() {
       setLoading(true);
+      setError(null);
       try {
         const response = await fetch(`/api/market${selectedMarket ? `?type=${selectedMarket}` : ''}`);
         const result = await response.json();
@@ -27,7 +29,7 @@ export default function DashboardPage() {
           const activeAssets = assets.filter(a => a.price > 0);
           
           setOverview({
-            marketType: selectedMarket || 'crypto', // Default if undefined
+            marketType: selectedMarket || 'crypto',
             totalAssets: activeAssets.length > 0 ? activeAssets.length : assets.length,
             bullishCount: activeAssets.filter(a => a.trend === 'bullish').length,
             bearishCount: activeAssets.filter(a => a.trend === 'bearish').length,
@@ -36,9 +38,12 @@ export default function DashboardPage() {
             topLosers: [...activeAssets].sort((a, b) => a.changePercent - b.changePercent).slice(0, 3),
             mostActive: [...activeAssets].sort((a, b) => b.volume - a.volume).slice(0, 3),
           });
+        } else {
+          setError(result.error || 'Failed to load market data');
         }
-      } catch (error) {
-        console.error('Failed to load market overview', error);
+      } catch (err) {
+        console.error('Failed to load market overview', err);
+        setError('Cannot connect to server. Please check your connection.');
       } finally {
         setLoading(false);
       }
@@ -46,7 +51,7 @@ export default function DashboardPage() {
     loadData();
   }, [selectedMarket]);
 
-  if (loading || !overview) {
+  if (loading) {
     return (
       <DashboardLayout>
         <div className="mb-6">
@@ -54,6 +59,30 @@ export default function DashboardPage() {
           <MarketSelector />
         </div>
         <DashboardSkeleton />
+      </DashboardLayout>
+    );
+  }
+
+  if (error || !overview) {
+    return (
+      <DashboardLayout>
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold mb-2">Market Dashboard</h1>
+          <MarketSelector />
+        </div>
+        <Card className="border-yellow-500/30 bg-yellow-500/5">
+          <CardContent className="p-6 text-center">
+            <Activity className="h-10 w-10 text-yellow-500 mx-auto mb-3" />
+            <p className="font-semibold text-lg mb-1">Data Loading Issue</p>
+            <p className="text-sm text-muted-foreground mb-4">{error || 'No market data available. The API might be initializing.'}</p>
+            <button 
+              onClick={() => window.location.reload()} 
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:opacity-90 transition"
+            >
+              Retry
+            </button>
+          </CardContent>
+        </Card>
       </DashboardLayout>
     );
   }

@@ -7,6 +7,9 @@ import { analyzeForexFundamentals, analyzeStockFundamentals, analyzeCryptoFundam
 import { analyzeSentiment } from '@/lib/analysis/sentiment';
 import { calculateFinalScore } from '@/lib/analysis/scoring';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ symbol: string }> }
