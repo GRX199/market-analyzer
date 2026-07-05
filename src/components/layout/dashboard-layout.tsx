@@ -12,8 +12,13 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setMounted(true);
-    document.documentElement.classList.toggle('dark', theme === 'dark');
-  }, [theme]);
+  }, []);
+
+  useEffect(() => {
+    if (mounted) {
+      document.documentElement.classList.toggle('dark', theme === 'dark');
+    }
+  }, [theme, mounted]);
 
   if (!mounted) {
     return <div className="min-h-screen bg-background" />;

@@ -199,7 +199,7 @@ export default function SignalScannerPage() {
           </div>
           <h3 className="text-2xl font-bold mb-2">No Active Signals</h3>
           <p className="text-muted-foreground text-lg mb-6">
-            The scanner didn't find any high-probability entry opportunities meeting our strict confluence criteria at this moment.
+            The scanner didn&apos;t find any high-probability entry opportunities meeting our strict confluence criteria at this moment.
           </p>
           <div className="px-6 py-3 rounded-xl bg-background border text-sm font-medium">
             Waiting for next market movement...

@@ -71,7 +71,7 @@ export default function SettingsPage() {
                 <div className="flex-1 space-y-1">
                   <p className="text-lg font-semibold">{displayName || 'User'}</p>
                   <p className="text-sm text-muted-foreground">{email}</p>
-                  <p className="text-xs text-muted-foreground">Member since {new Date(user?.createdAt || Date.now()).toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                  <p className="text-xs text-muted-foreground">Member since {new Date(user?.createdAt || "2026-01-01").toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
                 </div>
               </div>
 
@@ -190,7 +190,7 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-medium">Risk Disclaimer</p>
-                  <p className="text-sm text-muted-foreground">Accepted on {new Date(user?.disclaimerAcceptedAt || Date.now()).toLocaleDateString()}</p>
+                  <p className="text-sm text-muted-foreground">Accepted on {new Date(user?.disclaimerAcceptedAt || "2026-01-01").toLocaleDateString()}</p>
                 </div>
                 <a href="/disclaimer">
                   <Button variant="outline" size="sm">View Document</Button>

@@ -46,11 +46,11 @@ export default function DisclaimerPage() {
 
             <h3>5. Data Accuracy</h3>
             <p>
-              While we strive to provide accurate and timely market data, the information is provided "as is". We make no warranties, expressed or implied, regarding the accuracy, completeness, or reliability of the data, charts, or analysis provided. Data may be delayed or subject to errors.
+              While we strive to provide accurate and timely market data, the information is provided &quot;as is&quot;. We make no warranties, expressed or implied, regarding the accuracy, completeness, or reliability of the data, charts, or analysis provided. Data may be delayed or subject to errors.
             </p>
 
             <div className="mt-8 pt-6 border-t text-xs text-muted-foreground text-center">
-              Last updated: {new Date().toLocaleDateString()}
+              Last updated: {new Date("2026-07-01").toLocaleDateString()}
             </div>
           </CardContent>
         </Card>
