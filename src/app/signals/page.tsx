@@ -6,11 +6,13 @@ import { DashboardSkeleton } from '@/components/common/loading-skeleton';
 import { Activity, Radio, TrendingUp, TrendingDown, Target, Zap, AlertTriangle } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useMarketStore } from '@/stores/market-store';
+import { TIMEFRAMES } from '@/lib/constants';
 import Link from 'next/link';
 
 export default function SignalScannerPage() {
-  const { selectedMarket } = useMarketStore();
+  const { selectedMarket, selectedTimeframe, setSelectedTimeframe } = useMarketStore();
   const [signals, setSignals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -20,7 +22,11 @@ export default function SignalScannerPage() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`/api/signals${selectedMarket ? `?market=${selectedMarket}` : ''}`);
+        const query = new URLSearchParams();
+        if (selectedMarket && selectedMarket !== 'all') query.append('market', selectedMarket);
+        if (selectedTimeframe) query.append('timeframe', selectedTimeframe);
+
+        const res = await fetch(`/api/signals?${query.toString()}`);
         const result = await res.json();
         
         if (result.success && result.data) {
@@ -41,7 +47,7 @@ export default function SignalScannerPage() {
     // Auto-refresh every 60 seconds
     const interval = setInterval(scanMarkets, 60000);
     return () => clearInterval(interval);
-  }, [selectedMarket]);
+  }, [selectedMarket, selectedTimeframe]);
 
   return (
     <DashboardLayout>
@@ -51,11 +57,26 @@ export default function SignalScannerPage() {
             <Radio className="w-8 h-8 text-primary animate-pulse" /> 
             Live Market Scanner
           </h1>
-          <p className="text-muted-foreground">
-            Our AI continuously scans {selectedMarket || 'all'} markets to find high-probability entry opportunities based on technical confluence.
+          <p className="text-muted-foreground mt-2">
+            Our AI continuously scans {selectedMarket || 'all'} markets on the <strong>{selectedTimeframe}</strong> timeframe to find high-probability entry opportunities based on technical confluence.
           </p>
+          
+          <div className="mt-6 flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2 bg-muted/30 p-1 rounded-lg border w-fit">
+              <span className="text-sm text-muted-foreground ml-2 font-medium">Timeframe:</span>
+              <Tabs value={selectedTimeframe} onValueChange={(v) => setSelectedTimeframe(v as any)}>
+                <TabsList className="h-8 bg-transparent">
+                  {TIMEFRAMES.map(tf => (
+                    <TabsTrigger key={tf.value} value={tf.value} className="text-xs px-3 h-6 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                      {tf.label}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+            </div>
+          </div>
         </div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground bg-card px-4 py-2 rounded-full border shadow-sm">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground bg-card px-4 py-2 rounded-full border shadow-sm self-start sm:self-auto mt-4 sm:mt-0">
           <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
           Scanner Active
         </div>

@@ -12,11 +12,12 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const symbol = searchParams.get('symbol');
     const marketParam = searchParams.get('market');
+    const timeframe = searchParams.get('timeframe') || '1D';
     const targetMarket = (marketParam === 'all' || !marketParam) ? undefined : marketParam as MarketType;
 
     if (symbol) {
       // Analyze single symbol
-      const ohlcv = await getOHLCV(symbol, '1D');
+      const ohlcv = await getOHLCV(symbol, timeframe);
       if (!ohlcv || ohlcv.length === 0) return NextResponse.json({ success: true, data: [] });
       
       const tech = calculateTechnicalScore(ohlcv);
@@ -45,7 +46,7 @@ export async function GET(request: Request) {
     const topAssets = assets.slice(0, 20); // Take first 20 to provide more opportunities
 
     const signalsPromises = topAssets.map(async (asset) => {
-      const ohlcv = await getOHLCV(asset.symbol, '1D');
+      const ohlcv = await getOHLCV(asset.symbol, timeframe);
       if (!ohlcv || ohlcv.length === 0) return null;
       
       const tech = calculateTechnicalScore(ohlcv);

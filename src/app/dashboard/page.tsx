@@ -8,11 +8,13 @@ import { MarketSelector } from '@/components/market/market-selector';
 import { MarketOverview, MarketType, AssetData } from '@/types/market';
 import { useMarketStore } from '@/stores/market-store';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowUpRight, ArrowDownRight, Activity, TrendingUp, TrendingDown } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, Activity, TrendingUp, TrendingDown, Clock } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { TIMEFRAMES } from '@/lib/constants';
 import Link from 'next/link';
 
 export default function DashboardPage() {
-  const { selectedMarket } = useMarketStore();
+  const { selectedMarket, selectedTimeframe, setSelectedTimeframe } = useMarketStore();
   const [overview, setOverview] = useState<MarketOverview | null>(null);
   const [signals, setSignals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,8 +30,12 @@ export default function DashboardPage() {
         const response = await fetch(`/api/market${selectedMarket ? `?type=${selectedMarket}` : ''}`);
         const result = await response.json();
         
-        // Load signals in parallel
-        fetch(`/api/signals${selectedMarket ? `?market=${selectedMarket}` : ''}`)
+        // Load signals in parallel with timeframe
+        const signalQuery = new URLSearchParams();
+        if (selectedMarket && selectedMarket !== 'all') signalQuery.append('market', selectedMarket);
+        if (selectedTimeframe) signalQuery.append('timeframe', selectedTimeframe);
+        
+        fetch(`/api/signals?${signalQuery.toString()}`)
           .then(res => res.json())
           .then(res => {
             if (res.success && res.data) setSignals(res.data);
@@ -62,7 +68,7 @@ export default function DashboardPage() {
       }
     }
     loadData();
-  }, [selectedMarket]);
+  }, [selectedMarket, selectedTimeframe]);
 
   if (loading) {
     return (
@@ -229,9 +235,23 @@ export default function DashboardPage() {
       {/* Trading Signals Section */}
       <div className="mt-8">
         <div className="flex flex-col gap-2 mb-6">
-          <h2 className="text-2xl font-bold flex items-center gap-2">
-            <Activity className="h-6 w-6 text-primary" /> Entry Opportunities (Trading Signals)
-          </h2>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <h2 className="text-2xl font-bold flex items-center gap-2">
+              <Activity className="h-6 w-6 text-primary" /> Entry Opportunities (Trading Signals)
+            </h2>
+            <div className="flex items-center gap-2 bg-muted/30 p-1 rounded-lg border w-fit">
+              <Clock className="h-4 w-4 text-muted-foreground ml-2" />
+              <Tabs value={selectedTimeframe} onValueChange={(v) => setSelectedTimeframe(v as any)}>
+                <TabsList className="h-8 bg-transparent">
+                  {TIMEFRAMES.map(tf => (
+                    <TabsTrigger key={tf.value} value={tf.value} className="text-xs px-2 h-6 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                      {tf.label}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+            </div>
+          </div>
           <p className="text-muted-foreground text-sm max-w-3xl">
             <strong>Fitur Signal</strong> adalah fitur otomatis yang menganalisis aset-aset paling populer 
             menggunakan algoritma Analisis Teknikal (RSI, MACD, Moving Averages). Fitur ini akan mendeteksi apabila suatu aset 
