@@ -40,6 +40,26 @@ export function AssetCard({ asset, showWatchlistButton = true }: AssetCardProps)
     }
   };
 
+  const getMarketStateDetails = (state: string | undefined, marketType: string) => {
+    // Crypto is always open 24/7
+    if (marketType === 'crypto' || state === 'REGULAR') {
+      return { label: 'OPEN', color: 'bg-green-500/10 text-green-500 border-green-500/20' };
+    }
+    if (state === 'CLOSED') {
+      return { label: 'CLOSED', color: 'bg-red-500/10 text-red-500 border-red-500/20' };
+    }
+    if (state === 'PRE') {
+      return { label: 'PRE-MARKET', color: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' };
+    }
+    if (state === 'POST' || state === 'POSTPOST') {
+      return { label: 'POST-MARKET', color: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' };
+    }
+    // Default fallback
+    return { label: state || 'OPEN', color: 'bg-green-500/10 text-green-500 border-green-500/20' };
+  };
+
+  const marketStateInfo = getMarketStateDetails(asset.marketState, asset.marketType);
+
   const formatPrice = (price: number | null | undefined) => {
     if (price === null || price === undefined) return '0.00';
     if (price > 1000) return price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -71,11 +91,9 @@ export function AssetCard({ asset, showWatchlistButton = true }: AssetCardProps)
                   <TrendIcon className="h-2.5 w-2.5" />
                   {asset.trend}
                 </Badge>
-                {asset.marketState && asset.marketState !== 'REGULAR' && (
-                  <Badge variant="secondary" className="text-[9px] px-1.5 py-0 uppercase">
-                    {asset.marketState}
-                  </Badge>
-                )}
+                <Badge variant="outline" className={`text-[9px] px-1.5 py-0 uppercase tracking-wider ${marketStateInfo.color}`}>
+                  {marketStateInfo.label}
+                </Badge>
               </div>
               <p className="text-xs text-muted-foreground">{asset.name}</p>
             </div>

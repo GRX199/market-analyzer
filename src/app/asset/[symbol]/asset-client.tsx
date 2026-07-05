@@ -56,6 +56,24 @@ export default function AssetClientPage({ symbol }: { symbol: string }) {
     loadData();
   }, [symbol, timeframe]);
 
+  const getMarketStateDetails = (state: string | undefined, marketType: string | undefined) => {
+    // Crypto is always open 24/7
+    if (marketType === 'crypto' || state === 'REGULAR') {
+      return { label: 'OPEN', color: 'bg-green-500/10 text-green-500 border-green-500/20' };
+    }
+    if (state === 'CLOSED') {
+      return { label: 'CLOSED', color: 'bg-red-500/10 text-red-500 border-red-500/20' };
+    }
+    if (state === 'PRE') {
+      return { label: 'PRE-MARKET', color: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' };
+    }
+    if (state === 'POST' || state === 'POSTPOST') {
+      return { label: 'POST-MARKET', color: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' };
+    }
+    // Default fallback
+    return { label: state || 'OPEN', color: 'bg-green-500/10 text-green-500 border-green-500/20' };
+  };
+
   const handleWatchlist = () => {
     if (!asset) return;
     if (isWatched) {
@@ -89,11 +107,9 @@ export default function AssetClientPage({ symbol }: { symbol: string }) {
           <div className="flex items-center gap-3">
             <h1 className="text-3xl font-bold">{asset.symbol}</h1>
             <span className="text-muted-foreground text-lg">{asset.name}</span>
-            {asset.marketState && asset.marketState !== 'REGULAR' && (
-              <Badge variant="secondary" className="uppercase text-xs tracking-wider">
-                {asset.marketState}
-              </Badge>
-            )}
+            <Badge variant="outline" className={`uppercase text-[10px] tracking-wider px-2 py-0.5 ${getMarketStateDetails(asset.marketState, asset.marketType).color}`}>
+              {getMarketStateDetails(asset.marketState, asset.marketType).label}
+            </Badge>
             <Button variant="outline" size="icon" onClick={handleWatchlist} className="ml-2">
               <Star className={`h-4 w-4 ${isWatched ? 'fill-yellow-400 text-yellow-400' : ''}`} />
             </Button>
