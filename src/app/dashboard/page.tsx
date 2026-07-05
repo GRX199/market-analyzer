@@ -13,16 +13,28 @@ import { ArrowUpRight, ArrowDownRight, Activity, TrendingUp, TrendingDown } from
 export default function DashboardPage() {
   const { selectedMarket } = useMarketStore();
   const [overview, setOverview] = useState<MarketOverview | null>(null);
+  const [signals, setSignals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [signalsLoading, setSignalsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadData() {
       setLoading(true);
+      setSignalsLoading(true);
       setError(null);
       try {
         const response = await fetch(`/api/market${selectedMarket ? `?type=${selectedMarket}` : ''}`);
         const result = await response.json();
+        
+        // Load signals in parallel
+        fetch(`/api/signals${selectedMarket ? `?market=${selectedMarket}` : ''}`)
+          .then(res => res.json())
+          .then(res => {
+            if (res.success && res.data) setSignals(res.data);
+            setSignalsLoading(false);
+          })
+          .catch(() => setSignalsLoading(false));
         
         if (result.success && result.data) {
           const assets: AssetData[] = result.data;
@@ -194,22 +206,74 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Most Active */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold flex items-center gap-2">
-            <Activity className="h-5 w-5 text-blue-500" /> Most Active (Volume)
-          </h2>
+        {/* Most Active */}
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold flex items-center gap-2">
+              <Activity className="h-5 w-5 text-blue-500" /> Most Active (Volume)
+            </h2>
+          </div>
+          {overview.mostActive.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+              {overview.mostActive.map(asset => (
+                <AssetCard key={asset.symbol} asset={asset} />
+              ))}
+            </div>
+          ) : (
+            <div className="bg-card rounded-lg p-8 border border-border text-center">
+              <p className="text-muted-foreground">Tidak ada data (API Limit / Data Kosong)</p>
+            </div>
+          )}
         </div>
-        {overview.mostActive.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-            {overview.mostActive.map(asset => (
-              <AssetCard key={asset.symbol} asset={asset} />
+      {/* Trading Signals Section */}
+      <div className="mt-8">
+        <div className="flex flex-col gap-2 mb-6">
+          <h2 className="text-2xl font-bold flex items-center gap-2">
+            <Activity className="h-6 w-6 text-primary" /> Entry Opportunities (Trading Signals)
+          </h2>
+          <p className="text-muted-foreground text-sm max-w-3xl">
+            <strong>Fitur Signal</strong> adalah fitur otomatis yang menganalisis aset-aset paling populer 
+            menggunakan algoritma Analisis Teknikal (RSI, MACD, Moving Averages). Fitur ini akan mendeteksi apabila suatu aset 
+            sedang berada dalam kondisi <em>Oversold</em> (siap untuk dibeli / <strong>Buy</strong>) atau 
+            <em>Overbought</em> (siap untuk dijual / <strong>Sell</strong>).
+          </p>
+        </div>
+
+        {signalsLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <DashboardSkeleton />
+          </div>
+        ) : signals.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {signals.map((signal: any) => (
+              <Card key={signal.id} className="overflow-hidden border border-border/50 hover:border-primary/50 transition-colors">
+                <div className={`h-1 w-full ${signal.type.includes('buy') ? 'bg-green-500' : 'bg-red-500'}`} />
+                <CardContent className="p-5">
+                  <div className="flex justify-between items-start mb-3">
+                    <h3 className="text-xl font-bold">{signal.symbol}</h3>
+                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                      signal.type.includes('buy') ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'
+                    }`}>
+                      {signal.type.toUpperCase().replace('_', ' ')}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-end">
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-1">Price at Signal</p>
+                      <p className="font-mono text-lg font-semibold">${signal.priceAtSignal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm text-muted-foreground mb-1">Strength</p>
+                      <p className="font-bold">{signal.score}/100</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             ))}
           </div>
         ) : (
           <div className="bg-card rounded-lg p-8 border border-border text-center">
-            <p className="text-muted-foreground">Tidak ada data (API Limit / Data Kosong)</p>
+            <p className="text-muted-foreground">Tidak ada sinyal kuat yang terdeteksi saat ini.</p>
           </div>
         )}
       </div>
