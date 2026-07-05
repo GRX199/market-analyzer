@@ -18,7 +18,7 @@ async function getRealNewsWithCache(): Promise<NewsItem[] | null> {
 
   try {
     // Yahoo search query for general finance
-    const news = await fetchYahooNews('finance market economy');
+    const news = await fetchYahooNews('finance');
 
     if (news.length > 0) {
       // Sort by date, newest first
