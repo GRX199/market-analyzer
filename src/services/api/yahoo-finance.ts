@@ -8,9 +8,13 @@ import { StockFundamentals, NewsItem } from '@/types/analysis';
 
 // Stocks ending with .JK are Indonesian. 
 // Forex must end with =X (e.g. EURUSD=X)
-export function mapSymbolToYahoo(symbol: string, marketType: 'stocks' | 'forex'): string {
+export function mapSymbolToYahoo(symbol: string, marketType: 'stocks' | 'forex' | 'crypto'): string {
   if (marketType === 'forex') {
     return `${symbol.replace('/', '')}=X`;
+  }
+  
+  if (marketType === 'crypto') {
+    return `${symbol.replace('/USDT', '-USD')}`;
   }
   
   if (marketType === 'stocks') {
@@ -32,7 +36,7 @@ export function mapSymbolToYahoo(symbol: string, marketType: 'stocks' | 'forex')
 export async function fetchYahooQuote(
   symbol: string, 
   name: string, 
-  marketType: 'stocks' | 'forex'
+  marketType: 'stocks' | 'forex' | 'crypto'
 ): Promise<AssetData | null> {
   try {
     const yahooSymbol = mapSymbolToYahoo(symbol, marketType);
@@ -71,7 +75,7 @@ export async function fetchYahooQuote(
 
 export async function fetchYahooOHLCV(
   symbol: string, 
-  marketType: 'stocks' | 'forex'
+  marketType: 'stocks' | 'forex' | 'crypto'
 ): Promise<OHLCV[]> {
   try {
     const yahooSymbol = mapSymbolToYahoo(symbol, marketType);

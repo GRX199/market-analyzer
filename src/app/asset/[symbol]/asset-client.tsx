@@ -128,33 +128,25 @@ export default function AssetClientPage({ symbol }: { symbol: string }) {
 
           {/* Indicators Summary */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="rounded-xl border bg-card p-4 text-center">
-              <p className="text-xs text-muted-foreground mb-1 uppercase">RSI (14)</p>
-              <p className="text-xl font-mono font-bold">{analysis.technical.rsi.value.toFixed(1)}</p>
-              <p className={`text-xs mt-1 ${analysis.technical.rsi.signal === 'overbought' ? 'text-red-500' : analysis.technical.rsi.signal === 'oversold' ? 'text-green-500' : 'text-muted-foreground'}`}>
-                {analysis.technical.rsi.signal}
-              </p>
+            <div className="bg-card p-4 rounded-xl border flex flex-col gap-1">
+              <span className="text-sm text-muted-foreground">RSI (14)</span>
+              <p className="text-xl font-mono font-bold">{(analysis.technical.rsi?.value || 0).toFixed(1)}</p>
+              <Badge variant="outline" className="w-fit mt-1">{analysis.technical.rsi?.signal || 'neutral'}</Badge>
             </div>
-            <div className="rounded-xl border bg-card p-4 text-center">
-              <p className="text-xs text-muted-foreground mb-1 uppercase">MACD</p>
-              <p className="text-xl font-mono font-bold">{analysis.technical.macd.histogram.toFixed(4)}</p>
-              <p className={`text-xs mt-1 ${analysis.technical.macd.signal === 'bullish' ? 'text-green-500' : analysis.technical.macd.signal === 'bearish' ? 'text-red-500' : 'text-muted-foreground'}`}>
-                {analysis.technical.macd.signal}
-              </p>
+            <div className="bg-card p-4 rounded-xl border flex flex-col gap-1">
+              <span className="text-sm text-muted-foreground">MACD</span>
+              <p className="text-xl font-mono font-bold">{(analysis.technical.macd?.histogram || 0).toFixed(4)}</p>
+              <Badge variant="outline" className="w-fit mt-1">{analysis.technical.macd?.signal || 'neutral'}</Badge>
             </div>
-            <div className="rounded-xl border bg-card p-4 text-center">
-              <p className="text-xs text-muted-foreground mb-1 uppercase">Volatility (ATR)</p>
-              <p className="text-xl font-mono font-bold">{analysis.technical.atr.percentOfPrice.toFixed(2)}%</p>
-              <p className={`text-xs mt-1 capitalize`}>
-                {analysis.technical.atr.volatility} Risk
-              </p>
+            <div className="bg-card p-4 rounded-xl border flex flex-col gap-1">
+              <span className="text-sm text-muted-foreground">ATR / Volatility</span>
+              <p className="text-xl font-mono font-bold">{(analysis.technical.atr?.percentOfPrice || 0).toFixed(2)}%</p>
+              <Badge variant="outline" className="w-fit mt-1">{analysis.technical.atr?.volatility || 'medium'}</Badge>
             </div>
-            <div className="rounded-xl border bg-card p-4 text-center">
-              <p className="text-xs text-muted-foreground mb-1 uppercase">StochRSI</p>
-              <p className="text-xl font-mono font-bold">{analysis.technical.stochRSI.k.toFixed(1)}</p>
-              <p className={`text-xs mt-1 ${analysis.technical.stochRSI.signal === 'overbought' ? 'text-red-500' : analysis.technical.stochRSI.signal === 'oversold' ? 'text-green-500' : 'text-muted-foreground'}`}>
-                {analysis.technical.stochRSI.signal}
-              </p>
+            <div className="bg-card p-4 rounded-xl border flex flex-col gap-1">
+              <span className="text-sm text-muted-foreground">Stoch RSI</span>
+              <p className="text-xl font-mono font-bold">{(analysis.technical.stochRSI?.k || 0).toFixed(1)}</p>
+              <Badge variant="outline" className="w-fit mt-1">{analysis.technical.stochRSI?.signal || 'neutral'}</Badge>
             </div>
           </div>
         </div>

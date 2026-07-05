@@ -9,6 +9,7 @@ import { useMarketStore } from '@/stores/market-store';
 import { Badge } from '@/components/ui/badge';
 import { useRouter } from 'next/navigation';
 import { useState, useCallback } from 'react';
+import Link from 'next/link';
 import { ALL_SYMBOLS } from '@/lib/constants';
 
 export function Navbar() {
@@ -66,15 +67,19 @@ export function Navbar() {
 
       <div className="flex items-center gap-2">
         <ThemeToggle />
-        <Button variant="ghost" size="icon" className="relative h-9 w-9 rounded-full">
-          <Bell className="h-4 w-4" />
-          <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-blue-500 text-[10px] font-bold text-white flex items-center justify-center">3</span>
-        </Button>
-        <Avatar className="h-9 w-9 cursor-pointer">
-          <AvatarFallback className="bg-gradient-to-br from-blue-600 to-indigo-600 text-white text-sm">
-            U
-          </AvatarFallback>
-        </Avatar>
+        <Link href="/alerts">
+          <Button variant="ghost" size="icon" className="relative h-9 w-9 rounded-full">
+            <Bell className="h-4 w-4" />
+            <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-blue-500 text-[10px] font-bold text-white flex items-center justify-center">0</span>
+          </Button>
+        </Link>
+        <Link href="/settings">
+          <Avatar className="h-9 w-9 cursor-pointer hover:opacity-80 transition-opacity">
+            <AvatarFallback className="bg-gradient-to-br from-blue-600 to-indigo-600 text-white text-sm">
+              U
+            </AvatarFallback>
+          </Avatar>
+        </Link>
       </div>
     </header>
   );

@@ -40,13 +40,15 @@ export function AssetCard({ asset, showWatchlistButton = true }: AssetCardProps)
     }
   };
 
-  const formatPrice = (price: number) => {
+  const formatPrice = (price: number | null | undefined) => {
+    if (price === null || price === undefined) return '0.00';
     if (price > 1000) return price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     if (price > 1) return price.toFixed(4);
     return price.toFixed(6);
   };
 
-  const formatVolume = (vol: number) => {
+  const formatVolume = (vol: number | null | undefined) => {
+    if (vol === null || vol === undefined || vol === 0) return '0';
     if (vol >= 1e9) return (vol / 1e9).toFixed(1) + 'B';
     if (vol >= 1e6) return (vol / 1e6).toFixed(1) + 'M';
     if (vol >= 1e3) return (vol / 1e3).toFixed(1) + 'K';
@@ -88,7 +90,7 @@ export function AssetCard({ asset, showWatchlistButton = true }: AssetCardProps)
                   <TrendingDown className="h-3 w-3 text-red-500" />
                 )}
                 <span className={cn('text-xs font-mono font-semibold', isPositive ? 'text-green-500' : 'text-red-500')}>
-                  {isPositive ? '+' : ''}{asset.changePercent.toFixed(2)}%
+                  {isPositive ? '+' : ''}{(asset.changePercent || 0).toFixed(2)}%
                 </span>
               </div>
             </div>

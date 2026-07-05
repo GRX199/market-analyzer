@@ -11,7 +11,8 @@ interface PriceTickerProps {
 export function PriceTicker({ price, change, changePercent, size = 'md' }: PriceTickerProps) {
   const isPositive = changePercent >= 0;
 
-  const formatPrice = (p: number) => {
+  const formatPrice = (p: number | null | undefined) => {
+    if (p === null || p === undefined) return '0.00';
     if (p > 1000) return p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     if (p > 1) return p.toFixed(4);
     return p.toFixed(6);
@@ -34,8 +35,10 @@ export function PriceTicker({ price, change, changePercent, size = 'md' }: Price
         ) : (
           <TrendingDown className="h-4 w-4 text-red-500" />
         )}
-        <span className={cn('font-mono font-semibold', sizeClasses[size].change, isPositive ? 'text-green-500' : 'text-red-500')}>
-          {isPositive ? '+' : ''}{change.toFixed(Math.abs(change) < 1 ? 4 : 2)} ({isPositive ? '+' : ''}{changePercent.toFixed(2)}%)
+        <span className={cn('text-sm font-semibold flex items-center', isPositive ? 'text-green-500' : 'text-red-500')}>
+          {isPositive ? <ArrowUpRight className="h-4 w-4 mr-1" /> : <ArrowDownRight className="h-4 w-4 mr-1" />}
+          {isPositive ? '+' : ''}{(change || 0).toFixed(Math.abs(change || 0) < 1 ? 4 : 2)} 
+          ({isPositive ? '+' : ''}{(changePercent || 0).toFixed(2)}%)
         </span>
       </div>
     </div>

@@ -171,11 +171,11 @@ export function SignalCard({
                 <p className="text-[10px] uppercase tracking-wider text-blue-500 mb-2 flex items-center gap-1">
                   <Target className="h-3 w-3" /> Key Levels (Educational)
                 </p>
-                <div className="grid grid-cols-2 gap-1 text-xs">
-                  {supportLevel ? <div><span className="text-muted-foreground">Support:</span> <span className="font-mono">{supportLevel.toFixed(4)}</span></div> : null}
-                  {resistanceLevel ? <div><span className="text-muted-foreground">Resistance:</span> <span className="font-mono">{resistanceLevel.toFixed(4)}</span></div> : null}
-                  {stopLoss ? <div><span className="text-red-400">SL:</span> <span className="font-mono">{stopLoss.toFixed(4)}</span></div> : null}
-                  {takeProfit ? <div><span className="text-green-400">TP:</span> <span className="font-mono">{takeProfit.toFixed(4)}</span></div> : null}
+                <div className="grid grid-cols-2 gap-2 text-sm mt-3 pt-3 border-t">
+                  {supportLevel ? <div><span className="text-muted-foreground">Support:</span> <span className="font-mono">{(supportLevel || 0).toFixed(4)}</span></div> : null}
+                  {resistanceLevel ? <div><span className="text-muted-foreground">Resistance:</span> <span className="font-mono">{(resistanceLevel || 0).toFixed(4)}</span></div> : null}
+                  {stopLoss ? <div><span className="text-red-400">SL:</span> <span className="font-mono">{(stopLoss || 0).toFixed(4)}</span></div> : null}
+                  {takeProfit ? <div><span className="text-green-400">TP:</span> <span className="font-mono">{(takeProfit || 0).toFixed(4)}</span></div> : null}
                 </div>
               </div>
             )}

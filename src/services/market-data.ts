@@ -5,7 +5,7 @@
 import { AssetData, OHLCV, MarketType, MarketOverview } from '@/types/market';
 import { fetchCryptoAssets, fetchCryptoAssetDetail, fetchCryptoOHLCV, isCryptoSymbol } from './api/coingecko';
 import { fetchYahooQuote, fetchYahooOHLCV, mapSymbolToYahoo } from './api/yahoo-finance';
-import { STOCK_SYMBOLS, FOREX_SYMBOLS } from '@/lib/constants';
+import { STOCK_SYMBOLS, FOREX_SYMBOLS, CRYPTO_SYMBOLS } from '@/lib/constants';
 import yahooFinance from 'yahoo-finance2';
 
 function isForexSymbol(symbol: string) {
@@ -15,6 +15,8 @@ function isForexSymbol(symbol: string) {
 function isStockSymbol(symbol: string) {
   return STOCK_SYMBOLS.some(s => s.symbol === symbol);
 }
+
+
 
 /**
  * Get list of assets — ONLY uses real API, returns empty array if unconfigured
@@ -30,18 +32,23 @@ export async function getAssetList(marketType?: MarketType): Promise<AssetData[]
   }
 
   try {
-    if (marketType === 'crypto') {
-      const realData = await fetchCryptoAssets();
-      return realData;
-    }
 
-    if (marketType === 'stocks' || marketType === 'forex') {
-      const symbolsList = marketType === 'stocks' ? STOCK_SYMBOLS : FOREX_SYMBOLS;
+
+    if (marketType === 'stocks' || marketType === 'forex' || marketType === 'crypto') {
+      let symbolsList = STOCK_SYMBOLS;
+      if (marketType === 'forex') symbolsList = FOREX_SYMBOLS;
+      if (marketType === 'crypto') symbolsList = CRYPTO_SYMBOLS;
+      
       const yahooSymbols = symbolsList.map(s => mapSymbolToYahoo(s.symbol, marketType));
       
       try {
-        // Yahoo Finance allows batch quoting
-        const quotes = await yahooFinance.quote(yahooSymbols);
+        // Fetch individually to prevent one bad symbol from failing the batch
+        const quotePromises = yahooSymbols.map(sym => yahooFinance.quote(sym));
+        const results = await Promise.allSettled(quotePromises);
+        
+        const quotes = results
+          .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled' && !!r.value)
+          .map(r => r.value);
         
         return symbolsList.map(s => {
           const ySymbol = mapSymbolToYahoo(s.symbol, marketType);
@@ -101,7 +108,8 @@ export async function getAssetList(marketType?: MarketType): Promise<AssetData[]
 export async function getAssetPrice(symbol: string): Promise<AssetData | null> {
   try {
     if (isCryptoSymbol(symbol)) {
-      return await fetchCryptoAssetDetail(symbol);
+      const meta = CRYPTO_SYMBOLS.find(s => s.symbol === symbol);
+      return await fetchYahooQuote(symbol, meta?.name || symbol, 'crypto');
     }
 
     if (isStockSymbol(symbol)) {
@@ -127,7 +135,7 @@ export async function getAssetPrice(symbol: string): Promise<AssetData | null> {
 export async function getOHLCV(symbol: string): Promise<OHLCV[]> {
   try {
     if (isCryptoSymbol(symbol)) {
-      return await fetchCryptoOHLCV(symbol);
+      return await fetchYahooOHLCV(symbol, 'crypto');
     }
 
     if (isStockSymbol(symbol)) {
