@@ -11,6 +11,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { TIMEFRAMES } from '@/lib/constants';
 import { Star, ArrowLeft } from 'lucide-react';
 import { useUserStore } from '@/stores/user-store';
+import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 
 export default function AssetClientPage({ symbol }: { symbol: string }) {
