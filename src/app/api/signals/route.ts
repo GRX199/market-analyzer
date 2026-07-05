@@ -11,7 +11,8 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const symbol = searchParams.get('symbol');
-    const marketParam = searchParams.get('market') as MarketType || 'crypto';
+    const marketParam = searchParams.get('market');
+    const targetMarket = (marketParam === 'all' || !marketParam) ? undefined : marketParam as MarketType;
 
     if (symbol) {
       // Analyze single symbol
@@ -40,7 +41,7 @@ export async function GET(request: Request) {
     }
 
     // Analyze top assets in the market to find opportunities
-    const assets = await getAssetList(marketParam);
+    const assets = await getAssetList(targetMarket);
     const topAssets = assets.slice(0, 20); // Take first 20 to provide more opportunities
 
     const signalsPromises = topAssets.map(async (asset) => {
