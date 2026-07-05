@@ -53,7 +53,8 @@ export const TIMEFRAMES: { value: Timeframe; label: string }[] = [
   { value: '1W', label: '1 Week' },
 ];
 
-export const MARKET_TYPES: { value: MarketType; label: string; icon: string }[] = [
+export const MARKET_TYPES: { value: MarketType | 'all'; label: string; icon: string }[] = [
+  { value: 'all', label: 'All Markets', icon: '🌍' },
   { value: 'forex', label: 'Forex', icon: '💱' },
   { value: 'stocks', label: 'Stocks', icon: '📈' },
   { value: 'crypto', label: 'Crypto', icon: '₿' },

@@ -3,11 +3,11 @@ import { persist } from 'zustand/middleware';
 import { MarketType, Timeframe } from '@/types/market';
 
 interface MarketState {
-  selectedMarket: MarketType;
+  selectedMarket: MarketType | 'all';
   selectedSymbol: string | null;
   selectedTimeframe: Timeframe;
   searchQuery: string;
-  setSelectedMarket: (market: MarketType) => void;
+  setSelectedMarket: (market: MarketType | 'all') => void;
   setSelectedSymbol: (symbol: string | null) => void;
   setSelectedTimeframe: (timeframe: Timeframe) => void;
   setSearchQuery: (query: string) => void;
@@ -16,7 +16,7 @@ interface MarketState {
 export const useMarketStore = create<MarketState>()(
   persist(
     (set) => ({
-      selectedMarket: 'crypto',
+      selectedMarket: 'all',
       selectedSymbol: null,
       selectedTimeframe: '1D',
       searchQuery: '',

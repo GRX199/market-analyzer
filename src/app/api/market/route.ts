@@ -8,9 +8,10 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const marketType = searchParams.get('type') as MarketType | null;
+    const param = searchParams.get('type');
+    const marketType = (param === 'all' || !param) ? undefined : param as MarketType;
 
-    const data = await getAssetList(marketType || undefined);
+    const data = await getAssetList(marketType);
     
     return NextResponse.json({ success: true, data });
   } catch (error: any) {
