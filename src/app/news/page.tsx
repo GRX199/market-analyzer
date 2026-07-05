@@ -49,7 +49,7 @@ export default function NewsPage() {
   return (
     <DashboardLayout>
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Market News & Sentiment</h1>
+        <h1 className="text-2xl md:text-3xl font-bold mb-2">Market News &amp; Sentiment</h1>
         <p className="text-muted-foreground">Latest headlines and AI-analyzed sentiment impact.</p>
       </div>
 
@@ -64,7 +64,7 @@ export default function NewsPage() {
           {news.map(item => (
             <a key={item.id} href={item.url} target="_blank" rel="noopener noreferrer" className="block outline-none">
               <Card className="h-full hover:border-blue-500/30 transition-colors cursor-pointer group">
-                <CardContent className="p-5 flex gap-4 h-full">
+                <CardContent className="p-4 md:p-5 flex flex-col sm:flex-row gap-3 md:gap-4 h-full">
                   <div className="mt-1 flex-shrink-0 h-10 w-10 rounded-lg bg-muted flex items-center justify-center group-hover:bg-blue-500/10 transition-colors">
                     <Newspaper className="h-5 w-5 text-muted-foreground group-hover:text-blue-500" />
                   </div>
@@ -80,13 +80,13 @@ export default function NewsPage() {
                         {item.summary}
                       </p>
                     </div>
-                    <div className="flex items-center justify-between mt-auto pt-3 border-t">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mt-auto pt-3 border-t gap-2">
                       <div className="flex items-center gap-3 text-xs text-muted-foreground">
                         <span className="font-medium text-foreground">{item.source}</span>
                         <span>•</span>
                         <span>{formatDistanceToNow(new Date(item.publishedAt), { addSuffix: true })}</span>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         {item.relatedSymbols.slice(0, 2).map(sym => (
                           <Badge key={sym} variant="outline" className="text-[10px]">{sym}</Badge>
                         ))}

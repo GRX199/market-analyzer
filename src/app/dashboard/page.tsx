@@ -113,13 +113,13 @@ export default function DashboardPage() {
 
   return (
     <DashboardLayout>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-4">Market Dashboard</h1>
+      <div className="mb-6 md:mb-8">
+        <h1 className="text-2xl md:text-3xl font-bold mb-4">Market Dashboard</h1>
         <MarketSelector />
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Overall Trend</CardTitle>
@@ -173,7 +173,7 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 mb-8">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 md:gap-8 mb-6 md:mb-8">
         {/* Top Gainers */}
         <div>
           <div className="flex items-center justify-between mb-4">
@@ -238,8 +238,8 @@ export default function DashboardPage() {
       <div className="mt-8">
         <div className="flex flex-col gap-2 mb-6">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <h2 className="text-2xl font-bold flex items-center gap-2">
-              <Activity className="h-6 w-6 text-primary" /> Entry Opportunities (Trading Signals)
+            <h2 className="text-xl md:text-2xl font-bold flex items-center gap-2">
+              <Activity className="h-5 w-5 md:h-6 md:w-6 text-primary" /> Entry Opportunities
             </h2>
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-2 bg-muted/30 p-1 rounded-lg border w-fit">
@@ -254,12 +254,12 @@ export default function DashboardPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex items-center gap-2 bg-muted/30 p-1 rounded-lg border w-fit">
-                <Clock className="h-4 w-4 text-muted-foreground ml-2" />
+              <div className="flex items-center gap-2 bg-muted/30 p-1 rounded-lg border w-full sm:w-fit overflow-x-auto">
+                <Clock className="h-4 w-4 text-muted-foreground ml-2 shrink-0" />
                 <Tabs value={selectedTimeframe} onValueChange={(v) => setSelectedTimeframe(v as any)}>
                   <TabsList className="h-8 bg-transparent">
                     {TIMEFRAMES.map(tf => (
-                      <TabsTrigger key={tf.value} value={tf.value} className="text-xs px-2 h-6 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                      <TabsTrigger key={tf.value} value={tf.value} className="text-xs px-1.5 md:px-2 h-6 data-[state=active]:bg-background data-[state=active]:shadow-sm whitespace-nowrap">
                         {tf.label}
                       </TabsTrigger>
                     ))}
@@ -281,14 +281,14 @@ export default function DashboardPage() {
             <DashboardSkeleton />
           </div>
         ) : signals.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {signals.map((signal: any) => (
               <Link href={`/asset/${encodeURIComponent(signal.symbol)}`} key={signal.id}>
                 <Card className="overflow-hidden border border-border/50 hover:border-primary/50 transition-colors h-full cursor-pointer">
                   <div className={`h-1 w-full ${signal.type.includes('buy') ? 'bg-green-500' : 'bg-red-500'}`} />
-                <CardContent className="p-5">
+                <CardContent className="p-4 md:p-5">
                   <div className="flex justify-between items-start mb-3">
-                    <h3 className="text-xl font-bold">{signal.symbol}</h3>
+                    <h3 className="text-lg md:text-xl font-bold">{signal.symbol}</h3>
                     <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
                       signal.type.includes('buy') ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'
                     }`}>
@@ -298,7 +298,7 @@ export default function DashboardPage() {
                   <div className="flex justify-between items-end mb-4">
                     <div>
                       <p className="text-sm text-muted-foreground mb-1">Price at Signal</p>
-                      <p className="font-mono text-lg font-semibold">${signal.priceAtSignal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</p>
+                      <p className="font-mono text-base md:text-lg font-semibold">${signal.priceAtSignal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</p>
                     </div>
                     <div className="text-right">
                       <p className="text-sm text-muted-foreground mb-1">Strength</p>

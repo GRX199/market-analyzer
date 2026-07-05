@@ -72,7 +72,7 @@ export function SignalCard({
         style={{ backgroundColor: SIGNAL_COLORS[signal] }}
       />
       <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
             <CardTitle className="text-lg">Overall Signal (Combined)</CardTitle>
             <p className="text-[10px] text-muted-foreground mt-0.5">Combines Technical, Fundamental & Sentiment</p>
@@ -86,9 +86,9 @@ export function SignalCard({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex items-center gap-6">
+        <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
           <ScoreGauge score={score} signal={signal} size="md" />
-          <div className="flex-1 grid grid-cols-2 gap-3">
+          <div className="flex-1 w-full grid grid-cols-2 gap-3">
             <div className="rounded-lg bg-muted/50 p-3">
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Confidence</p>
               <p className="text-lg font-bold font-mono">{confidence}%</p>
@@ -126,7 +126,7 @@ export function SignalCard({
 
         {/* Buy/Sell Factors */}
         {(buyFactors.length > 0 || sellFactors.length > 0) && (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {buyFactors.length > 0 && (
               <div className="rounded-lg border border-green-500/20 bg-green-500/5 p-3">
                 <p className="text-[10px] uppercase tracking-wider text-green-500 mb-2 flex items-center gap-1">
@@ -156,7 +156,7 @@ export function SignalCard({
 
         {/* Risk & Levels */}
         {(riskFactors.length > 0 || supportLevel || resistanceLevel) && (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {riskFactors.length > 0 && (
               <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
                 <p className="text-[10px] uppercase tracking-wider text-amber-500 mb-2 flex items-center gap-1">

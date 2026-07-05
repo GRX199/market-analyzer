@@ -55,15 +55,15 @@ export default function SignalScannerPage() {
     <DashboardLayout>
       <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold mb-2 flex items-center gap-3">
-            <Radio className="w-8 h-8 text-primary animate-pulse" /> 
+          <h1 className="text-2xl md:text-3xl font-bold mb-2 flex items-center gap-3">
+            <Radio className="w-6 h-6 md:w-8 md:h-8 text-primary animate-pulse" /> 
             Live Market Scanner
           </h1>
           <p className="text-muted-foreground mt-2">
             Our AI continuously scans {selectedMarket || 'all'} markets on the <strong>{selectedTimeframe}</strong> timeframe to find high-probability entry opportunities based on technical confluence.
           </p>
           
-          <div className="mt-6 flex flex-wrap items-center gap-4">
+          <div className="mt-4 md:mt-6 flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-3 md:gap-4">
             <div className="flex items-center gap-2 bg-muted/30 p-1 rounded-lg border w-fit">
               <span className="text-sm text-muted-foreground ml-2 font-medium">Mode:</span>
               <Select value={analysisMode} onValueChange={(v) => setAnalysisMode(v as any)}>
@@ -77,12 +77,12 @@ export default function SignalScannerPage() {
               </Select>
             </div>
             
-            <div className="flex items-center gap-2 bg-muted/30 p-1 rounded-lg border w-fit">
+            <div className="flex items-center gap-2 bg-muted/30 p-1 rounded-lg border w-full sm:w-fit overflow-x-auto">
               <span className="text-sm text-muted-foreground ml-2 font-medium">Timeframe:</span>
               <Tabs value={selectedTimeframe} onValueChange={(v) => setSelectedTimeframe(v as any)}>
                 <TabsList className="h-8 bg-transparent">
                   {TIMEFRAMES.map(tf => (
-                    <TabsTrigger key={tf.value} value={tf.value} className="text-xs px-3 h-6 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                    <TabsTrigger key={tf.value} value={tf.value} className="text-xs px-1.5 md:px-3 h-6 data-[state=active]:bg-background data-[state=active]:shadow-sm whitespace-nowrap">
                       {tf.label}
                     </TabsTrigger>
                   ))}
@@ -124,11 +124,11 @@ export default function SignalScannerPage() {
                   />
                 </div>
                 
-                <CardContent className="p-6">
+                <CardContent className="p-4 md:p-6">
                   {/* Header */}
                   <div className="flex justify-between items-start mb-6">
                     <div>
-                      <h3 className="text-2xl font-black tracking-tight">{signal.symbol}</h3>
+                      <h3 className="text-xl md:text-2xl font-black tracking-tight">{signal.symbol}</h3>
                       <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
                         <Target className="w-3 h-3" /> Entry Price: <span className="font-mono text-foreground">${signal.priceAtSignal.toLocaleString()}</span>
                       </p>

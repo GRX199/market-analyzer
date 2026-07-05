@@ -81,7 +81,7 @@ export function AssetCard({ asset, showWatchlistButton = true }: AssetCardProps)
         <CardContent className="p-4">
           <div className="flex items-start justify-between mb-3">
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <h3 className="font-bold text-sm">{asset.symbol}</h3>
                 <Badge
                   variant="outline"

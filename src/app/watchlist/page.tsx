@@ -51,7 +51,7 @@ export default function WatchlistPage() {
   return (
     <DashboardLayout>
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">My Watchlist</h1>
+        <h1 className="text-2xl md:text-3xl font-bold mb-2">My Watchlist</h1>
         <p className="text-muted-foreground">Monitor your favorite assets across all markets.</p>
       </div>
 

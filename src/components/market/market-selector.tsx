@@ -10,7 +10,7 @@ export function MarketSelector() {
 
   return (
     <Tabs value={selectedMarket} onValueChange={(v) => setSelectedMarket(v as MarketType)}>
-      <TabsList className="bg-muted/50">
+      <TabsList className="bg-muted/50 w-full sm:w-auto overflow-x-auto">
         {MARKET_TYPES.map((mt) => (
           <TabsTrigger key={mt.value} value={mt.value} className="gap-1.5 data-[state=active]:bg-background">
             <span>{mt.icon}</span>

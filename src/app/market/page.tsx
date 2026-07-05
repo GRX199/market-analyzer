@@ -42,7 +42,7 @@ export default function MarketPage() {
   return (
     <DashboardLayout>
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-4">Market Explorer</h1>
+        <h1 className="text-2xl md:text-3xl font-bold mb-4">Market Explorer</h1>
         <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
           <MarketSelector />
           <div className="relative w-full sm:w-72">

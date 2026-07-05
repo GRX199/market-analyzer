@@ -104,9 +104,9 @@ export default function AssetClientPage({ symbol }: { symbol: string }) {
           <Link href="/market" className="text-muted-foreground hover:text-foreground flex items-center gap-2 mb-2 text-sm">
             <ArrowLeft className="h-4 w-4" /> Back to Market
           </Link>
-          <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold">{asset.symbol}</h1>
-            <span className="text-muted-foreground text-lg">{asset.name}</span>
+          <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl md:text-3xl font-bold">{asset.symbol}</h1>
+            <span className="text-muted-foreground text-base md:text-lg">{asset.name}</span>
             <Badge variant="outline" className={`uppercase text-[10px] tracking-wider px-2 py-0.5 ${getMarketStateDetails(asset.marketState, asset.marketType).color}`}>
               {getMarketStateDetails(asset.marketState, asset.marketType).label}
             </Badge>
@@ -128,7 +128,7 @@ export default function AssetClientPage({ symbol }: { symbol: string }) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Chart Column */}
         <div className="lg:col-span-2 space-y-6">
-          <div className="rounded-xl border bg-card p-4 shadow-sm">
+          <div className="rounded-xl border bg-card p-3 md:p-4 shadow-sm">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
               <h3 className="font-semibold">Interactive Chart</h3>
               <Tabs value={timeframe} onValueChange={(v) => setTimeframe(v as Timeframe)}>
@@ -143,13 +143,13 @@ export default function AssetClientPage({ symbol }: { symbol: string }) {
             </div>
             <CandlestickChart 
               data={candles} 
-              height={500} 
+              height={typeof window !== 'undefined' && window.innerWidth < 640 ? 320 : 500} 
               onCrosshairMove={setCrosshairPrice}
             />
           </div>
 
           {/* Indicators Summary */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
             <div className="bg-card p-4 rounded-xl border flex flex-col gap-1">
               <span className="text-sm text-muted-foreground">Technical Score</span>
               <p className="text-xl font-mono font-bold text-primary">{analysis.technical.score}/100</p>
