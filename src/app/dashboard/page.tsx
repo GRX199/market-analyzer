@@ -293,7 +293,7 @@ export default function DashboardPage() {
                   {signal.reasons && signal.reasons.length > 0 && (
                     <div className="mt-4 pt-4 border-t border-border/50">
                       <p className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1">
-                        <Activity className="w-3 h-3" /> Technical Analysis
+                        <Activity className="w-3 h-3" /> Overall Analysis (Combined)
                       </p>
                       <ul className="text-xs space-y-1.5">
                         {signal.reasons.slice(0, 3).map((reason: string, idx: number) => (

@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
 import { SignalType } from '@/types/analysis';
-import { getAssetList, getOHLCV } from '@/services/market-data';
+import { getAssetList, getOHLCV, getMarketTypeForSymbol } from '@/services/market-data';
+import { getFundamentalData } from '@/services/fundamental-data';
+import { getNewsBySymbol } from '@/services/news-service';
 import { calculateTechnicalScore } from '@/lib/analysis/technical';
+import { analyzeForexFundamentals, analyzeStockFundamentals, analyzeCryptoFundamentals } from '@/lib/analysis/fundamental';
+import { analyzeSentiment } from '@/lib/analysis/sentiment';
+import { calculateFinalScore } from '@/lib/analysis/scoring';
 import { MarketType } from '@/types/market';
 
 export const runtime = 'nodejs';
@@ -17,26 +22,41 @@ export async function GET(request: Request) {
 
     if (symbol) {
       // Analyze single symbol
-      const ohlcv = await getOHLCV(symbol, timeframe);
+      const marketType = getMarketTypeForSymbol(symbol);
+      const [ohlcv, fundamentalData, newsData] = await Promise.all([
+        getOHLCV(symbol, timeframe),
+        getFundamentalData(symbol, marketType),
+        getNewsBySymbol(symbol)
+      ]);
+
       if (!ohlcv || ohlcv.length === 0) return NextResponse.json({ success: true, data: [] });
       
-      const tech = calculateTechnicalScore(ohlcv);
+      const technical = calculateTechnicalScore(ohlcv);
       
-      let type: SignalType = 'hold';
-      if (tech.score >= 80) type = 'strong_buy';
-      else if (tech.score >= 60) type = 'buy';
-      else if (tech.score <= 20) type = 'strong_sell';
-      else if (tech.score <= 40) type = 'sell';
+      let fundamental;
+      if (marketType === 'forex') fundamental = analyzeForexFundamentals(fundamentalData as any);
+      else if (marketType === 'stocks') fundamental = analyzeStockFundamentals(fundamentalData as any);
+      else fundamental = analyzeCryptoFundamentals(fundamentalData as any);
+
+      const sentiment = analyzeSentiment(newsData);
+      
+      const finalAnalysis = calculateFinalScore(
+        symbol,
+        marketType,
+        technical,
+        fundamental,
+        sentiment
+      );
 
       return NextResponse.json({
         success: true,
         data: [{
           id: symbol,
           symbol,
-          type,
+          type: finalAnalysis.signal,
           priceAtSignal: ohlcv[ohlcv.length - 1].close,
           date: new Date().toISOString(),
-          score: tech.score
+          score: finalAnalysis.finalScore
         }]
       });
     }
@@ -46,29 +66,47 @@ export async function GET(request: Request) {
     const topAssets = assets.slice(0, 20); // Take first 20 to provide more opportunities
 
     const signalsPromises = topAssets.map(async (asset) => {
-      const ohlcv = await getOHLCV(asset.symbol, timeframe);
-      if (!ohlcv || ohlcv.length === 0) return null;
-      
-      const tech = calculateTechnicalScore(ohlcv);
-      
-      let type: SignalType = 'hold';
-      if (tech.score >= 80) type = 'strong_buy';
-      else if (tech.score >= 60) type = 'buy';
-      else if (tech.score <= 20) type = 'strong_sell';
-      else if (tech.score <= 40) type = 'sell';
+      try {
+        const [ohlcv, fundamentalData, newsData] = await Promise.all([
+          getOHLCV(asset.symbol, timeframe),
+          getFundamentalData(asset.symbol, asset.marketType),
+          getNewsBySymbol(asset.symbol)
+        ]);
 
-      // Only return actionable signals
-      if (type === 'hold') return null;
+        if (!ohlcv || ohlcv.length === 0) return null;
+        
+        const technical = calculateTechnicalScore(ohlcv);
+        
+        let fundamental;
+        if (asset.marketType === 'forex') fundamental = analyzeForexFundamentals(fundamentalData as any);
+        else if (asset.marketType === 'stocks') fundamental = analyzeStockFundamentals(fundamentalData as any);
+        else fundamental = analyzeCryptoFundamentals(fundamentalData as any);
 
-      return {
-        id: asset.symbol,
-        symbol: asset.symbol,
-        type,
-        priceAtSignal: asset.price,
-        date: new Date().toISOString(),
-        score: tech.score,
-        reasons: tech.reasons // Add reasons for UI explanation
-      };
+        const sentiment = analyzeSentiment(newsData);
+        
+        const finalAnalysis = calculateFinalScore(
+          asset.symbol,
+          asset.marketType,
+          technical,
+          fundamental,
+          sentiment
+        );
+
+        // Only return actionable signals based on Overall Score
+        if (finalAnalysis.signal === 'hold') return null;
+
+        return {
+          id: `${asset.symbol}-${Date.now()}`,
+          symbol: asset.symbol,
+          type: finalAnalysis.signal,
+          priceAtSignal: ohlcv[ohlcv.length - 1].close,
+          date: new Date().toISOString(),
+          score: finalAnalysis.finalScore,
+          reasons: finalAnalysis.reasons
+        };
+      } catch (err) {
+        return null;
+      }
     });
 
     const results = await Promise.all(signalsPromises);
