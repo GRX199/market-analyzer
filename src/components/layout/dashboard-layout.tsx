@@ -25,12 +25,12 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex">
       <DisclaimerModal />
       <Sidebar />
-      <div className="ml-64 flex flex-col min-h-screen transition-all duration-300">
+      <div className="flex-1 flex flex-col min-h-screen md:ml-64 transition-all duration-300 w-full overflow-hidden">
         <Navbar />
-        <main className="flex-1 p-6">
+        <main className="flex-1 p-4 md:p-6 w-full max-w-full overflow-x-hidden">
           {children}
         </main>
       </div>

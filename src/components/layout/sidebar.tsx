@@ -19,7 +19,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 
-const navItems = [
+export const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/market', label: 'Market Explorer', icon: Globe },
   { href: '/watchlist', label: 'Watchlist', icon: Star },
@@ -37,7 +37,7 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        'fixed left-0 top-0 z-40 flex h-screen flex-col border-r bg-card transition-all duration-300',
+        'hidden md:flex fixed left-0 top-0 z-40 h-screen flex-col border-r bg-card transition-all duration-300',
         collapsed ? 'w-16' : 'w-64'
       )}
     >

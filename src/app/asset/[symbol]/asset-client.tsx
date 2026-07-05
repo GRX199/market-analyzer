@@ -129,7 +129,7 @@ export default function AssetClientPage({ symbol }: { symbol: string }) {
         {/* Main Chart Column */}
         <div className="lg:col-span-2 space-y-6">
           <div className="rounded-xl border bg-card p-4 shadow-sm">
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
               <h3 className="font-semibold">Interactive Chart</h3>
               <Tabs value={timeframe} onValueChange={(v) => setTimeframe(v as Timeframe)}>
                 <TabsList className="h-8">
