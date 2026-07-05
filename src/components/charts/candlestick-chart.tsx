@@ -62,13 +62,20 @@ export function CandlestickChart({ data, height = 400, onCrosshairMove }: Candle
       wickDownColor: '#ef4444',
     });
 
-    const chartData = data.map(d => ({
-      time: (d.time / 1000) as any, // TV Lightweight charts expects seconds timestamp or YYYY-MM-DD
-      open: d.open,
-      high: d.high,
-      low: d.low,
-      close: d.close,
-    }));
+    const chartData = data
+      .map(d => ({
+        time: typeof d.time === 'string' ? d.time : (d.time > 1e10 ? Math.floor(d.time / 1000) : d.time) as any,
+        open: d.open,
+        high: d.high,
+        low: d.low,
+        close: d.close,
+      }))
+      .sort((a, b) => {
+        if (a.time < b.time) return -1;
+        if (a.time > b.time) return 1;
+        return 0;
+      })
+      .filter((d, index, self) => index === 0 || d.time !== self[index - 1].time); // Deduplicate
 
     candleSeries.setData(chartData);
 
@@ -83,13 +90,20 @@ export function CandlestickChart({ data, height = 400, onCrosshairMove }: Candle
       scaleMargins: { top: 0.85, bottom: 0 },
     });
 
-    volumeSeries.setData(
-      data.map(d => ({
-        time: (d.time / 1000) as any,
+    const volumeData = data
+      .map(d => ({
+        time: typeof d.time === 'string' ? d.time : (d.time > 1e10 ? Math.floor(d.time / 1000) : d.time) as any,
         value: d.volume,
         color: d.close >= d.open ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)',
       }))
-    );
+      .sort((a, b) => {
+        if (a.time < b.time) return -1;
+        if (a.time > b.time) return 1;
+        return 0;
+      })
+      .filter((d, index, self) => index === 0 || d.time !== self[index - 1].time); // Deduplicate
+
+    volumeSeries.setData(volumeData);
 
     chart.timeScale().fitContent();
 
