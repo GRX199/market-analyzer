@@ -73,7 +73,10 @@ export function SignalCard({
       />
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-lg">Analysis Signal</CardTitle>
+          <div>
+            <CardTitle className="text-lg">Overall Signal (Combined)</CardTitle>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Combines Technical, Fundamental & Sentiment</p>
+          </div>
           <Badge
             className="text-sm font-bold px-3 py-1"
             style={{ backgroundColor: SIGNAL_COLORS[signal] + '20', color: SIGNAL_COLORS[signal] }}

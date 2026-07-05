@@ -31,7 +31,7 @@ export default function AssetClientPage({ symbol }: { symbol: string }) {
       try {
         const [marketRes, analysisRes] = await Promise.all([
           fetch(`/api/market/${encodeURIComponent(symbol)}?chart=true&timeframe=${timeframe}`),
-          fetch(`/api/analysis/${encodeURIComponent(symbol)}`)
+          fetch(`/api/analysis/${encodeURIComponent(symbol)}?timeframe=${timeframe}`)
         ]);
 
         const marketResult = await marketRes.json();
@@ -133,7 +133,12 @@ export default function AssetClientPage({ symbol }: { symbol: string }) {
           </div>
 
           {/* Indicators Summary */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+            <div className="bg-card p-4 rounded-xl border flex flex-col gap-1">
+              <span className="text-sm text-muted-foreground">Technical Score</span>
+              <p className="text-xl font-mono font-bold text-primary">{analysis.technical.score}/100</p>
+              <Badge variant="outline" className="w-fit mt-1 border-primary/30 text-primary">Scanner Match</Badge>
+            </div>
             <div className="bg-card p-4 rounded-xl border flex flex-col gap-1">
               <span className="text-sm text-muted-foreground">RSI (14)</span>
               <p className="text-xl font-mono font-bold">{(analysis.technical.rsi?.value || 0).toFixed(1)}</p>
@@ -145,7 +150,7 @@ export default function AssetClientPage({ symbol }: { symbol: string }) {
               <Badge variant="outline" className="w-fit mt-1">{analysis.technical.macd?.signal || 'neutral'}</Badge>
             </div>
             <div className="bg-card p-4 rounded-xl border flex flex-col gap-1">
-              <span className="text-sm text-muted-foreground">ATR / Volatility</span>
+              <span className="text-sm text-muted-foreground">ATR / Volat.</span>
               <p className="text-xl font-mono font-bold">{(analysis.technical.atr?.percentOfPrice || 0).toFixed(2)}%</p>
               <Badge variant="outline" className="w-fit mt-1">{analysis.technical.atr?.volatility || 'medium'}</Badge>
             </div>

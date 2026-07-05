@@ -15,13 +15,16 @@ export async function GET(
   { params }: { params: Promise<{ symbol: string }> }
 ) {
   try {
+    const { searchParams } = new URL(request.url);
+    const timeframe = searchParams.get('timeframe') || '1D';
+    
     const resolvedParams = await params;
     const symbol = decodeURIComponent(resolvedParams.symbol);
     const marketType = getMarketTypeForSymbol(symbol);
     
     const [assetData, ohlcvData, fundamentalData, newsData] = await Promise.all([
       getAssetPrice(symbol),
-      getOHLCV(symbol),
+      getOHLCV(symbol, timeframe),
       getFundamentalData(symbol, marketType),
       getNewsBySymbol(symbol)
     ]);
