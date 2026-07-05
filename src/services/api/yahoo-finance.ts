@@ -240,7 +240,7 @@ export async function fetchYahooNews(query: string): Promise<NewsItem[]> {
       summary: item.title,
       source: item.publisher || 'Yahoo Finance',
       url: item.link,
-      publishedAt: new Date(item.providerPublishTime ? item.providerPublishTime * 1000 : Date.now()).toISOString(),
+      publishedAt: new Date(item.providerPublishTime || Date.now()).toISOString(),
       sentiment: 'neutral',
       impact: 'medium',
       relatedSymbols: item.relatedTickers || [],
