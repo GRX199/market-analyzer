@@ -9,6 +9,7 @@ import { MarketOverview, MarketType, AssetData } from '@/types/market';
 import { useMarketStore } from '@/stores/market-store';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ArrowUpRight, ArrowDownRight, Activity, TrendingUp, TrendingDown } from 'lucide-react';
+import Link from 'next/link';
 
 export default function DashboardPage() {
   const { selectedMarket } = useMarketStore();
@@ -246,8 +247,9 @@ export default function DashboardPage() {
         ) : signals.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {signals.map((signal: any) => (
-              <Card key={signal.id} className="overflow-hidden border border-border/50 hover:border-primary/50 transition-colors">
-                <div className={`h-1 w-full ${signal.type.includes('buy') ? 'bg-green-500' : 'bg-red-500'}`} />
+              <Link href={`/asset/${encodeURIComponent(signal.symbol)}`} key={signal.id}>
+                <Card className="overflow-hidden border border-border/50 hover:border-primary/50 transition-colors h-full cursor-pointer">
+                  <div className={`h-1 w-full ${signal.type.includes('buy') ? 'bg-green-500' : 'bg-red-500'}`} />
                 <CardContent className="p-5">
                   <div className="flex justify-between items-start mb-3">
                     <h3 className="text-xl font-bold">{signal.symbol}</h3>
@@ -257,18 +259,35 @@ export default function DashboardPage() {
                       {signal.type.toUpperCase().replace('_', ' ')}
                     </span>
                   </div>
-                  <div className="flex justify-between items-end">
+                  <div className="flex justify-between items-end mb-4">
                     <div>
                       <p className="text-sm text-muted-foreground mb-1">Price at Signal</p>
                       <p className="font-mono text-lg font-semibold">${signal.priceAtSignal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</p>
                     </div>
                     <div className="text-right">
                       <p className="text-sm text-muted-foreground mb-1">Strength</p>
-                      <p className="font-bold">{signal.score}/100</p>
+                      <p className="font-bold text-lg">{signal.score}<span className="text-xs text-muted-foreground font-normal">/100</span></p>
                     </div>
                   </div>
+                  
+                  {signal.reasons && signal.reasons.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-border/50">
+                      <p className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1">
+                        <Activity className="w-3 h-3" /> Technical Analysis
+                      </p>
+                      <ul className="text-xs space-y-1.5">
+                        {signal.reasons.slice(0, 3).map((reason: string, idx: number) => (
+                          <li key={idx} className="flex items-start gap-1.5 text-muted-foreground">
+                            <span className={`w-1.5 h-1.5 rounded-full mt-1 shrink-0 ${signal.type.includes('buy') ? 'bg-green-500/70' : 'bg-red-500/70'}`} />
+                            <span className="leading-tight">{reason}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
+              </Link>
             ))}
           </div>
         ) : (

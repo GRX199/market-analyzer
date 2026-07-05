@@ -39,9 +39,9 @@ export async function GET(request: Request) {
       });
     }
 
-    // Analyze top 5 assets in the market to find opportunities
+    // Analyze top assets in the market to find opportunities
     const assets = await getAssetList(marketParam);
-    const topAssets = assets.slice(0, 5); // Take first 5 to keep API fast
+    const topAssets = assets.slice(0, 12); // Take first 12 to provide more opportunities
 
     const signalsPromises = topAssets.map(async (asset) => {
       const ohlcv = await getOHLCV(asset.symbol, '1D');
@@ -64,7 +64,8 @@ export async function GET(request: Request) {
         type,
         priceAtSignal: asset.price,
         date: new Date().toISOString(),
-        score: tech.score
+        score: tech.score,
+        reasons: tech.reasons // Add reasons for UI explanation
       };
     });
 
