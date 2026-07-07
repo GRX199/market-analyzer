@@ -82,7 +82,7 @@ export function Sidebar() {
       <div className="border-t p-3 flex flex-col gap-2">
         {!collapsed && (
           <div className="text-center text-[10px] text-muted-foreground/70 font-mono tracking-wider">
-            v0.1.0-f10d89e
+            v0.1.0-{process.env.NEXT_PUBLIC_GIT_COMMIT || 'dev'}
           </div>
         )}
         <Button
