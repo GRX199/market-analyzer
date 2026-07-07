@@ -48,6 +48,7 @@ export async function GET(request: Request) {
         const finalAnalysis = calculateFinalScore(
           symbol,
           marketType,
+          ohlcv[ohlcv.length - 1].close,
           technical,
           fundamental,
           sentiment
@@ -138,6 +139,7 @@ export async function GET(request: Request) {
           const finalAnalysis = calculateFinalScore(
             asset.symbol,
             asset.marketType,
+            entryPrice,
             technical,
             fundamental,
             sentiment

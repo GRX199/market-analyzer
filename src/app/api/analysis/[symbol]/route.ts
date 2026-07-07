@@ -52,6 +52,7 @@ export async function GET(
     const finalAnalysis = calculateFinalScore(
       symbol,
       marketType,
+      assetData.price,
       technical,
       fundamental,
       sentiment

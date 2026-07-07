@@ -12,6 +12,7 @@ import { SCORE_WEIGHTS, SCORE_RANGES } from '@/lib/constants';
 export function calculateFinalScore(
   symbol: string,
   marketType: MarketType,
+  currentPrice: number,
   technical: TechnicalAnalysis,
   fundamental: FundamentalAnalysis,
   sentiment: SentimentAnalysis
@@ -108,9 +109,6 @@ export function calculateFinalScore(
   if (marketType === 'crypto') riskFactors.push('Cryptocurrency markets are highly speculative and subject to extreme volatility.');
 
   // 7. Establish Key Levels (Educational purposes only)
-  const currentPrice = technical.movingAverages.length > 0 
-    ? technical.movingAverages[0].value 
-    : 0;
   const atrValue = technical.atr.value;
   
   // Maximum SL distance: 1.5× ATR, capped at 3% of price
