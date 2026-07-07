@@ -78,13 +78,19 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* Collapse toggle */}
-      <div className="border-t p-3">
+      {/* Collapse toggle & Version */}
+      <div className="border-t p-3 flex flex-col gap-2">
+        {!collapsed && (
+          <div className="text-center text-[10px] text-muted-foreground/70 font-mono tracking-wider">
+            v0.1.0-f10d89e
+          </div>
+        )}
         <Button
           variant="ghost"
           size="sm"
           onClick={() => setCollapsed(!collapsed)}
           className="w-full justify-center"
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
         </Button>
