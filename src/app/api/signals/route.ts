@@ -89,11 +89,23 @@ export async function GET(request: Request) {
         if (!ohlcv || ohlcv.length === 0) return null;
         
         const technical = calculateTechnicalScore(ohlcv);
+        const lastCandle = ohlcv[ohlcv.length - 1];
+        const entryPrice = lastCandle.close;
         
         let finalScore = technical.score;
         let finalSignal = technical.signal || 'hold';
         let finalReasons = technical.reasons;
+        let stopLoss = 0;
+        let takeProfit = 0;
+        let supportLevel = 0;
+        let resistanceLevel = 0;
         
+        // Calculate support/resistance from technical data
+        const supports = technical.supportResistance.filter(sr => sr.type === 'support');
+        const resistances = technical.supportResistance.filter(sr => sr.type === 'resistance');
+        supportLevel = supports.length > 0 ? supports[0].price : technical.pivotPoints.s1;
+        resistanceLevel = resistances.length > 0 ? resistances[resistances.length - 1].price : technical.pivotPoints.r1;
+
         if (mode === 'combined') {
           let fundamental;
           if (asset.marketType === 'forex') fundamental = analyzeForexFundamentals(fundamentalData as any);
@@ -112,24 +124,49 @@ export async function GET(request: Request) {
           finalScore = finalAnalysis.finalScore;
           finalSignal = finalAnalysis.signal;
           finalReasons = finalAnalysis.reasons;
+          stopLoss = finalAnalysis.stopLoss;
+          takeProfit = finalAnalysis.takeProfit;
+          supportLevel = finalAnalysis.supportLevel;
+          resistanceLevel = finalAnalysis.resistanceLevel;
         } else {
           if (technical.score >= 80) finalSignal = 'strong_buy';
           else if (technical.score >= 60) finalSignal = 'buy';
           else if (technical.score <= 20) finalSignal = 'strong_sell';
           else if (technical.score <= 40) finalSignal = 'sell';
+          
+          // Calculate TP/SL for technical-only mode using ATR
+          const atrValue = technical.atr.value;
+          if (finalSignal === 'buy' || finalSignal === 'strong_buy') {
+            stopLoss = supportLevel > 0 ? supportLevel * 0.99 : entryPrice - (atrValue * 2);
+            takeProfit = resistanceLevel > entryPrice ? resistanceLevel : entryPrice + (atrValue * 3);
+          } else if (finalSignal === 'sell' || finalSignal === 'strong_sell') {
+            stopLoss = resistanceLevel > 0 ? resistanceLevel * 1.01 : entryPrice + (atrValue * 2);
+            takeProfit = supportLevel > 0 && supportLevel < entryPrice ? supportLevel : entryPrice - (atrValue * 3);
+          }
         }
 
         // Only return actionable signals
         if (finalSignal === 'hold') return null;
 
+        // Calculate Risk:Reward ratio
+        const risk = Math.abs(entryPrice - stopLoss);
+        const reward = Math.abs(takeProfit - entryPrice);
+        const riskRewardRatio = risk > 0 ? parseFloat((reward / risk).toFixed(2)) : 0;
+
         return {
           id: `${asset.symbol}-${Date.now()}`,
           symbol: asset.symbol,
           type: finalSignal,
-          priceAtSignal: ohlcv[ohlcv.length - 1].close,
+          priceAtSignal: entryPrice,
           date: new Date().toISOString(),
           score: finalScore,
-          reasons: finalReasons
+          reasons: finalReasons,
+          entryPrice,
+          stopLoss,
+          takeProfit,
+          supportLevel,
+          resistanceLevel,
+          riskRewardRatio,
         };
       } catch (err) {
         return null;

@@ -295,19 +295,51 @@ export default function DashboardPage() {
                       {signal.type.toUpperCase().replace('_', ' ')}
                     </span>
                   </div>
-                  <div className="flex justify-between items-end mb-4">
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-1">Price at Signal</p>
-                      <p className="font-mono text-base md:text-lg font-semibold">${signal.priceAtSignal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</p>
+
+                  {/* Entry / TP / SL Grid */}
+                  <div className="grid grid-cols-3 gap-2 mb-3">
+                    <div className="rounded-lg bg-blue-500/5 border border-blue-500/20 p-2 text-center">
+                      <p className="text-[10px] uppercase tracking-wider text-blue-400 mb-0.5">Entry</p>
+                      <p className="font-mono text-xs md:text-sm font-bold text-blue-400">
+                        {signal.entryPrice ? signal.entryPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : '-'}
+                      </p>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm text-muted-foreground mb-1">Strength</p>
-                      <p className="font-bold text-lg">{signal.score}<span className="text-xs text-muted-foreground font-normal">/100</span></p>
+                    <div className="rounded-lg bg-green-500/5 border border-green-500/20 p-2 text-center">
+                      <p className="text-[10px] uppercase tracking-wider text-green-400 mb-0.5">TP</p>
+                      <p className="font-mono text-xs md:text-sm font-bold text-green-400">
+                        {signal.takeProfit ? signal.takeProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : '-'}
+                      </p>
                     </div>
+                    <div className="rounded-lg bg-red-500/5 border border-red-500/20 p-2 text-center">
+                      <p className="text-[10px] uppercase tracking-wider text-red-400 mb-0.5">SL</p>
+                      <p className="font-mono text-xs md:text-sm font-bold text-red-400">
+                        {signal.stopLoss ? signal.stopLoss.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : '-'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Score & R:R */}
+                  <div className="flex justify-between items-center mb-3 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">Score:</span>
+                      <span className="font-bold">{signal.score}<span className="text-muted-foreground font-normal">/100</span></span>
+                    </div>
+                    {signal.riskRewardRatio > 0 && (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-muted-foreground">R:R</span>
+                        <span className={`font-bold font-mono px-1.5 py-0.5 rounded ${
+                          signal.riskRewardRatio >= 2 ? 'bg-green-500/10 text-green-500' : 
+                          signal.riskRewardRatio >= 1 ? 'bg-yellow-500/10 text-yellow-500' : 
+                          'bg-red-500/10 text-red-500'
+                        }`}>
+                          1:{signal.riskRewardRatio}
+                        </span>
+                      </div>
+                    )}
                   </div>
                   
                   {signal.reasons && signal.reasons.length > 0 && (
-                    <div className="mt-4 pt-4 border-t border-border/50">
+                    <div className="pt-3 border-t border-border/50">
                       <p className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1">
                         <Activity className="w-3 h-3" /> {analysisMode === 'combined' ? 'Overall Analysis (Combined)' : 'Technical Analysis'}
                       </p>
