@@ -108,32 +108,78 @@ export function calculateFinalScore(
   if (marketType === 'crypto') riskFactors.push('Cryptocurrency markets are highly speculative and subject to extreme volatility.');
 
   // 7. Establish Key Levels (Educational purposes only)
+  const currentPrice = technical.movingAverages.length > 0 
+    ? technical.movingAverages[0].value 
+    : 0;
+  const atrValue = technical.atr.value;
+  
+  // Maximum SL distance: 1.5× ATR, capped at 3% of price
+  // Target R:R of 1:1.5 minimum
+  const maxSlDistance = Math.min(atrValue * 1.5, currentPrice * 0.03);
+  const defaultTpDistance = maxSlDistance * 1.5; // 1:1.5 R:R minimum
+
+  // Find nearest valid support/resistance levels (within 3% of current price)
   let supportLevel = 0;
   let resistanceLevel = 0;
+  const maxLevelDistance = currentPrice * 0.03; // Only consider S/R within 3%
   
   if (technical.supportResistance.length > 0) {
-    const supports = technical.supportResistance.filter(sr => sr.type === 'support');
-    const resistances = technical.supportResistance.filter(sr => sr.type === 'resistance');
+    const supports = technical.supportResistance
+      .filter(sr => sr.type === 'support' && sr.price < currentPrice && (currentPrice - sr.price) <= maxLevelDistance)
+      .sort((a, b) => b.price - a.price); // Nearest support first
+    const resistances = technical.supportResistance
+      .filter(sr => sr.type === 'resistance' && sr.price > currentPrice && (sr.price - currentPrice) <= maxLevelDistance)
+      .sort((a, b) => a.price - b.price); // Nearest resistance first
     
     if (supports.length > 0) supportLevel = supports[0].price;
-    if (resistances.length > 0) resistanceLevel = resistances[resistances.length - 1].price; // Nearest resistance
-  } else {
-    // Fallback to pivot points
-    supportLevel = technical.pivotPoints.s1;
-    resistanceLevel = technical.pivotPoints.r1;
+    if (resistances.length > 0) resistanceLevel = resistances[0].price;
+  }
+  
+  // Fallback to pivot points if within range
+  if (supportLevel === 0) {
+    const s1 = technical.pivotPoints.s1;
+    if (s1 > 0 && s1 < currentPrice && (currentPrice - s1) <= maxLevelDistance) {
+      supportLevel = s1;
+    }
+  }
+  if (resistanceLevel === 0) {
+    const r1 = technical.pivotPoints.r1;
+    if (r1 > currentPrice && (r1 - currentPrice) <= maxLevelDistance) {
+      resistanceLevel = r1;
+    }
   }
 
-  // Fictional Stop Loss / Take Profit for educational demonstration
   let stopLoss = 0;
   let takeProfit = 0;
-  const currentPrice = technical.movingAverages[0].value; // Approx close price
 
   if (signal === 'buy' || signal === 'strong_buy') {
-    stopLoss = supportLevel > 0 ? supportLevel * 0.99 : currentPrice * 0.95;
-    takeProfit = resistanceLevel > currentPrice ? resistanceLevel : currentPrice * 1.1;
+    // SL: Use nearest support if valid and close enough, else ATR-based
+    if (supportLevel > 0) {
+      stopLoss = supportLevel - (atrValue * 0.2); // Slightly below support
+    } else {
+      stopLoss = currentPrice - maxSlDistance;
+    }
+    // TP: Use nearest resistance if valid, else ATR-based R:R
+    const slDistance = currentPrice - stopLoss;
+    if (resistanceLevel > 0 && (resistanceLevel - currentPrice) >= slDistance) {
+      takeProfit = resistanceLevel;
+    } else {
+      takeProfit = currentPrice + Math.max(defaultTpDistance, slDistance * 1.5);
+    }
   } else if (signal === 'sell' || signal === 'strong_sell') {
-    stopLoss = resistanceLevel > 0 ? resistanceLevel * 1.01 : currentPrice * 1.05;
-    takeProfit = supportLevel > 0 && supportLevel < currentPrice ? supportLevel : currentPrice * 0.9;
+    // SL: Use nearest resistance if valid and close enough, else ATR-based
+    if (resistanceLevel > 0) {
+      stopLoss = resistanceLevel + (atrValue * 0.2); // Slightly above resistance
+    } else {
+      stopLoss = currentPrice + maxSlDistance;
+    }
+    // TP: Use nearest support if valid, else ATR-based R:R
+    const slDistance = stopLoss - currentPrice;
+    if (supportLevel > 0 && (currentPrice - supportLevel) >= slDistance) {
+      takeProfit = supportLevel;
+    } else {
+      takeProfit = currentPrice - Math.max(defaultTpDistance, slDistance * 1.5);
+    }
   }
 
   return {

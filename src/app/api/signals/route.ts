@@ -100,11 +100,32 @@ export async function GET(request: Request) {
         let supportLevel = 0;
         let resistanceLevel = 0;
         
-        // Calculate support/resistance from technical data
-        const supports = technical.supportResistance.filter(sr => sr.type === 'support');
-        const resistances = technical.supportResistance.filter(sr => sr.type === 'resistance');
-        supportLevel = supports.length > 0 ? supports[0].price : technical.pivotPoints.s1;
-        resistanceLevel = resistances.length > 0 ? resistances[resistances.length - 1].price : technical.pivotPoints.r1;
+        // ATR-based TP/SL constraints
+        const atrValue = technical.atr.value;
+        const maxSlDistance = Math.min(atrValue * 1.5, entryPrice * 0.03); // 1.5× ATR, capped at 3%
+        const defaultTpDistance = maxSlDistance * 1.5; // Target 1:1.5 R:R
+        const maxLevelDistance = entryPrice * 0.03; // Only consider S/R within 3%
+
+        // Find nearest valid support/resistance (within reasonable range)
+        const nearSupports = technical.supportResistance
+          .filter(sr => sr.type === 'support' && sr.price < entryPrice && (entryPrice - sr.price) <= maxLevelDistance)
+          .sort((a, b) => b.price - a.price);
+        const nearResistances = technical.supportResistance
+          .filter(sr => sr.type === 'resistance' && sr.price > entryPrice && (sr.price - entryPrice) <= maxLevelDistance)
+          .sort((a, b) => a.price - b.price);
+        
+        supportLevel = nearSupports.length > 0 ? nearSupports[0].price : 0;
+        resistanceLevel = nearResistances.length > 0 ? nearResistances[0].price : 0;
+        
+        // Fallback to pivot points if within range
+        if (supportLevel === 0) {
+          const s1 = technical.pivotPoints.s1;
+          if (s1 > 0 && s1 < entryPrice && (entryPrice - s1) <= maxLevelDistance) supportLevel = s1;
+        }
+        if (resistanceLevel === 0) {
+          const r1 = technical.pivotPoints.r1;
+          if (r1 > entryPrice && (r1 - entryPrice) <= maxLevelDistance) resistanceLevel = r1;
+        }
 
         if (mode === 'combined') {
           let fundamental;
@@ -134,14 +155,23 @@ export async function GET(request: Request) {
           else if (technical.score <= 20) finalSignal = 'strong_sell';
           else if (technical.score <= 40) finalSignal = 'sell';
           
-          // Calculate TP/SL for technical-only mode using ATR
-          const atrValue = technical.atr.value;
+          // Calculate TP/SL for technical-only mode (same ATR-based logic)
           if (finalSignal === 'buy' || finalSignal === 'strong_buy') {
-            stopLoss = supportLevel > 0 ? supportLevel * 0.99 : entryPrice - (atrValue * 2);
-            takeProfit = resistanceLevel > entryPrice ? resistanceLevel : entryPrice + (atrValue * 3);
+            stopLoss = supportLevel > 0 
+              ? supportLevel - (atrValue * 0.2) 
+              : entryPrice - maxSlDistance;
+            const slDist = entryPrice - stopLoss;
+            takeProfit = (resistanceLevel > 0 && (resistanceLevel - entryPrice) >= slDist)
+              ? resistanceLevel 
+              : entryPrice + Math.max(defaultTpDistance, slDist * 1.5);
           } else if (finalSignal === 'sell' || finalSignal === 'strong_sell') {
-            stopLoss = resistanceLevel > 0 ? resistanceLevel * 1.01 : entryPrice + (atrValue * 2);
-            takeProfit = supportLevel > 0 && supportLevel < entryPrice ? supportLevel : entryPrice - (atrValue * 3);
+            stopLoss = resistanceLevel > 0 
+              ? resistanceLevel + (atrValue * 0.2) 
+              : entryPrice + maxSlDistance;
+            const slDist = stopLoss - entryPrice;
+            takeProfit = (supportLevel > 0 && (entryPrice - supportLevel) >= slDist)
+              ? supportLevel 
+              : entryPrice - Math.max(defaultTpDistance, slDist * 1.5);
           }
         }
 
