@@ -490,126 +490,128 @@ export function calculateTechnicalScore(candles: OHLCV[]): TechnicalAnalysis {
   const currentVol = volumes[volumes.length - 1];
   const avgVol = volMA[volMA.length - 1] || currentVol;
 
-  // ============ SCORING ============
-  let score = 50;
+  // ============ TRADINGVIEW-STYLE QUANTITATIVE SCORING ============
   const reasons: string[] = [];
+  
+  // 1. Moving Averages (MA) Vote
+  let maBuyVotes = 0;
+  let maSellVotes = 0;
+  let maTotalVotes = 0;
 
-  // MA scoring (max ±20 points)
-  const maBuyCount = maData.filter((m) => m.signal === 'buy').length;
-  score += (maBuyCount - 2) * 5;
-  if (maBuyCount >= 3)
-    reasons.push(
-      `Price is above MA${maData
-        .filter((m) => m.signal === 'buy')
-        .map((m) => m.period)
-        .join(', MA')}.`
-    );
-  if (maBuyCount <= 1) reasons.push('Price is below major moving averages.');
+  // EMA for additional trend sensitivity
+  const ema20 = calculateEMA(closes, 20);
+  const ema50 = calculateEMA(closes, 50);
+  const ema100 = calculateEMA(closes, 100);
+  const ema200 = calculateEMA(closes, 200);
+  
+  const allMAs = [
+    { name: 'SMA 20', val: ma20[ma20.length - 1] },
+    { name: 'SMA 50', val: ma50[ma50.length - 1] },
+    { name: 'SMA 100', val: ma100[ma100.length - 1] },
+    { name: 'SMA 200', val: ma200[ma200.length - 1] },
+    { name: 'EMA 20', val: ema20.length > 0 ? ema20[ema20.length - 1] : undefined },
+    { name: 'EMA 50', val: ema50.length > 0 ? ema50[ema50.length - 1] : undefined },
+    { name: 'EMA 100', val: ema100.length > 0 ? ema100[ema100.length - 1] : undefined },
+    { name: 'EMA 200', val: ema200.length > 0 ? ema200[ema200.length - 1] : undefined },
+  ];
 
-  // RSI scoring (max ±15 points)
+  allMAs.forEach(ma => {
+    if (ma.val !== undefined && !isNaN(ma.val)) {
+      maTotalVotes++;
+      if (lastPrice > ma.val) maBuyVotes++;
+      else if (lastPrice < ma.val) maSellVotes++;
+    }
+  });
+
+  const maRating = maTotalVotes > 0 ? ((maBuyVotes - maSellVotes) / maTotalVotes) : 0; // -1 to 1
+
+  if (maRating >= 0.5) reasons.push('Moving Averages show strong bullish alignment.');
+  else if (maRating <= -0.5) reasons.push('Moving Averages show strong bearish alignment.');
+  else if (maRating > 0) reasons.push('Moving Averages lean slightly bullish.');
+  else if (maRating < 0) reasons.push('Moving Averages lean slightly bearish.');
+
+  // 2. Oscillators Vote
+  let oscBuyVotes = 0;
+  let oscSellVotes = 0;
+  let oscTotalVotes = 0;
+
+  // RSI Vote
+  oscTotalVotes++;
   if (rsiValue < 30) {
-    score += 10;
+    oscBuyVotes++;
     reasons.push('RSI indicates oversold conditions — potential bounce.');
-  } else if (rsiValue < 40) {
-    score += 5;
-    reasons.push('RSI is approaching oversold territory.');
   } else if (rsiValue > 70) {
-    score -= 10;
-    reasons.push(
-      'RSI indicates overbought conditions — potential pullback.'
-    );
-  } else if (rsiValue > 60) {
-    score -= 5;
-    reasons.push('RSI is approaching overbought territory.');
+    oscSellVotes++;
+    reasons.push('RSI indicates overbought conditions — potential pullback.');
   }
 
-  // MACD scoring (max ±15 points)
-  if (macdData.crossover === 'bullish_crossover') {
-    score += 12;
-    reasons.push('MACD bullish crossover detected.');
-  } else if (macdData.crossover === 'bearish_crossover') {
-    score -= 12;
-    reasons.push('MACD bearish crossover detected.');
-  } else if (macdData.signal === 'bullish') {
-    score += 5;
-    reasons.push('MACD line is above signal line — bullish momentum.');
-  } else if (macdData.signal === 'bearish') {
-    score -= 5;
-    reasons.push('MACD line is below signal line — bearish momentum.');
+  // Stochastic RSI Vote
+  oscTotalVotes++;
+  if (stochK < 20 && stochD < 20 && stochK > stochD) {
+    oscBuyVotes++;
+    reasons.push('StochRSI bullish crossover in oversold territory.');
+  } else if (stochK > 80 && stochD > 80 && stochK < stochD) {
+    oscSellVotes++;
+    reasons.push('StochRSI bearish crossover in overbought territory.');
   }
 
-  // Bollinger Bands scoring (max ±10 points)
-  if (bbPosition === 'below_lower') {
-    score += 8;
-    reasons.push('Price below lower Bollinger Band — potential reversal.');
-  } else if (bbPosition === 'near_lower') {
-    score += 4;
-    reasons.push('Price near lower Bollinger Band.');
-  } else if (bbPosition === 'above_upper') {
-    score -= 8;
-    reasons.push(
-      'Price above upper Bollinger Band — potentially overextended.'
-    );
-  } else if (bbPosition === 'near_upper') {
-    score -= 4;
-    reasons.push('Price near upper Bollinger Band.');
+  // MACD Vote
+  oscTotalVotes++;
+  if (macdLine > signalLine) oscBuyVotes++;
+  else if (macdLine < signalLine) oscSellVotes++;
+  
+  if (macdData.crossover === 'bullish_crossover') reasons.push('MACD bullish crossover detected.');
+  else if (macdData.crossover === 'bearish_crossover') reasons.push('MACD bearish crossover detected.');
+
+  // Bollinger Bands Vote
+  oscTotalVotes++;
+  if (bbPosition === 'below_lower' || bbPosition === 'near_lower') {
+    oscBuyVotes++;
+    if (bbPosition === 'below_lower') reasons.push('Price below lower Bollinger Band — potential reversal.');
+  } else if (bbPosition === 'above_upper' || bbPosition === 'near_upper') {
+    oscSellVotes++;
+    if (bbPosition === 'above_upper') reasons.push('Price above upper Bollinger Band — potentially overextended.');
   }
 
-  // StochRSI scoring (max ±8 points)
-  if (stochData.signal === 'oversold') {
-    score += 6;
-    reasons.push('Stochastic RSI in oversold zone.');
-  } else if (stochData.signal === 'overbought') {
-    score -= 6;
-    reasons.push('Stochastic RSI in overbought zone.');
-  }
+  const oscRating = oscTotalVotes > 0 ? ((oscBuyVotes - oscSellVotes) / oscTotalVotes) : 0; // -1 to 1
 
-  // Volume scoring (max ±5 points)
+  // 3. Composite Technical Rating
+  // Overall rating is the average of MA and Oscillator ratings
+  let compositeRating = (maRating + oscRating) / 2; // -1 to 1
+
+  // 4. Trend and Volume Confirmation Boosts (Modifiers)
+  
+  // Volume confirmation
   if (currentVol > avgVol * 1.5) {
-    score += maBuyCount >= 2 ? 5 : -5;
-    reasons.push('Volume significantly above average — strong momentum.');
+    if (compositeRating > 0) {
+      compositeRating = Math.min(1, compositeRating + 0.1);
+      reasons.push('High volume confirms bullish momentum.');
+    } else if (compositeRating < 0) {
+      compositeRating = Math.max(-1, compositeRating - 0.1);
+      reasons.push('High volume confirms bearish momentum.');
+    }
   } else if (currentVol < avgVol * 0.5) {
-    reasons.push('Volume below average — weak conviction.');
+    // Low volume softens the rating (less conviction)
+    compositeRating = compositeRating * 0.8;
   }
 
-  // Pattern scoring (max ±5 points)
+  // Candlestick pattern confirmation
   const bullishPatterns = patterns.filter((p) => p.type === 'bullish');
   const bearishPatterns = patterns.filter((p) => p.type === 'bearish');
+  
   if (bullishPatterns.length > 0) {
-    score += 5;
-    reasons.push(`Bullish pattern: ${bullishPatterns[0].name}.`);
-  }
-  if (bearishPatterns.length > 0) {
-    score -= 5;
-    reasons.push(`Bearish pattern: ${bearishPatterns[0].name}.`);
-  }
-
-  // Trend Alignment (Confluence Check)
-  // Check where price is relative to the 200 SMA
-  const ma200Data = maData.find(m => m.period === 200);
-  if (ma200Data) {
-    if (ma200Data.signal === 'buy') {
-      // Long-term uptrend
-      if (score > 50) {
-        score += 10; // Boost buy signals in an uptrend
-        reasons.push('Signal aligns with the long-term uptrend (Price > 200 SMA).');
-      } else {
-        score += 5; // Soften sell signals in an uptrend
-      }
-    } else {
-      // Long-term downtrend
-      if (score < 50) {
-        score -= 10; // Boost sell signals in a downtrend
-        reasons.push('Signal aligns with the long-term downtrend (Price < 200 SMA).');
-      } else {
-        score -= 5; // Soften buy signals in a downtrend
-        reasons.push('Warning: Buy signal is against the long-term downtrend (Price < 200 SMA).');
-      }
-    }
+    reasons.push(`Bullish pattern detected: ${bullishPatterns[0].name}.`);
+    if (compositeRating >= 0) compositeRating = Math.min(1, compositeRating + 0.1);
+  } else if (bearishPatterns.length > 0) {
+    reasons.push(`Bearish pattern detected: ${bearishPatterns[0].name}.`);
+    if (compositeRating <= 0) compositeRating = Math.max(-1, compositeRating - 0.1);
   }
 
-  // Clamp score to 0-100
-  score = Math.max(0, Math.min(100, Math.round(score)));
+  // Convert -1 to 1 rating into 0 to 100 score
+  let score = Math.round(((compositeRating + 1) / 2) * 100);
+  
+  // Clamp score to strictly 0-100
+  score = Math.max(0, Math.min(100, score));
 
   return {
     movingAverages: maData,
