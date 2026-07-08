@@ -85,8 +85,8 @@ export function SignalCard({
           </Badge>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
+      <CardContent className="space-y-6">
+        <div className="flex flex-col xl:flex-row items-center gap-6">
           <ScoreGauge score={score} signal={signal} size="md" />
           <div className="flex-1 w-full grid grid-cols-2 gap-3">
             <div className="rounded-lg bg-muted/50 p-3">
@@ -126,9 +126,9 @@ export function SignalCard({
 
         {/* Buy/Sell Factors */}
         {(buyFactors.length > 0 || sellFactors.length > 0) && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="flex flex-col gap-3">
             {buyFactors.length > 0 && (
-              <div className="rounded-lg border border-green-500/20 bg-green-500/5 p-3">
+              <div className="rounded-lg border border-green-500/20 bg-green-500/5 p-3.5">
                 <p className="text-[10px] uppercase tracking-wider text-green-500 mb-2 flex items-center gap-1">
                   <TrendingUp className="h-3 w-3" /> Buy Factors
                 </p>
@@ -140,8 +140,8 @@ export function SignalCard({
               </div>
             )}
             {sellFactors.length > 0 && (
-              <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3">
-                <p className="text-[10px] uppercase tracking-wider text-red-500 mb-2 flex items-center gap-1">
+              <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3.5">
+                <p className="text-[10px] uppercase tracking-wider text-red-500 mb-2 flex items-center gap-1 font-semibold">
                   <TrendingDown className="h-3 w-3" /> Sell Factors
                 </p>
                 <ul className="space-y-1">

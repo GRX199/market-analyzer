@@ -124,7 +124,7 @@ export default function AssetClientPage({ symbol }: { symbol: string }) {
             </Button>
           </div>
         </div>
-        <div className="text-right">
+        <div className="w-full md:w-auto flex justify-start md:justify-end">
           <PriceTicker 
             price={crosshairPrice || asset.price} 
             change={asset.change} 

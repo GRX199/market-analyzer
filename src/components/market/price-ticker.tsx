@@ -21,7 +21,7 @@ export function PriceTicker({ price, change, changePercent, size = 'md' }: Price
   const sizeClasses = {
     sm: { price: 'text-lg', change: 'text-xs' },
     md: { price: 'text-2xl', change: 'text-sm' },
-    lg: { price: 'text-4xl', change: 'text-base' },
+    lg: { price: 'text-3xl md:text-4xl tracking-tight', change: 'text-sm md:text-base' },
   };
 
   return (
