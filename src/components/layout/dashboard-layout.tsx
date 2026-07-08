@@ -5,13 +5,17 @@ import { Navbar } from './navbar';
 import { DisclaimerModal } from '@/components/common/disclaimer-modal';
 import { CommandPalette } from '@/components/common/command-palette';
 import { useUserStore } from '@/stores/user-store';
+import { useMarketStore } from '@/stores/market-store';
 import { useEffect, useState } from 'react';
 
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { theme } = useUserStore();
   const [mounted, setMounted] = useState(false);
 
+  // Rehydrate persisted stores on client mount
   useEffect(() => {
+    useUserStore.persist.rehydrate();
+    useMarketStore.persist.rehydrate();
     setMounted(true);
   }, []);
 

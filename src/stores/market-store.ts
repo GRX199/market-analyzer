@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { MarketType, Timeframe } from '@/types/market';
 
 interface MarketState {
@@ -29,6 +29,18 @@ export const useMarketStore = create<MarketState>()(
       setSearchQuery: (query) => set({ searchQuery: query }),
       setAnalysisMode: (mode) => set({ analysisMode: mode }),
     }),
-    { name: 'market-store' }
+    {
+      name: 'market-store',
+      storage: createJSONStorage(() => {
+        if (typeof window !== 'undefined') return localStorage;
+        // SSR fallback — a no-op storage
+        return {
+          getItem: () => null,
+          setItem: () => {},
+          removeItem: () => {},
+        };
+      }),
+      skipHydration: true,
+    }
   )
 );

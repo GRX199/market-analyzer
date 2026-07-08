@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { UserProfile, WatchlistItem, UserAlert } from '@/types/user';
 
 interface UserState {
@@ -61,6 +61,17 @@ export const useUserStore = create<UserState>()(
         alerts: state.alerts.map(a => a.id === id ? { ...a, isActive: !a.isActive } : a),
       })),
     }),
-    { name: 'user-store' }
+    {
+      name: 'user-store',
+      storage: createJSONStorage(() => {
+        if (typeof window !== 'undefined') return localStorage;
+        return {
+          getItem: () => null,
+          setItem: () => {},
+          removeItem: () => {},
+        };
+      }),
+      skipHydration: true,
+    }
   )
 );
