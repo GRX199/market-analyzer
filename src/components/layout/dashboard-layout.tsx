@@ -7,9 +7,10 @@ import { CommandPalette } from '@/components/common/command-palette';
 import { useUserStore } from '@/stores/user-store';
 import { useMarketStore } from '@/stores/market-store';
 import { useEffect, useState } from 'react';
+import { cn } from '@/lib/utils';
 
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { theme } = useUserStore();
+  const { theme, sidebarCollapsed } = useUserStore();
   const [mounted, setMounted] = useState(false);
 
   // Rehydrate persisted stores on client mount
@@ -34,7 +35,12 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
       <DisclaimerModal />
       <CommandPalette />
       <Sidebar />
-      <div className="flex-1 flex flex-col min-h-screen md:ml-64 transition-all duration-300 w-full overflow-hidden">
+      <div 
+        className={cn(
+          "flex-1 flex flex-col min-h-screen transition-all duration-300 w-full overflow-hidden",
+          sidebarCollapsed ? "md:ml-16" : "md:ml-64"
+        )}
+      >
         <Navbar />
         <main className="flex-1 p-4 md:p-6 w-full max-w-full overflow-x-hidden">
           {children}

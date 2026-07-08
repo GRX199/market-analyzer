@@ -7,6 +7,7 @@ interface UserState {
   isAuthenticated: boolean;
   disclaimerAccepted: boolean;
   theme: 'dark' | 'light';
+  sidebarCollapsed: boolean;
   watchlist: WatchlistItem[];
   alerts: UserAlert[];
   setUser: (user: UserProfile | null) => void;
@@ -14,6 +15,7 @@ interface UserState {
   acceptDisclaimer: () => void;
   toggleTheme: () => void;
   setTheme: (theme: 'dark' | 'light') => void;
+  toggleSidebar: () => void;
   addToWatchlist: (item: WatchlistItem) => void;
   removeFromWatchlist: (symbol: string) => void;
   isInWatchlist: (symbol: string) => boolean;
@@ -29,6 +31,7 @@ export const useUserStore = create<UserState>()(
       isAuthenticated: false,
       disclaimerAccepted: false,
       theme: 'dark',
+      sidebarCollapsed: false,
       watchlist: [],
       alerts: [],
       setUser: (user) => set({ user, isAuthenticated: !!user }),
@@ -47,6 +50,7 @@ export const useUserStore = create<UserState>()(
         }
         set({ theme });
       },
+      toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
       addToWatchlist: (item) => set((state) => {
         if (state.watchlist.some(w => w.symbol === item.symbol)) return state;
         return { watchlist: [...state.watchlist, item] };
