@@ -65,18 +65,6 @@ export function CommandPalette() {
 
   return (
     <>
-      {/* Search trigger button */}
-      <button
-        onClick={() => setOpen(true)}
-        className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border/50 bg-muted/30 text-muted-foreground text-sm hover:bg-muted/50 transition-colors"
-      >
-        <Search className="h-3.5 w-3.5" />
-        <span className="text-xs">Search...</span>
-        <kbd className="ml-3 pointer-events-none inline-flex h-5 select-none items-center gap-0.5 rounded border border-border/50 bg-muted/50 px-1.5 text-[10px] font-medium text-muted-foreground">
-          <span className="text-xs">⌘</span>K
-        </kbd>
-      </button>
-
       <CommandDialog open={open} onOpenChange={setOpen}>
         <CommandInput placeholder="Search assets, pages, or type a command..." />
         <CommandList>
