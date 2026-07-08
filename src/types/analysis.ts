@@ -14,6 +14,7 @@ export interface MovingAverageData {
 export interface RSIData {
   value: number;
   signal: 'overbought' | 'oversold' | 'neutral';
+  zScore?: number; // Optional Z-Score for dynamic thresholds
 }
 
 export interface MACDData {
@@ -67,6 +68,20 @@ export interface CandlestickPattern {
   description: string;
 }
 
+export interface ADXData {
+  adx: number;
+  pdi: number;
+  mdi: number;
+  trendStrength: 'strong' | 'weak' | 'ranging';
+  trendDirection: 'bullish' | 'bearish' | 'none';
+}
+
+export interface VWAPData {
+  value: number;
+  priceRelation: 'above' | 'below';
+  distancePercent: number;
+}
+
 export interface TechnicalAnalysis {
   movingAverages: MovingAverageData[];
   rsi: RSIData;
@@ -74,6 +89,8 @@ export interface TechnicalAnalysis {
   bollingerBands: BollingerBandsData;
   stochRSI: StochRSIData;
   atr: ATRData;
+  adx?: ADXData;
+  vwap?: VWAPData;
   pivotPoints: PivotPointData;
   supportResistance: SupportResistanceLevel[];
   patterns: CandlestickPattern[];

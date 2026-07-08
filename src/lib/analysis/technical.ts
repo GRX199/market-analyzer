@@ -10,9 +10,99 @@ import {
   PivotPointData,
   SupportResistanceLevel,
   CandlestickPattern,
+  ADXData,
+  VWAPData
 } from '@/types/analysis';
 
 // ============ CALCULATION FUNCTIONS ============
+
+export function calculateZScore(values: number[]): number {
+  if (values.length === 0) return 0;
+  const mean = values.reduce((a, b) => a + b, 0) / values.length;
+  const variance = values.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / values.length;
+  const stdDev = Math.sqrt(variance);
+  if (stdDev === 0) return 0;
+  return (values[values.length - 1] - mean) / stdDev;
+}
+
+export function calculateVWAP(candles: OHLCV[]): number[] {
+  const result: number[] = [];
+  let cumPriceVol = 0;
+  let cumVol = 0;
+  
+  for (let i = 0; i < candles.length; i++) {
+    const c = candles[i];
+    const typicalPrice = (c.high + c.low + c.close) / 3;
+    cumPriceVol += typicalPrice * c.volume;
+    cumVol += c.volume;
+    result.push(cumVol > 0 ? cumPriceVol / cumVol : typicalPrice);
+  }
+  return result;
+}
+
+export function calculateADX(candles: OHLCV[], period = 14): { adx: number[], pdi: number[], mdi: number[] } {
+  if (candles.length < period * 2) return { adx: [], pdi: [], mdi: [] };
+  
+  const tr: number[] = [];
+  const pDM: number[] = [];
+  const mDM: number[] = [];
+  
+  for (let i = 1; i < candles.length; i++) {
+    const curr = candles[i];
+    const prev = candles[i - 1];
+    
+    tr.push(Math.max(
+      curr.high - curr.low,
+      Math.abs(curr.high - prev.close),
+      Math.abs(curr.low - prev.close)
+    ));
+    
+    const upMove = curr.high - prev.high;
+    const downMove = prev.low - curr.low;
+    
+    if (upMove > downMove && upMove > 0) {
+      pDM.push(upMove);
+      mDM.push(0);
+    } else if (downMove > upMove && downMove > 0) {
+      pDM.push(0);
+      mDM.push(downMove);
+    } else {
+      pDM.push(0);
+      mDM.push(0);
+    }
+  }
+
+  // Wilder's Smoothing (EMA variant)
+  const smooth = (data: number[], period: number) => {
+    const result = [data.slice(0, period).reduce((a, b) => a + b, 0)];
+    for (let i = period; i < data.length; i++) {
+      result.push(result[result.length - 1] - (result[result.length - 1] / period) + data[i]);
+    }
+    return result;
+  };
+
+  const smoothedTR = smooth(tr, period);
+  const smoothedPDM = smooth(pDM, period);
+  const smoothedMDM = smooth(mDM, period);
+  
+  const pdi: number[] = [];
+  const mdi: number[] = [];
+  const dx: number[] = [];
+  
+  for (let i = 0; i < smoothedTR.length; i++) {
+    const currentTR = smoothedTR[i] === 0 ? 1 : smoothedTR[i];
+    const currentPDI = (smoothedPDM[i] / currentTR) * 100;
+    const currentMDI = (smoothedMDM[i] / currentTR) * 100;
+    pdi.push(currentPDI);
+    mdi.push(currentMDI);
+    const diSum = currentPDI + currentMDI;
+    dx.push(diSum === 0 ? 0 : (Math.abs(currentPDI - currentMDI) / diSum) * 100);
+  }
+  
+  const adx = calculateEMA(dx, period); // Using EMA instead of Wilder's smoothing for simplicity, often close enough in fast JS envs. Or just average:
+  
+  return { adx, pdi, mdi };
+}
 
 export function calculateSMA(prices: number[], period: number): number[] {
   const result: number[] = [];
@@ -391,13 +481,47 @@ export function calculateTechnicalScore(candles: OHLCV[]): TechnicalAnalysis {
     },
   ];
 
-  // RSI
+  // RSI & Z-Score
   const rsiValues = calculateRSI(closes);
   const rsiValue = rsiValues[rsiValues.length - 1] || 50;
+  const rsiZScore = calculateZScore(rsiValues);
+  
+  // Dynamic threshold using Z-Score if applicable (Z-Score > 2 is statistically significant)
+  let rsiSignal: 'overbought' | 'oversold' | 'neutral' = 'neutral';
+  if (rsiZScore > 2 || rsiValue > 75) rsiSignal = 'overbought';
+  else if (rsiZScore < -2 || rsiValue < 25) rsiSignal = 'oversold';
+  else if (rsiValue > 70) rsiSignal = 'overbought'; // Fallback
+  else if (rsiValue < 30) rsiSignal = 'oversold'; // Fallback
+
   const rsiData: RSIData = {
     value: rsiValue,
-    signal:
-      rsiValue > 70 ? 'overbought' : rsiValue < 30 ? 'oversold' : 'neutral',
+    signal: rsiSignal,
+    zScore: rsiZScore
+  };
+
+  // ADX (Market Context)
+  const adxResult = calculateADX(candles);
+  const adxValue = adxResult.adx[adxResult.adx.length - 1] || 0;
+  const pdi = adxResult.pdi[adxResult.pdi.length - 1] || 0;
+  const mdi = adxResult.mdi[adxResult.mdi.length - 1] || 0;
+  const isTrending = adxValue > 25;
+  const trendDir = pdi > mdi ? 'bullish' : mdi > pdi ? 'bearish' : 'none';
+  
+  const adxData: ADXData = {
+    adx: adxValue,
+    pdi,
+    mdi,
+    trendStrength: adxValue > 40 ? 'strong' : isTrending ? 'weak' : 'ranging',
+    trendDirection: trendDir
+  };
+
+  // VWAP
+  const vwapResult = calculateVWAP(candles);
+  const vwapValue = vwapResult[vwapResult.length - 1] || lastPrice;
+  const vwapData: VWAPData = {
+    value: vwapValue,
+    priceRelation: lastPrice > vwapValue ? 'above' : 'below',
+    distancePercent: Math.abs((lastPrice - vwapValue) / vwapValue) * 100
   };
 
   // MACD
@@ -575,9 +699,31 @@ export function calculateTechnicalScore(candles: OHLCV[]): TechnicalAnalysis {
 
   const oscRating = oscTotalVotes > 0 ? ((oscBuyVotes - oscSellVotes) / oscTotalVotes) : 0; // -1 to 1
 
-  // 3. Composite Technical Rating
-  // Overall rating is the average of MA and Oscillator ratings
-  let compositeRating = (maRating + oscRating) / 2; // -1 to 1
+  // 3. Composite Technical Rating (Context-Aware using ADX)
+  let compositeRating = 0;
+  
+  if (adxData.trendStrength !== 'ranging') {
+    // Trending Market: Moving Averages and MACD are more reliable
+    compositeRating = (maRating * 0.7) + (oscRating * 0.3);
+    reasons.push(`ADX (${adxValue.toFixed(1)}) indicates a ${adxData.trendStrength} ${adxData.trendDirection} trend. Trend indicators heavily weighted.`);
+  } else {
+    // Ranging Market: Oscillators (RSI, Stoch) are more reliable
+    compositeRating = (maRating * 0.3) + (oscRating * 0.7);
+    reasons.push(`ADX (${adxValue.toFixed(1)}) indicates a ranging market. Oscillators heavily weighted.`);
+  }
+
+  // VWAP Institutional Context
+  if (vwapData.priceRelation === 'above' && compositeRating > 0) {
+    compositeRating = Math.min(1, compositeRating + 0.1); // Boost buy signal if above VWAP
+  } else if (vwapData.priceRelation === 'below' && compositeRating < 0) {
+    compositeRating = Math.max(-1, compositeRating - 0.1); // Boost sell signal if below VWAP
+  } else if (vwapData.priceRelation === 'above' && compositeRating < -0.5) {
+    reasons.push('Price is above VWAP (Bullish context), softening the bearish signal.');
+    compositeRating += 0.1; 
+  } else if (vwapData.priceRelation === 'below' && compositeRating > 0.5) {
+    reasons.push('Price is below VWAP (Bearish context), softening the bullish signal.');
+    compositeRating -= 0.1;
+  }
 
   // 4. Trend and Volume Confirmation Boosts (Modifiers)
   
@@ -620,6 +766,8 @@ export function calculateTechnicalScore(candles: OHLCV[]): TechnicalAnalysis {
     bollingerBands: bbData,
     stochRSI: stochData,
     atr: atrData,
+    adx: adxData,
+    vwap: vwapData,
     pivotPoints: pivotData,
     supportResistance: srLevels.slice(0, 6),
     patterns,
