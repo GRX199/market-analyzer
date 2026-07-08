@@ -144,7 +144,7 @@ export default function SignalScannerPage() {
                   </div>
                   
                   {/* Score Dial */}
-                  <div className="flex items-center gap-4 mb-4 p-4 rounded-xl bg-background/50 border border-border/50">
+                  <div className="flex flex-col sm:flex-row items-center gap-4 mb-4 p-4 rounded-xl bg-background/50 border border-border/50">
                     <div className="relative flex items-center justify-center w-16 h-16 rounded-full bg-card shadow-inner shrink-0 border border-border/50">
                       <span className={`text-xl font-black ${
                         signal.type.includes('buy') ? 'text-green-500' : 'text-red-500'
@@ -159,7 +159,7 @@ export default function SignalScannerPage() {
                         />
                       </svg>
                     </div>
-                    <div className="flex-1">
+                    <div className="flex-1 text-center sm:text-left">
                       <p className="font-semibold mb-0.5">Signal Strength</p>
                       <p className="text-xs text-muted-foreground leading-snug">
                         Based on algorithmic confluence of moving averages, oscillators, and trend alignment.
@@ -187,30 +187,30 @@ export default function SignalScannerPage() {
                         </p>
                       </div>
                       <div className="grid grid-cols-3 divide-x divide-border/50">
-                        <div className="p-3 text-center">
-                          <p className="text-[10px] uppercase tracking-wider text-blue-400 mb-1 font-semibold">Entry Price</p>
-                          <p className="font-mono text-sm md:text-base font-bold text-blue-400">
+                        <div className="p-2 sm:p-3 text-center flex flex-col justify-center">
+                          <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-blue-400 mb-1 font-semibold truncate">Entry Price</p>
+                          <p className="font-mono text-sm sm:text-base font-bold text-blue-400 truncate">
                             {signal.entryPrice ? signal.entryPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : '-'}
                           </p>
                         </div>
-                        <div className="p-3 text-center">
-                          <p className="text-[10px] uppercase tracking-wider text-green-400 mb-1 font-semibold">Take Profit</p>
-                          <p className="font-mono text-sm md:text-base font-bold text-green-400">
+                        <div className="p-2 sm:p-3 text-center flex flex-col justify-center">
+                          <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-green-400 mb-1 font-semibold truncate">Take Profit</p>
+                          <p className="font-mono text-sm sm:text-base font-bold text-green-400 truncate">
                             {signal.takeProfit ? signal.takeProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : '-'}
                           </p>
                           {signal.entryPrice && signal.takeProfit ? (
-                            <p className={`text-[10px] font-mono mt-0.5 ${signal.type.includes('buy') ? 'text-green-500/70' : 'text-red-500/70'}`}>
+                            <p className={`text-[9px] sm:text-[10px] font-mono mt-0.5 truncate ${signal.type.includes('buy') ? 'text-green-500/70' : 'text-red-500/70'}`}>
                               {signal.type.includes('buy') ? '+' : ''}{(((signal.takeProfit - signal.entryPrice) / signal.entryPrice) * 100).toFixed(2)}%
                             </p>
                           ) : null}
                         </div>
-                        <div className="p-3 text-center">
-                          <p className="text-[10px] uppercase tracking-wider text-red-400 mb-1 font-semibold">Stop Loss</p>
-                          <p className="font-mono text-sm md:text-base font-bold text-red-400">
+                        <div className="p-2 sm:p-3 text-center flex flex-col justify-center">
+                          <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-red-400 mb-1 font-semibold truncate">Stop Loss</p>
+                          <p className="font-mono text-sm sm:text-base font-bold text-red-400 truncate">
                             {signal.stopLoss ? signal.stopLoss.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : '-'}
                           </p>
                           {signal.entryPrice && signal.stopLoss ? (
-                            <p className="text-[10px] font-mono mt-0.5 text-red-500/70">
+                            <p className="text-[9px] sm:text-[10px] font-mono mt-0.5 text-red-500/70 truncate">
                               {(((signal.stopLoss - signal.entryPrice) / signal.entryPrice) * 100).toFixed(2)}%
                             </p>
                           ) : null}
