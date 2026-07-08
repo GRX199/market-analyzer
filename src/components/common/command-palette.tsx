@@ -1,0 +1,128 @@
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from '@/components/ui/command';
+import { ALL_SYMBOLS } from '@/lib/constants';
+import { navItems } from '@/components/layout/sidebar';
+import { Search, TrendingUp, Globe, Star, History, Bell, Newspaper, Settings, AlertTriangle, LayoutDashboard } from 'lucide-react';
+
+const iconMap: Record<string, any> = {
+  '/dashboard': LayoutDashboard,
+  '/market': Globe,
+  '/watchlist': Star,
+  '/signals': History,
+  '/alerts': Bell,
+  '/news': Newspaper,
+  '/settings': Settings,
+  '/disclaimer': AlertTriangle,
+};
+
+const marketIcons: Record<string, string> = {
+  forex: '💱',
+  stocks: '📈',
+  crypto: '₿',
+};
+
+export function CommandPalette() {
+  const [open, setOpen] = useState(false);
+  const router = useRouter();
+
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if ((e.key === 'k' && (e.metaKey || e.ctrlKey)) || e.key === '/') {
+        // Don't trigger if typing in an input
+        if (
+          e.target instanceof HTMLInputElement ||
+          e.target instanceof HTMLTextAreaElement
+        ) {
+          return;
+        }
+        e.preventDefault();
+        setOpen((prev) => !prev);
+      }
+    };
+
+    document.addEventListener('keydown', down);
+    return () => document.removeEventListener('keydown', down);
+  }, []);
+
+  const handleSelect = useCallback(
+    (value: string) => {
+      setOpen(false);
+      router.push(value);
+    },
+    [router]
+  );
+
+  return (
+    <>
+      {/* Search trigger button */}
+      <button
+        onClick={() => setOpen(true)}
+        className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border/50 bg-muted/30 text-muted-foreground text-sm hover:bg-muted/50 transition-colors"
+      >
+        <Search className="h-3.5 w-3.5" />
+        <span className="text-xs">Search...</span>
+        <kbd className="ml-3 pointer-events-none inline-flex h-5 select-none items-center gap-0.5 rounded border border-border/50 bg-muted/50 px-1.5 text-[10px] font-medium text-muted-foreground">
+          <span className="text-xs">⌘</span>K
+        </kbd>
+      </button>
+
+      <CommandDialog open={open} onOpenChange={setOpen}>
+        <CommandInput placeholder="Search assets, pages, or type a command..." />
+        <CommandList>
+          <CommandEmpty>No results found.</CommandEmpty>
+
+          {/* Navigation */}
+          <CommandGroup heading="Pages">
+            {navItems.map((item) => {
+              const Icon = iconMap[item.href] || Globe;
+              return (
+                <CommandItem
+                  key={item.href}
+                  value={`page-${item.label}`}
+                  onSelect={() => handleSelect(item.href)}
+                  className="cursor-pointer"
+                >
+                  <Icon className="mr-2 h-4 w-4 text-muted-foreground" />
+                  <span>{item.label}</span>
+                </CommandItem>
+              );
+            })}
+          </CommandGroup>
+
+          <CommandSeparator />
+
+          {/* Assets */}
+          <CommandGroup heading="Assets">
+            {ALL_SYMBOLS.map((asset) => (
+              <CommandItem
+                key={asset.symbol}
+                value={`asset-${asset.symbol}-${asset.name}`}
+                onSelect={() =>
+                  handleSelect(`/asset/${encodeURIComponent(asset.symbol)}`)
+                }
+                className="cursor-pointer"
+              >
+                <span className="mr-2 text-base">{marketIcons[asset.marketType] || '📊'}</span>
+                <div className="flex flex-col">
+                  <span className="font-medium">{asset.symbol}</span>
+                  <span className="text-xs text-muted-foreground">{asset.name}</span>
+                </div>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        </CommandList>
+      </CommandDialog>
+    </>
+  );
+}

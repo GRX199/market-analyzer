@@ -3,6 +3,7 @@
 import { Sidebar } from './sidebar';
 import { Navbar } from './navbar';
 import { DisclaimerModal } from '@/components/common/disclaimer-modal';
+import { CommandPalette } from '@/components/common/command-palette';
 import { useUserStore } from '@/stores/user-store';
 import { useEffect, useState } from 'react';
 
@@ -27,6 +28,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background flex">
       <DisclaimerModal />
+      <CommandPalette />
       <Sidebar />
       <div className="flex-1 flex flex-col min-h-screen md:ml-64 transition-all duration-300 w-full overflow-hidden">
         <Navbar />

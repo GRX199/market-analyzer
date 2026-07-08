@@ -81,37 +81,22 @@ export function Navbar() {
         </SheetContent>
       </Sheet>
 
-      {/* Search */}
-      <div className="relative flex-1 max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search symbol..."
-          className="pl-9 bg-muted/50 border-0 text-sm"
-          value={searchQuery}
-          onChange={(e) => {
-            setSearchQuery(e.target.value);
-            setShowResults(true);
+      {/* Search — opens Command Palette (Ctrl+K) */}
+      <div className="flex-1 max-w-md">
+        <button
+          onClick={() => {
+            // Dispatch Ctrl+K to open the command palette
+            const event = new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true });
+            document.dispatchEvent(event);
           }}
-          onFocus={() => setShowResults(true)}
-          onBlur={() => setTimeout(() => setShowResults(false), 200)}
-        />
-        {showResults && filteredSymbols.length > 0 && (
-          <div className="absolute top-full left-0 right-0 mt-1 rounded-lg border bg-popover shadow-lg overflow-hidden z-50">
-            {filteredSymbols.map((s) => (
-              <button
-                key={s.symbol}
-                className="flex items-center gap-3 w-full px-4 py-2.5 text-sm hover:bg-accent transition-colors text-left"
-                onMouseDown={() => handleSelect(s.symbol)}
-              >
-                <span className="font-medium">{s.symbol}</span>
-                <span className="text-muted-foreground text-xs">{s.name}</span>
-                <Badge variant="outline" className="ml-auto text-[10px]">
-                  {s.marketType}
-                </Badge>
-              </button>
-            ))}
-          </div>
-        )}
+          className="flex items-center gap-2 w-full px-3 py-2 rounded-lg border border-border/50 bg-muted/30 text-muted-foreground text-sm hover:bg-muted/50 transition-colors"
+        >
+          <Search className="h-3.5 w-3.5 shrink-0" />
+          <span className="text-xs truncate">Search assets, pages...</span>
+          <kbd className="ml-auto pointer-events-none hidden sm:inline-flex h-5 select-none items-center gap-0.5 rounded border border-border/50 bg-muted/50 px-1.5 text-[10px] font-medium text-muted-foreground shrink-0">
+            <span className="text-xs">⌘</span>K
+          </kbd>
+        </button>
       </div>
 
       <div className="flex items-center gap-2">

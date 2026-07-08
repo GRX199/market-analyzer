@@ -21,6 +21,15 @@ export default function AssetClientPage({ symbol }: { symbol: string }) {
   const [analysis, setAnalysis] = useState<FinalAnalysis | null>(null);
   const [loading, setLoading] = useState(true);
   const [crosshairPrice, setCrosshairPrice] = useState<number | null>(null);
+  const [maOverlays, setMaOverlays] = useState([
+    { period: 20, color: '#f59e0b', visible: true },
+    { period: 50, color: '#3b82f6', visible: true },
+    { period: 200, color: '#a855f7', visible: true },
+  ]);
+
+  const toggleMA = (period: number) => {
+    setMaOverlays(prev => prev.map(ma => ma.period === period ? { ...ma, visible: !ma.visible } : ma));
+  };
   
   const { watchlist, addToWatchlist, removeFromWatchlist } = useUserStore();
   const isWatched = watchlist.some(w => w.symbol === symbol);
@@ -145,7 +154,26 @@ export default function AssetClientPage({ symbol }: { symbol: string }) {
               data={candles} 
               height={typeof window !== 'undefined' && window.innerWidth < 640 ? 320 : 500} 
               onCrosshairMove={setCrosshairPrice}
+              maOverlays={maOverlays}
             />
+            {/* MA Legend / Toggle */}
+            <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-border/50">
+              <span className="text-xs text-muted-foreground mr-1">Overlays:</span>
+              {maOverlays.map(ma => (
+                <button
+                  key={ma.period}
+                  onClick={() => toggleMA(ma.period)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all duration-200 ${
+                    ma.visible 
+                      ? 'border-transparent bg-white/10 shadow-sm' 
+                      : 'border-border/50 opacity-40 hover:opacity-70'
+                  }`}
+                >
+                  <span className="w-3 h-0.5 rounded-full" style={{ backgroundColor: ma.color }} />
+                  SMA {ma.period}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Indicators Summary */}

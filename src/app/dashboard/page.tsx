@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { DashboardSkeleton } from '@/components/common/loading-skeleton';
 import { AssetCard } from '@/components/market/asset-card';
@@ -21,56 +21,74 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [signalsLoading, setSignalsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const refreshTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isInitialLoadRef = useRef(true);
 
-  useEffect(() => {
-    async function loadData() {
+  const fetchData = useCallback(async (silent = false) => {
+    if (!silent) {
       setLoading(true);
       setSignalsLoading(true);
-      setError(null);
-      try {
-        const response = await fetch(`/api/market${selectedMarket ? `?type=${selectedMarket}` : ''}`);
-        const result = await response.json();
-        
-        // Load signals in parallel with timeframe and mode
-        const signalQuery = new URLSearchParams();
-        if (selectedMarket && selectedMarket !== 'all') signalQuery.append('market', selectedMarket);
-        if (selectedTimeframe) signalQuery.append('timeframe', selectedTimeframe);
-        if (analysisMode) signalQuery.append('mode', analysisMode);
-        
-        fetch(`/api/signals?${signalQuery.toString()}`)
-          .then(res => res.json())
-          .then(res => {
-            if (res.success && res.data) setSignals(res.data);
-            setSignalsLoading(false);
-          })
-          .catch(() => setSignalsLoading(false));
-        
-        if (result.success && result.data) {
-          const assets: AssetData[] = result.data;
-          const activeAssets = assets.filter(a => a.price > 0);
-          
-          setOverview({
-            marketType: selectedMarket || 'crypto',
-            totalAssets: activeAssets.length > 0 ? activeAssets.length : assets.length,
-            bullishCount: activeAssets.filter(a => a.trend === 'bullish').length,
-            bearishCount: activeAssets.filter(a => a.trend === 'bearish').length,
-            sidewaysCount: activeAssets.filter(a => a.trend === 'sideways').length,
-            topGainers: [...activeAssets].sort((a, b) => b.changePercent - a.changePercent).slice(0, 3),
-            topLosers: [...activeAssets].sort((a, b) => a.changePercent - b.changePercent).slice(0, 3),
-            mostActive: [...activeAssets].sort((a, b) => b.volume - a.volume).slice(0, 3),
-          });
-        } else {
-          setError(result.error || 'Failed to load market data');
-        }
-      } catch (err) {
-        console.error('Failed to load market overview', err);
-        setError('Cannot connect to server. Please check your connection.');
-      } finally {
-        setLoading(false);
-      }
     }
-    loadData();
+    setError(null);
+    try {
+      const response = await fetch(`/api/market${selectedMarket ? `?type=${selectedMarket}` : ''}`);
+      const result = await response.json();
+      
+      const signalQuery = new URLSearchParams();
+      if (selectedMarket && selectedMarket !== 'all') signalQuery.append('market', selectedMarket);
+      if (selectedTimeframe) signalQuery.append('timeframe', selectedTimeframe);
+      if (analysisMode) signalQuery.append('mode', analysisMode);
+      
+      fetch(`/api/signals?${signalQuery.toString()}`)
+        .then(res => res.json())
+        .then(res => {
+          if (res.success && res.data) setSignals(res.data);
+          setSignalsLoading(false);
+        })
+        .catch(() => setSignalsLoading(false));
+      
+      if (result.success && result.data) {
+        const assets: AssetData[] = result.data;
+        const activeAssets = assets.filter(a => a.price > 0);
+        
+        setOverview({
+          marketType: selectedMarket || 'crypto',
+          totalAssets: activeAssets.length > 0 ? activeAssets.length : assets.length,
+          bullishCount: activeAssets.filter(a => a.trend === 'bullish').length,
+          bearishCount: activeAssets.filter(a => a.trend === 'bearish').length,
+          sidewaysCount: activeAssets.filter(a => a.trend === 'sideways').length,
+          topGainers: [...activeAssets].sort((a, b) => b.changePercent - a.changePercent).slice(0, 3),
+          topLosers: [...activeAssets].sort((a, b) => a.changePercent - b.changePercent).slice(0, 3),
+          mostActive: [...activeAssets].sort((a, b) => b.volume - a.volume).slice(0, 3),
+        });
+      } else {
+        setError(result.error || 'Failed to load market data');
+      }
+      setLastRefresh(new Date());
+    } catch (err) {
+      console.error('Failed to load market overview', err);
+      if (!silent) setError('Cannot connect to server. Please check your connection.');
+    } finally {
+      setLoading(false);
+    }
   }, [selectedMarket, selectedTimeframe, analysisMode]);
+
+  // Initial load and dependency-based reload
+  useEffect(() => {
+    fetchData(false);
+    isInitialLoadRef.current = false;
+  }, [fetchData]);
+
+  // Auto-refresh every 30 seconds (silent)
+  useEffect(() => {
+    refreshTimerRef.current = setInterval(() => {
+      fetchData(true);
+    }, 30000);
+    return () => {
+      if (refreshTimerRef.current) clearInterval(refreshTimerRef.current);
+    };
+  }, [fetchData]);
 
   if (loading) {
     return (
@@ -114,7 +132,17 @@ export default function DashboardPage() {
   return (
     <DashboardLayout>
       <div className="mb-6 md:mb-8">
-        <h1 className="text-2xl md:text-3xl font-bold mb-4">Market Dashboard</h1>
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-2xl md:text-3xl font-bold">Market Dashboard</h1>
+          {lastRefresh && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="w-2 h-2 rounded-full bg-green-500 live-pulse-dot" />
+              <span className="hidden sm:inline">Live</span>
+              <span className="hidden sm:inline">·</span>
+              <span>{lastRefresh.toLocaleTimeString()}</span>
+            </div>
+          )}
+        </div>
         <MarketSelector />
       </div>
 

@@ -3,21 +3,50 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { OHLCV } from '@/types/market';
 
+interface MAOverlay {
+  period: number;
+  color: string;
+  visible: boolean;
+}
+
 interface CandlestickChartProps {
   data: OHLCV[];
   height?: number;
   onCrosshairMove?: (price: number | null) => void;
+  maOverlays?: MAOverlay[];
 }
 
-export function CandlestickChart({ data, height = 400, onCrosshairMove }: CandlestickChartProps) {
+const DEFAULT_MA_OVERLAYS: MAOverlay[] = [
+  { period: 20, color: '#f59e0b', visible: true },   // Amber
+  { period: 50, color: '#3b82f6', visible: true },   // Blue
+  { period: 200, color: '#a855f7', visible: true },  // Purple
+];
+
+function calculateSMAFromCandles(closes: number[], period: number): (number | null)[] {
+  const result: (number | null)[] = [];
+  for (let i = 0; i < closes.length; i++) {
+    if (i < period - 1) {
+      result.push(null);
+    } else {
+      const slice = closes.slice(i - period + 1, i + 1);
+      const sum = slice.reduce((a, b) => a + b, 0);
+      result.push(sum / period);
+    }
+  }
+  return result;
+}
+
+export function CandlestickChart({ data, height = 400, onCrosshairMove, maOverlays }: CandlestickChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
+
+  const activeOverlays = maOverlays || DEFAULT_MA_OVERLAYS;
 
   const initChart = useCallback(async () => {
     if (!chartContainerRef.current) return;
 
     // Dynamic import for SSR safety
-    const { createChart, ColorType, CrosshairMode } = await import('lightweight-charts');
+    const { createChart, ColorType, CrosshairMode, LineStyle } = await import('lightweight-charts');
 
     // Clean up existing chart
     if (chartRef.current) {
@@ -54,14 +83,7 @@ export function CandlestickChart({ data, height = 400, onCrosshairMove }: Candle
       height,
     });
 
-    const candleSeries = chart.addCandlestickSeries({
-      upColor: '#22c55e',
-      downColor: '#ef4444',
-      borderVisible: false,
-      wickUpColor: '#22c55e',
-      wickDownColor: '#ef4444',
-    });
-
+    // Prepare and deduplicate time data
     const chartData = data
       .map(d => ({
         time: typeof d.time === 'string' ? d.time : (d.time > 1e10 ? Math.floor(d.time / 1000) : d.time) as any,
@@ -75,9 +97,47 @@ export function CandlestickChart({ data, height = 400, onCrosshairMove }: Candle
         if (a.time > b.time) return 1;
         return 0;
       })
-      .filter((d, index, self) => index === 0 || d.time !== self[index - 1].time); // Deduplicate
+      .filter((d, index, self) => index === 0 || d.time !== self[index - 1].time);
+
+    const candleSeries = chart.addCandlestickSeries({
+      upColor: '#22c55e',
+      downColor: '#ef4444',
+      borderVisible: false,
+      wickUpColor: '#22c55e',
+      wickDownColor: '#ef4444',
+    });
 
     candleSeries.setData(chartData);
+
+    // Moving Average Overlays
+    const closes = chartData.map(d => d.close);
+    const times = chartData.map(d => d.time);
+
+    activeOverlays.forEach(overlay => {
+      if (!overlay.visible) return;
+      if (closes.length < overlay.period) return;
+
+      const smaValues = calculateSMAFromCandles(closes, overlay.period);
+      const lineData = smaValues
+        .map((val, i) => {
+          if (val === null) return null;
+          return { time: times[i], value: val };
+        })
+        .filter(Boolean) as { time: any; value: number }[];
+
+      if (lineData.length === 0) return;
+
+      const lineSeries = chart.addLineSeries({
+        color: overlay.color,
+        lineWidth: 1,
+        lineStyle: LineStyle.Solid,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      });
+
+      lineSeries.setData(lineData);
+    });
 
     // Volume histogram
     const volumeSeries = chart.addHistogramSeries({
@@ -101,7 +161,7 @@ export function CandlestickChart({ data, height = 400, onCrosshairMove }: Candle
         if (a.time > b.time) return 1;
         return 0;
       })
-      .filter((d, index, self) => index === 0 || d.time !== self[index - 1].time); // Deduplicate
+      .filter((d, index, self) => index === 0 || d.time !== self[index - 1].time);
 
     volumeSeries.setData(volumeData);
 
@@ -137,7 +197,7 @@ export function CandlestickChart({ data, height = 400, onCrosshairMove }: Candle
         // Ignore "Object is disposed" error in React strict mode
       }
     };
-  }, [data, height, onCrosshairMove]);
+  }, [data, height, onCrosshairMove, activeOverlays]);
 
   useEffect(() => {
     const cleanup = initChart();
