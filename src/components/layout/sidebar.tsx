@@ -88,7 +88,7 @@ export function Sidebar() {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => setCollapsed(!collapsed)}
+          onClick={toggleSidebar}
           className="w-full justify-center"
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
