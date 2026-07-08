@@ -38,6 +38,7 @@ export function Navbar() {
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-card/80 backdrop-blur-xl px-4 md:px-6">
       <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+        {/* @ts-expect-error asChild is used by Shadcn but Base UI might use render */}
         <SheetTrigger asChild>
           <Button variant="ghost" size="icon" className="md:hidden shrink-0">
             <Menu className="h-5 w-5" />

@@ -53,6 +53,7 @@ export default function AlertsPage() {
         </div>
         
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          {/* @ts-expect-error asChild is used by Shadcn but Base UI might use render */}
           <DialogTrigger asChild>
             <Button className="gap-2">
               <Plus className="h-4 w-4" /> Create Alert

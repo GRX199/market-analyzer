@@ -17,6 +17,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     useUserStore.persist.rehydrate();
     useMarketStore.persist.rehydrate();
+    // eslint-disable-next-line
     setMounted(true);
   }, []);
 

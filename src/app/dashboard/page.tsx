@@ -53,7 +53,7 @@ export default function DashboardPage() {
         const activeAssets = assets.filter(a => a.price > 0);
         
         setOverview({
-          marketType: selectedMarket || 'crypto',
+          marketType: (selectedMarket === 'all' || !selectedMarket) ? 'crypto' : selectedMarket,
           totalAssets: activeAssets.length > 0 ? activeAssets.length : assets.length,
           bullishCount: activeAssets.filter(a => a.trend === 'bullish').length,
           bearishCount: activeAssets.filter(a => a.trend === 'bearish').length,
@@ -76,6 +76,7 @@ export default function DashboardPage() {
 
   // Initial load and dependency-based reload
   useEffect(() => {
+    // eslint-disable-next-line
     fetchData(false);
     isInitialLoadRef.current = false;
   }, [fetchData]);

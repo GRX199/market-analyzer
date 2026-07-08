@@ -35,7 +35,7 @@ export async function GET(request: Request) {
       const technical = calculateTechnicalScore(ohlcv);
       
       let finalScore = technical.score;
-      let finalSignal = technical.signal || 'hold';
+      let finalSignal = 'hold';
       
       if (mode === 'combined') {
         let fundamental;
@@ -94,7 +94,11 @@ export async function GET(request: Request) {
         const entryPrice = lastCandle.close;
         
         let finalScore = technical.score;
-        let finalSignal = technical.signal || 'hold';
+        let finalSignal = 'hold';
+        if (technical.score >= 80) finalSignal = 'strong_buy';
+        else if (technical.score >= 60) finalSignal = 'buy';
+        else if (technical.score <= 20) finalSignal = 'strong_sell';
+        else if (technical.score <= 40) finalSignal = 'sell';
         let finalReasons = technical.reasons;
         let stopLoss = 0;
         let takeProfit = 0;

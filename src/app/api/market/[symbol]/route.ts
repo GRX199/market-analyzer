@@ -24,7 +24,7 @@ export async function GET(
       );
     }
 
-    let result: any = { asset };
+    const result: any = { asset };
 
     if (includeChart) {
       const ohlcv = await getOHLCV(symbol, timeframe);
