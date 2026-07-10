@@ -131,6 +131,9 @@ export default function AssetClientPage({ symbol }: { symbol: string }) {
             change={asset.change} 
             changePercent={asset.changePercent} 
             size="lg" 
+            symbol={asset.symbol}
+            marketType={asset.marketType}
+            isHoveringChart={!!crosshairPrice}
           />
         </div>
       </div>

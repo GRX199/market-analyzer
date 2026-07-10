@@ -8,6 +8,7 @@ import { AssetData } from '@/types/market';
 import { cn } from '@/lib/utils';
 import { TREND_COLORS } from '@/lib/constants';
 import { WatchlistButton } from '@/components/common/watchlist-button';
+import { RealtimePrice } from '@/components/market/realtime-price';
 
 interface AssetCardProps {
   asset: AssetData;
@@ -85,7 +86,12 @@ export function AssetCard({ asset, showWatchlistButton = true }: AssetCardProps)
           </div>
           <div className="flex items-end justify-between">
             <div>
-              <p className="text-lg font-bold font-mono">{formatPrice(asset.price)}</p>
+              <RealtimePrice 
+                symbol={asset.symbol} 
+                marketType={asset.marketType} 
+                initialPrice={asset.price} 
+                className="text-lg font-bold font-mono"
+              />
               <div className="flex items-center gap-1 mt-0.5">
                 {isPositive ? (
                   <TrendingUp className="h-3 w-3 text-green-500" />

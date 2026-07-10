@@ -1,14 +1,22 @@
 import { cn } from '@/lib/utils';
 import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { MarketType } from '@/types/market';
+import { RealtimePrice } from '@/components/market/realtime-price';
 
 interface PriceTickerProps {
   price: number;
   change: number;
   changePercent: number;
   size?: 'sm' | 'md' | 'lg';
+  symbol?: string;
+  marketType?: MarketType;
+  isHoveringChart?: boolean;
 }
 
-export function PriceTicker({ price, change, changePercent, size = 'md' }: PriceTickerProps) {
+export function PriceTicker({ 
+  price, change, changePercent, size = 'md', 
+  symbol, marketType, isHoveringChart = false 
+}: PriceTickerProps) {
   const isPositive = changePercent >= 0;
 
   const formatPrice = (p: number | null | undefined) => {
@@ -26,9 +34,18 @@ export function PriceTicker({ price, change, changePercent, size = 'md' }: Price
 
   return (
     <div>
-      <p className={cn('font-bold font-mono', sizeClasses[size].price)}>
-        {formatPrice(price)}
-      </p>
+      {symbol && marketType && !isHoveringChart ? (
+        <RealtimePrice 
+          symbol={symbol} 
+          marketType={marketType} 
+          initialPrice={price} 
+          className={cn('font-bold font-mono', sizeClasses[size].price)} 
+        />
+      ) : (
+        <p className={cn('font-bold font-mono', sizeClasses[size].price)}>
+          {formatPrice(price)}
+        </p>
+      )}
       <div className="flex items-center gap-2 mt-1">
         {isPositive ? (
           <TrendingUp className="h-4 w-4 text-green-500" />
