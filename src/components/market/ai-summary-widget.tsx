@@ -28,12 +28,17 @@ export function AISummaryWidget({ symbol, analysis }: AISummaryWidgetProps) {
       hasFetchedRef.current = true;
       
       try {
-        const response = await fetch(`/api/analysis/${symbol}/summary`, {
+        const response = await fetch(`/api/analysis/${encodeURIComponent(symbol)}/summary`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ analysisData: analysis }),
         });
         
+        if (!response.ok) {
+          setError(`AI service unavailable (${response.status})`);
+          return;
+        }
+
         const data = await response.json();
         
         if (data.success) {
