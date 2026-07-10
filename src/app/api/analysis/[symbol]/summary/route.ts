@@ -84,7 +84,6 @@ Data: Trend=${trend}, Signal=${signal}, Confidence=${confidence}%, Tech Score=${
     }
     
     let lastError = '';
-    let successModel = '';
     
     for (const modelName of modelsToTry) {
       try {
