@@ -36,12 +36,25 @@ export function MiniChart({ data, width = 120, height = 40, color }: MiniChartPr
     ctx.clearRect(0, 0, width, height);
     ctx.beginPath();
 
-    closes.forEach((close, i) => {
-      const x = (i / (closes.length - 1)) * width;
-      const y = height - ((close - min) / range) * (height - 4) - 2;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
+    const points = closes.map((close, i) => ({
+      x: (i / (closes.length - 1)) * width,
+      y: height - ((close - min) / range) * (height - 4) - 2
+    }));
+
+    if (points.length > 0) {
+      ctx.moveTo(points[0].x, points[0].y);
+      if (points.length === 2) {
+        ctx.lineTo(points[1].x, points[1].y);
+      } else {
+        for (let i = 1; i < points.length - 1; i++) {
+          const xc = (points[i].x + points[i + 1].x) / 2;
+          const yc = (points[i].y + points[i + 1].y) / 2;
+          ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
+        }
+        // Connect the last point
+        ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+      }
+    }
 
     ctx.strokeStyle = lineColor;
     ctx.lineWidth = 1.5;

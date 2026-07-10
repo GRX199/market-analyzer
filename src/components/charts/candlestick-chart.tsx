@@ -70,7 +70,27 @@ export function CandlestickChart({ data, height = 400, onCrosshairMove, maOverla
         vertLines: { color: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.06)' },
         horzLines: { color: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.06)' },
       },
-      crosshair: { mode: CrosshairMode.Normal },
+      watermark: {
+        visible: true,
+        fontSize: 24,
+        horzAlign: 'center',
+        vertAlign: 'center',
+        color: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.03)',
+        text: 'MARKET ANALYZER PREMIUM',
+      },
+      crosshair: { 
+        mode: CrosshairMode.Normal,
+        vertLine: {
+          width: 1,
+          color: isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)',
+          style: LineStyle.Dashed,
+        },
+        horzLine: {
+          width: 1,
+          color: isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)',
+          style: LineStyle.Dashed,
+        },
+      },
       rightPriceScale: {
         borderVisible: false,
         scaleMargins: { top: 0.1, bottom: 0.1 },
