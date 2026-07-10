@@ -6,6 +6,7 @@ import { FinalAnalysis } from '@/types/analysis';
 import { CandlestickChart } from '@/components/charts/candlestick-chart';
 import { PriceTicker } from '@/components/market/price-ticker';
 import { SignalCard } from '@/components/market/signal-card';
+import { AISummaryWidget } from '@/components/market/ai-summary-widget';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { TIMEFRAMES } from '@/lib/constants';
@@ -208,6 +209,8 @@ export default function AssetClientPage({ symbol }: { symbol: string }) {
 
         {/* Analysis Sidebar Column */}
         <div className="space-y-6">
+          <AISummaryWidget symbol={asset.symbol} analysis={analysis} />
+          
           <SignalCard 
             score={analysis.finalScore}
             signal={analysis.signal}
@@ -222,6 +225,9 @@ export default function AssetClientPage({ symbol }: { symbol: string }) {
             resistanceLevel={analysis.resistanceLevel}
             stopLoss={analysis.stopLoss}
             takeProfit={analysis.takeProfit}
+            symbol={asset.symbol}
+            name={asset.name}
+            marketType={asset.marketType}
           />
         </div>
       </div>

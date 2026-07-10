@@ -2,9 +2,10 @@ import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { SignalType, RiskLevel } from '@/types/analysis';
-import { TrendDirection } from '@/types/market';
+import { TrendDirection, MarketType } from '@/types/market';
 import { SIGNAL_COLORS, SIGNAL_LABELS, RISK_LABELS, RISK_COLORS, TREND_COLORS } from '@/lib/constants';
 import { ScoreGauge } from '@/components/charts/score-gauge';
+import { WatchlistButton } from '@/components/common/watchlist-button';
 import { TrendingUp, TrendingDown, Minus, Shield, AlertTriangle, Target } from 'lucide-react';
 
 interface SignalCardProps {
@@ -22,6 +23,9 @@ interface SignalCardProps {
   stopLoss?: number;
   takeProfit?: number;
   compact?: boolean;
+  symbol?: string; // Optional for Watchlist
+  name?: string;
+  marketType?: MarketType;
 }
 
 export function SignalCard({
@@ -29,6 +33,7 @@ export function SignalCard({
   buyFactors = [], sellFactors = [], riskFactors = [],
   supportLevel, resistanceLevel, stopLoss, takeProfit,
   compact = false,
+  symbol, name, marketType
 }: SignalCardProps) {
   const TrendIcon = trend === 'bullish' ? TrendingUp : trend === 'bearish' ? TrendingDown : Minus;
 
@@ -77,12 +82,17 @@ export function SignalCard({
             <CardTitle className="text-lg">Overall Signal (Combined)</CardTitle>
             <p className="text-[10px] text-muted-foreground mt-0.5">Combines Technical, Fundamental & Sentiment</p>
           </div>
-          <Badge
-            className="text-sm font-bold px-3 py-1"
-            style={{ backgroundColor: SIGNAL_COLORS[signal] + '20', color: SIGNAL_COLORS[signal] }}
-          >
-            {SIGNAL_LABELS[signal]}
-          </Badge>
+          <div className="flex items-center gap-2">
+            {symbol && marketType && (
+              <WatchlistButton symbol={symbol} name={name} marketType={marketType} className="mr-1" />
+            )}
+            <Badge
+              className="text-sm font-bold px-3 py-1"
+              style={{ backgroundColor: SIGNAL_COLORS[signal] + '20', color: SIGNAL_COLORS[signal] }}
+            >
+              {SIGNAL_LABELS[signal]}
+            </Badge>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-6">

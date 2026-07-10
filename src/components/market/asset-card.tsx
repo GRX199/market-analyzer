@@ -7,8 +7,7 @@ import { TrendingUp, TrendingDown, Minus, Star } from 'lucide-react';
 import { AssetData } from '@/types/market';
 import { cn } from '@/lib/utils';
 import { TREND_COLORS } from '@/lib/constants';
-import { Button } from '@/components/ui/button';
-import { useUserStore } from '@/stores/user-store';
+import { WatchlistButton } from '@/components/common/watchlist-button';
 
 interface AssetCardProps {
   asset: AssetData;
@@ -16,29 +15,8 @@ interface AssetCardProps {
 }
 
 export function AssetCard({ asset, showWatchlistButton = true }: AssetCardProps) {
-  const { watchlist, addToWatchlist, removeFromWatchlist } = useUserStore();
-  const isWatched = watchlist.some(w => w.symbol === asset.symbol);
   const isPositive = asset.changePercent >= 0;
   const TrendIcon = asset.trend === 'bullish' ? TrendingUp : asset.trend === 'bearish' ? TrendingDown : Minus;
-
-  const handleWatchlist = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (isWatched) {
-      removeFromWatchlist(asset.symbol);
-    } else {
-      addToWatchlist({
-        id: crypto.randomUUID(),
-        userId: 'demo',
-        symbol: asset.symbol,
-        marketType: asset.marketType,
-        displayName: asset.name,
-        notes: null,
-        sortOrder: 0,
-        createdAt: new Date().toISOString(),
-      });
-    }
-  };
 
   const getMarketStateDetails = (state: string | undefined, marketType: string) => {
     // Crypto is always open 24/7
@@ -98,9 +76,11 @@ export function AssetCard({ asset, showWatchlistButton = true }: AssetCardProps)
               <p className="text-xs text-muted-foreground">{asset.name}</p>
             </div>
             {showWatchlistButton && (
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleWatchlist}>
-                <Star className={cn('h-3.5 w-3.5', isWatched && 'fill-yellow-400 text-yellow-400')} />
-              </Button>
+              <WatchlistButton 
+                symbol={asset.symbol} 
+                name={asset.name} 
+                marketType={asset.marketType} 
+              />
             )}
           </div>
           <div className="flex items-end justify-between">
