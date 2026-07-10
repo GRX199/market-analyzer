@@ -189,13 +189,15 @@ export function CandlestickChart({ data, height = 400, onCrosshairMove, maOverla
 
     if (onCrosshairMove) {
       chart.subscribeCrosshairMove((param: any) => {
-        if (!param || !param.seriesData) {
+        if (!param || !param.seriesData || param.point === undefined || !param.time || param.point.x < 0 || param.point.y < 0) {
           onCrosshairMove(null);
           return;
         }
         const data = param.seriesData.get(candleSeries);
-        if (data) {
+        if (data && data.close !== undefined) {
           onCrosshairMove((data as any).close);
+        } else {
+          onCrosshairMove(null);
         }
       });
     }
