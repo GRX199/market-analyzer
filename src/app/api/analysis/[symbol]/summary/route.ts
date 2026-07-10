@@ -54,10 +54,38 @@ Data: Trend=${trend}, Signal=${signal}, Confidence=${confidence}%, Tech Score=${
 
     const genAI = new GoogleGenerativeAI(apiKey);
 
-    // Try models in order of preference (latest valid models first)
-    const modelsToTry = ['gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-1.5-flash'];
+    // Dynamically fetch available models to prevent 404 errors
+    let modelsToTry = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-pro']; // fallback defaults
+    
+    try {
+      const modelsRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+      if (modelsRes.ok) {
+        const modelsData = await modelsRes.json();
+        if (modelsData.models && Array.isArray(modelsData.models)) {
+          // Filter models that support generateContent
+          const availableModels = modelsData.models
+            .filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
+            .map((m: any) => m.name.replace('models/', ''));
+            
+          if (availableModels.length > 0) {
+            // Prioritize flash models, then pro models, then whatever is available
+            const flashModels = availableModels.filter((m: string) => m.includes('flash'));
+            const proModels = availableModels.filter((m: string) => m.includes('pro'));
+            
+            modelsToTry = [...flashModels, ...proModels, ...availableModels];
+            
+            // Remove duplicates
+            modelsToTry = Array.from(new Set(modelsToTry));
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to dynamically fetch models, falling back to defaults', e);
+    }
     
     let lastError = '';
+    let successModel = '';
+    
     for (const modelName of modelsToTry) {
       try {
         const model = genAI.getGenerativeModel({ model: modelName });
@@ -70,8 +98,8 @@ Data: Trend=${trend}, Signal=${signal}, Confidence=${confidence}%, Tech Score=${
           summary: text,
           model: modelName,
         });
-      } catch (modelError: unknown) {
-        lastError = modelError instanceof Error ? modelError.message : String(modelError);
+      } catch (modelError: any) {
+        lastError = modelError?.message || String(modelError);
         console.warn(`Model ${modelName} failed: ${lastError}`);
         continue; // Try next model
       }
