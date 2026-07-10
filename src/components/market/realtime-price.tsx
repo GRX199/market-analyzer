@@ -6,40 +6,55 @@ import { cn } from '@/lib/utils';
 import { MarketType } from '@/types/market';
 
 interface RealtimePriceProps {
-  symbol: string;         // e.g. "BTC/USDT"
-  marketType: MarketType; // e.g. "crypto"
+  symbol: string;         // e.g. "BTC/USDT" or "AAPL" or "EUR/USD"
+  marketType: MarketType; // e.g. "crypto" | "stocks" | "forex"
   initialPrice: number;
   className?: string;
 }
 
 export function RealtimePrice({ symbol, marketType, initialPrice, className }: RealtimePriceProps) {
-  // Only crypto is supported for real-time WebSocket right now
-  const isEligible = marketType === 'crypto';
-  
-  // Convert "BTC/USDT" to "BTCUSDT" for Binance mapping
-  const binanceSymbol = isEligible ? symbol.replace('/', '').toUpperCase() : '';
+  // Format the symbol based on market type
+  const getStreamSymbol = (sym: string, type: MarketType) => {
+    if (type === 'crypto') return sym.replace('/', '').toUpperCase(); // BTC/USDT -> BTCUSDT
+    return sym; // Stocks (AAPL) and Forex (EUR/USD) keep original names for matching
+  };
 
-  // Get price data specifically for this symbol to minimize re-renders
-  const priceData = useRealtimeStore((state) => 
-    isEligible ? state.prices[binanceSymbol] : undefined
-  );
+  const streamSymbol = getStreamSymbol(symbol, marketType);
+
+  // Get price data specifically for this symbol
+  const priceData = useRealtimeStore((state) => state.prices[streamSymbol]);
 
   const [flashClass, setFlashClass] = useState('');
 
   useEffect(() => {
-    // Ensure WebSocket is connected
-    if (isEligible) {
-      useRealtimeStore.getState().connect();
+    const store = useRealtimeStore.getState();
+    
+    // Connect to streams if not connected
+    if (marketType === 'crypto') store.connectCrypto();
+    if (marketType === 'stocks') {
+      const finnhubKey = process.env.NEXT_PUBLIC_FINNHUB_API_KEY;
+      if (finnhubKey) store.connectStocks(finnhubKey);
     }
-  }, [isEligible]);
+    if (marketType === 'forex') store.startForexPolling();
+
+    // Subscribe this symbol
+    store.subscribeSymbol(streamSymbol, marketType);
+
+    // Unsubscribe on unmount
+    return () => {
+      store.unsubscribeSymbol(streamSymbol, marketType);
+    };
+  }, [streamSymbol, marketType]);
 
   useEffect(() => {
     if (!priceData) return;
 
-    // Determine flash color
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (priceData.current > priceData.previous) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFlashClass('text-green-500 scale-105 transition-none');
     } else if (priceData.current < priceData.previous) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFlashClass('text-red-500 scale-105 transition-none');
     }
 
