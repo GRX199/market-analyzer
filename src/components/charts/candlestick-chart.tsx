@@ -14,6 +14,7 @@ interface CandlestickChartProps {
   height?: number;
   onCrosshairMove?: (price: number | null) => void;
   maOverlays?: MAOverlay[];
+  realtimePrice?: number;
 }
 
 const DEFAULT_MA_OVERLAYS: MAOverlay[] = [
@@ -36,9 +37,10 @@ function calculateSMAFromCandles(closes: number[], period: number): (number | nu
   return result;
 }
 
-export function CandlestickChart({ data, height = 400, onCrosshairMove, maOverlays }: CandlestickChartProps) {
+export function CandlestickChart({ data, height = 400, onCrosshairMove, maOverlays, realtimePrice }: CandlestickChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
+  const seriesRef = useRef<any>(null);
 
   const activeOverlays = maOverlays || DEFAULT_MA_OVERLAYS;
 
@@ -185,6 +187,12 @@ export function CandlestickChart({ data, height = 400, onCrosshairMove, maOverla
 
     volumeSeries.setData(volumeData);
 
+    seriesRef.current = {
+      candleSeries,
+      volumeSeries,
+      lastData: chartData.length > 0 ? { ...chartData[chartData.length - 1] } : null
+    };
+
     chart.timeScale().fitContent();
 
     if (onCrosshairMove) {
@@ -227,6 +235,30 @@ export function CandlestickChart({ data, height = 400, onCrosshairMove, maOverla
       cleanup?.then(fn => fn?.());
     };
   }, [initChart]);
+
+  // Realtime Update Effect
+  useEffect(() => {
+    if (!realtimePrice || !seriesRef.current || !seriesRef.current.lastData) return;
+    
+    const { candleSeries, lastData } = seriesRef.current;
+    
+    // Update the high/low/close of the very last candle
+    const updatedCandle = {
+      ...lastData,
+      close: realtimePrice,
+      high: Math.max(lastData.high, realtimePrice),
+      low: Math.min(lastData.low, realtimePrice),
+    };
+    
+    // Push the update to TradingView
+    try {
+      candleSeries.update(updatedCandle);
+      // Save for next tick
+      seriesRef.current.lastData = updatedCandle;
+    } catch (err) {
+      // Ignore update errors during unmounts
+    }
+  }, [realtimePrice]);
 
   return (
     <div

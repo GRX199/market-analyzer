@@ -12,6 +12,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { TIMEFRAMES } from '@/lib/constants';
 import { Star, ArrowLeft } from 'lucide-react';
 import { useUserStore } from '@/stores/user-store';
+import { useRealtimeStore } from '@/stores/realtime-store';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 
@@ -34,6 +35,12 @@ export default function AssetClientPage({ symbol }: { symbol: string }) {
   
   const { watchlist, addToWatchlist, removeFromWatchlist } = useUserStore();
   const isWatched = watchlist.some(w => w.symbol === symbol);
+
+  const isEligibleForRealtime = asset?.marketType === 'crypto';
+  const binanceSymbol = isEligibleForRealtime ? symbol.replace('/', '').toUpperCase() : '';
+  const priceData = useRealtimeStore((state) => 
+    isEligibleForRealtime ? state.prices[binanceSymbol] : undefined
+  );
 
   useEffect(() => {
     async function loadData() {
@@ -159,6 +166,7 @@ export default function AssetClientPage({ symbol }: { symbol: string }) {
               height={typeof window !== 'undefined' && window.innerWidth < 640 ? 320 : 500} 
               onCrosshairMove={setCrosshairPrice}
               maOverlays={maOverlays}
+              realtimePrice={priceData?.current}
             />
             {/* MA Legend / Toggle */}
             <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-border/50">
