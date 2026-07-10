@@ -10,9 +10,11 @@ interface UserState {
   sidebarCollapsed: boolean;
   watchlist: WatchlistItem[];
   alerts: UserAlert[];
+  telegramChatId: string | null;
   setUser: (user: UserProfile | null) => void;
   setAuthenticated: (isAuth: boolean) => void;
   acceptDisclaimer: () => void;
+  setTelegramChatId: (id: string | null) => void;
   toggleTheme: () => void;
   setTheme: (theme: 'dark' | 'light') => void;
   toggleSidebar: () => void;
@@ -22,6 +24,7 @@ interface UserState {
   addAlert: (alert: UserAlert) => void;
   removeAlert: (id: string) => void;
   toggleAlert: (id: string) => void;
+  markAlertTriggered: (id: string) => void;
 }
 
 export const useUserStore = create<UserState>()(
@@ -34,9 +37,11 @@ export const useUserStore = create<UserState>()(
       sidebarCollapsed: false,
       watchlist: [],
       alerts: [],
+      telegramChatId: null,
       setUser: (user) => set({ user, isAuthenticated: !!user }),
       setAuthenticated: (isAuth) => set({ isAuthenticated: isAuth }),
       acceptDisclaimer: () => set({ disclaimerAccepted: true }),
+      setTelegramChatId: (id) => set({ telegramChatId: id }),
       toggleTheme: () => set((state) => {
         const newTheme = state.theme === 'dark' ? 'light' : 'dark';
         if (typeof document !== 'undefined') {
@@ -63,6 +68,15 @@ export const useUserStore = create<UserState>()(
       removeAlert: (id) => set((state) => ({ alerts: state.alerts.filter(a => a.id !== id) })),
       toggleAlert: (id) => set((state) => ({
         alerts: state.alerts.map(a => a.id === id ? { ...a, isActive: !a.isActive } : a),
+      })),
+      markAlertTriggered: (id) => set((state) => ({
+        alerts: state.alerts.map(a => a.id === id ? { 
+          ...a, 
+          isActive: false, // Turn off alert after triggered to prevent spam
+          isTriggered: true, 
+          triggeredAt: new Date().toISOString(),
+          triggerCount: a.triggerCount + 1
+        } : a),
       })),
     }),
     {

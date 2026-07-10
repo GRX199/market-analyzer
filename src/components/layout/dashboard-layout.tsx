@@ -8,10 +8,14 @@ import { useUserStore } from '@/stores/user-store';
 import { useMarketStore } from '@/stores/market-store';
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
+import { useAlertsMonitor } from '@/hooks/use-alerts-monitor';
 
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { theme, sidebarCollapsed } = useUserStore();
   const [mounted, setMounted] = useState(false);
+
+  // Initialize background alerts monitor
+  useAlertsMonitor();
 
   // Rehydrate persisted stores on client mount
   useEffect(() => {

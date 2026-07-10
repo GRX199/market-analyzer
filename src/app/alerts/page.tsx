@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { EmptyState } from '@/components/common/empty-state';
 import { useUserStore } from '@/stores/user-store';
@@ -11,10 +11,33 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Send, BellRing, Info } from 'lucide-react';
 
 export default function AlertsPage() {
-  const { alerts, addAlert, removeAlert, toggleAlert } = useUserStore();
+  const { alerts, addAlert, removeAlert, toggleAlert, telegramChatId, setTelegramChatId } = useUserStore();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [tempChatId, setTempChatId] = useState(telegramChatId || '');
+  const [notificationStatus, setNotificationStatus] = useState<string>('default');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      setNotificationStatus(Notification.permission);
+    }
+    setTempChatId(telegramChatId || '');
+  }, [telegramChatId]);
+
+  const requestNotificationPermission = () => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      Notification.requestPermission().then(permission => {
+        setNotificationStatus(permission);
+      });
+    }
+  };
+
+  const handleSaveTelegramId = () => {
+    setTelegramChatId(tempChatId);
+    // Could add a toast notification here
+  };
   const [newAlert, setNewAlert] = useState({
     symbol: '',
     marketType: 'crypto' as 'crypto' | 'stocks' | 'forex',
@@ -114,6 +137,69 @@ export default function AlertsPage() {
         </Dialog>
       </div>
 
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+        <Card className="bg-card">
+          <CardContent className="p-6">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-blue-500/10 rounded-xl text-blue-500">
+                <Send className="h-6 w-6" />
+              </div>
+              <div className="flex-1 space-y-2">
+                <h3 className="font-semibold text-lg leading-none">Telegram Bot</h3>
+                <p className="text-sm text-muted-foreground">Receive instant alerts to your Telegram app.</p>
+                
+                <div className="flex gap-2 pt-2">
+                  <Input 
+                    placeholder="Enter Telegram Chat ID" 
+                    value={tempChatId}
+                    onChange={(e) => setTempChatId(e.target.value)}
+                  />
+                  <Button onClick={handleSaveTelegramId} variant={telegramChatId === tempChatId ? "secondary" : "default"}>
+                    {telegramChatId === tempChatId ? 'Saved' : 'Save'}
+                  </Button>
+                </div>
+                <div className="text-xs text-muted-foreground bg-secondary/50 p-2 rounded-md mt-2 flex items-start gap-2">
+                  <Info className="h-4 w-4 shrink-0 mt-0.5" />
+                  <p>Send any message to <strong>@userinfobot</strong> on Telegram to get your Chat ID.</p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card">
+          <CardContent className="p-6">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-orange-500/10 rounded-xl text-orange-500">
+                <BellRing className="h-6 w-6" />
+              </div>
+              <div className="flex-1 space-y-2">
+                <h3 className="font-semibold text-lg leading-none">Browser Notifications</h3>
+                <p className="text-sm text-muted-foreground">Get desktop pop-ups when the app is open.</p>
+                
+                <div className="pt-2">
+                  {notificationStatus === 'granted' ? (
+                    <Badge variant="default" className="bg-green-500/20 text-green-500 border-none px-3 py-1">
+                      Enabled
+                    </Badge>
+                  ) : notificationStatus === 'denied' ? (
+                    <Badge variant="destructive" className="px-3 py-1">
+                      Blocked by Browser
+                    </Badge>
+                  ) : (
+                    <Button onClick={requestNotificationPermission} variant="outline" className="w-full">
+                      Enable Browser Alerts
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <h2 className="text-xl font-bold mb-4">Active Alerts</h2>
+
       {alerts.length > 0 ? (
         <div className="space-y-4">
           {alerts.map(alert => (
@@ -129,10 +215,16 @@ export default function AlertsPage() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge variant={alert.isActive ? "default" : "secondary"}>
-                    {alert.isActive ? 'Active' : 'Paused'}
-                  </Badge>
-                  <Button variant="ghost" size="icon" onClick={() => toggleAlert(alert.id)}>
+                  {alert.isTriggered ? (
+                    <Badge variant="secondary" className="bg-green-500/20 text-green-500 border-none">
+                      Triggered
+                    </Badge>
+                  ) : (
+                    <Badge variant={alert.isActive ? "default" : "secondary"}>
+                      {alert.isActive ? 'Active' : 'Paused'}
+                    </Badge>
+                  )}
+                  <Button variant="ghost" size="icon" onClick={() => toggleAlert(alert.id)} disabled={alert.isTriggered}>
                     <Settings className="h-4 w-4 text-muted-foreground" />
                   </Button>
                   <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600 hover:bg-red-500/10" onClick={() => removeAlert(alert.id)}>
