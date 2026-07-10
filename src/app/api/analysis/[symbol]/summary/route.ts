@@ -7,7 +7,7 @@ export async function POST(
 ) {
   try {
     const { symbol: rawSymbol } = await params;
-    const symbol = decodeURIComponent(rawSymbol).toUpperCase();
+    const symbol = decodeURIComponent(rawSymbol).toUpperCase().replace('-', '/');
     
     let body;
     try {

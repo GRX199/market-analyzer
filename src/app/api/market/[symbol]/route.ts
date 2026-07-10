@@ -10,7 +10,7 @@ export async function GET(
 ) {
   try {
     const resolvedParams = await params;
-    const symbol = decodeURIComponent(resolvedParams.symbol);
+    const symbol = decodeURIComponent(resolvedParams.symbol).replace('-', '/');
     const { searchParams } = new URL(request.url);
     const includeChart = searchParams.get('chart') === 'true';
     const timeframe = searchParams.get('timeframe') || '1D';

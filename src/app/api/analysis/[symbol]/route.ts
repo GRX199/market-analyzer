@@ -19,7 +19,8 @@ export async function GET(
     const timeframe = searchParams.get('timeframe') || '1D';
     
     const resolvedParams = await params;
-    const symbol = decodeURIComponent(resolvedParams.symbol);
+    const symbol = decodeURIComponent(resolvedParams.symbol).replace('-', '/');
+      
     const marketType = getMarketTypeForSymbol(symbol);
     
     const [assetData, ohlcvData, fundamentalData, newsData] = await Promise.all([
