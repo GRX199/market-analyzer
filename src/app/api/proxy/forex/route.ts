@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const symbolsParam = searchParams.get('symbols');
@@ -27,9 +30,10 @@ export async function GET(request: Request) {
           const response = await fetch(url, {
             headers: {
               'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-              'Accept': 'text/html'
+              'Accept': 'text/html',
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
             },
-            next: { revalidate: 5 } // Cache for 5s
+            cache: 'no-store'
           });
 
           if (response.ok) {

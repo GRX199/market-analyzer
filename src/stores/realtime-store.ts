@@ -201,7 +201,7 @@ export const useRealtimeStore = create<RealtimeState>((set, get) => ({
       const symbolsList = Array.from(activeSymbols.forex).join(',');
       
       try {
-        const res = await fetch(`/api/proxy/forex?symbols=${encodeURIComponent(symbolsList)}`);
+        const res = await fetch(`/api/proxy/forex?symbols=${encodeURIComponent(symbolsList)}&_t=${Date.now()}`);
         if (res.ok) {
           const pricesMap = await res.json();
           
