@@ -35,7 +35,12 @@ export function AISummaryWidget({ symbol, analysis }: AISummaryWidgetProps) {
         });
         
         if (!response.ok) {
-          setError(`AI service unavailable (${response.status})`);
+          try {
+            const errData = await response.json();
+            setError(errData.error || `AI service unavailable (${response.status})`);
+          } catch {
+            setError(`AI service unavailable (${response.status})`);
+          }
           return;
         }
 
