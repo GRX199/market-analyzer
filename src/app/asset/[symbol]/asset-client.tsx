@@ -36,10 +36,14 @@ export default function AssetClientPage({ symbol }: { symbol: string }) {
   const { watchlist, addToWatchlist, removeFromWatchlist } = useUserStore();
   const isWatched = watchlist.some(w => w.symbol === symbol);
 
-  const isEligibleForRealtime = asset?.marketType === 'crypto';
-  const binanceSymbol = isEligibleForRealtime ? symbol.replace('/', '').toUpperCase() : '';
+  const getStreamSymbol = (sym: string, type: MarketType) => {
+    if (type === 'crypto') return sym.replace('/', '').toUpperCase();
+    return sym;
+  };
+
+  const streamSymbol = asset ? getStreamSymbol(symbol, asset.marketType) : '';
   const priceData = useRealtimeStore((state) => 
-    isEligibleForRealtime ? state.prices[binanceSymbol] : undefined
+    streamSymbol ? state.prices[streamSymbol] : undefined
   );
 
   useEffect(() => {
