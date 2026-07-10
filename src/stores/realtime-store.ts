@@ -33,6 +33,9 @@ let cryptoReconnectTimeout: NodeJS.Timeout;
 let stocksReconnectTimeout: NodeJS.Timeout;
 let forexPollingInterval: NodeJS.Timeout | null = null;
 
+let isCryptoConnecting = false;
+let isStocksConnecting = false;
+
 export const useRealtimeStore = create<RealtimeState>((set, get) => ({
   prices: {},
   isCryptoConnected: false,
@@ -73,12 +76,16 @@ export const useRealtimeStore = create<RealtimeState>((set, get) => ({
 
   connectCrypto: () => {
     const { isCryptoConnected } = get();
-    if (isCryptoConnected || typeof window === 'undefined') return;
+    if (isCryptoConnected || isCryptoConnecting || typeof window === 'undefined') return;
 
+    isCryptoConnecting = true;
     try {
       cryptoWs = new WebSocket('wss://stream.binance.com:9443/ws/!miniTicker@arr');
       
-      cryptoWs.onopen = () => set({ isCryptoConnected: true });
+      cryptoWs.onopen = () => {
+        isCryptoConnecting = false;
+        set({ isCryptoConnected: true });
+      };
       
       cryptoWs.onmessage = (event) => {
         try {
@@ -111,23 +118,28 @@ export const useRealtimeStore = create<RealtimeState>((set, get) => ({
       };
 
       cryptoWs.onclose = () => {
+        isCryptoConnecting = false;
         set({ isCryptoConnected: false });
         clearTimeout(cryptoReconnectTimeout);
-        cryptoReconnectTimeout = setTimeout(() => get().connectCrypto(), 3000);
+        cryptoReconnectTimeout = setTimeout(() => get().connectCrypto(), 5000);
       };
       
       cryptoWs.onerror = () => cryptoWs?.close();
-    } catch (err) {}
+    } catch (err) {
+      isCryptoConnecting = false;
+    }
   },
 
   connectStocks: (apiKey: string) => {
     const { isStocksConnected, activeSymbols } = get();
-    if (isStocksConnected || typeof window === 'undefined' || !apiKey) return;
+    if (isStocksConnected || isStocksConnecting || typeof window === 'undefined' || !apiKey) return;
 
+    isStocksConnecting = true;
     try {
       stocksWs = new WebSocket(`wss://ws.finnhub.io?token=${apiKey}`);
       
       stocksWs.onopen = () => {
+        isStocksConnecting = false;
         set({ isStocksConnected: true });
         // Subscribe to all currently active stock symbols
         activeSymbols.stocks.forEach(symbol => {
@@ -166,13 +178,16 @@ export const useRealtimeStore = create<RealtimeState>((set, get) => ({
       };
 
       stocksWs.onclose = () => {
+        isStocksConnecting = false;
         set({ isStocksConnected: false });
         clearTimeout(stocksReconnectTimeout);
-        stocksReconnectTimeout = setTimeout(() => get().connectStocks(apiKey), 3000);
+        stocksReconnectTimeout = setTimeout(() => get().connectStocks(apiKey), 5000);
       };
       
       stocksWs.onerror = () => stocksWs?.close();
-    } catch (err) {}
+    } catch (err) {
+      isStocksConnecting = false;
+    }
   },
 
   startForexPolling: () => {
