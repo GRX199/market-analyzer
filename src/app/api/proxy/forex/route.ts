@@ -8,52 +8,48 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Missing symbols parameter' }, { status: 400 });
   }
 
-  // Parse custom format "EUR/USD,GBP/USD" to Yahoo Finance format "EURUSD=X,GBPUSD=X"
+  // Parse requested symbols (e.g., "EUR/USD,GBP/USD")
   const requestedSymbols = symbolsParam.split(',');
-  const yahooSymbols = requestedSymbols.map(sym => {
-    // If it contains a slash, assume it's forex
-    if (sym.includes('/')) {
-      return sym.replace('/', '') + '=X';
-    }
-    // Fallback for others
-    return sym;
-  });
 
   try {
-    const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${yahooSymbols.join(',')}`;
-    
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      },
-      next: { revalidate: 5 } // Cache for 5 seconds to prevent rate limits
-    });
-
-    if (!response.ok) {
-      throw new Error(`Yahoo API responded with ${response.status}`);
-    }
-
-    const data = await response.json();
-    const results = data.quoteResponse?.result || [];
-
-    // Map back to our format
     const parsedPrices: Record<string, number> = {};
-    
-    results.forEach((item: any) => {
-      // Find original requested symbol
-      let originalSymbol = item.symbol;
-      if (item.symbol.endsWith('=X')) {
-        const base = item.symbol.replace('=X', '');
-        // Hacky way to restore slash for 6-char forex pairs (e.g., EURUSD -> EUR/USD)
-        if (base.length === 6) {
-          originalSymbol = `${base.substring(0,3)}/${base.substring(3,6)}`;
+
+    // Fetch all sequentially or parallel (Google Finance is fast)
+    await Promise.all(
+      requestedSymbols.map(async (sym) => {
+        if (!sym.includes('/')) return;
+        
+        // Convert "EUR/USD" to "EUR-USD"
+        const gfSymbol = sym.replace('/', '-');
+        const url = `https://www.google.com/finance/quote/${gfSymbol}`;
+        
+        try {
+          const response = await fetch(url, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+              'Accept': 'text/html'
+            },
+            next: { revalidate: 5 } // Cache for 5s
+          });
+
+          if (response.ok) {
+            const html = await response.text();
+            // Regex to find the main price div in Google Finance
+            const match = html.match(/class="YMlKec fxKbKc">([^<]+)<\/div>/);
+            if (match && match[1]) {
+              // Parse "1,0823" or "1.0823"
+              const priceStr = match[1].replace(/,/g, '');
+              const price = parseFloat(priceStr);
+              if (!isNaN(price)) {
+                parsedPrices[sym] = price;
+              }
+            }
+          }
+        } catch (err) {
+          // Ignore individual fetch errors
         }
-      }
-      
-      if (item.regularMarketPrice) {
-        parsedPrices[originalSymbol] = item.regularMarketPrice;
-      }
-    });
+      })
+    );
 
     return NextResponse.json(parsedPrices);
 
