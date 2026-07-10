@@ -50,7 +50,7 @@ export default function AssetClientPage({ symbol }: { symbol: string }) {
     async function loadData() {
       setLoading(true);
       try {
-        const safeSymbolPath = symbol.split('/').map(encodeURIComponent).join('/');
+        const safeSymbolPath = encodeURIComponent(symbol.replace('/', '-'));
         const [marketRes, analysisRes] = await Promise.all([
           fetch(`/api/market/${safeSymbolPath}?chart=true&timeframe=${timeframe}`),
           fetch(`/api/analysis/${safeSymbolPath}?timeframe=${timeframe}`)
