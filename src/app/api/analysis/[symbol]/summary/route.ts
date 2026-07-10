@@ -1,16 +1,13 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// Initialize Gemini API
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ symbol: string }> }
 ) {
   try {
     const { symbol: rawSymbol } = await params;
-    const symbol = rawSymbol.toUpperCase();
+    const symbol = decodeURIComponent(rawSymbol).toUpperCase();
     const body = await request.json();
     
     // Check if API key is configured
@@ -27,9 +24,23 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'Analysis data is required' }, { status: 400 });
     }
 
+    // Safely extract values with fallbacks
+    const trend = analysisData.trend || 'unknown';
+    const signal = analysisData.signal || 'unknown';
+    const confidence = analysisData.confidence || 0;
+    const techScore = analysisData.technical?.score || 0;
+    const macdSignal = analysisData.technical?.macd?.signal || 'unknown';
+    const rsiValue = typeof analysisData.technical?.rsi?.value === 'number' 
+      ? analysisData.technical.rsi.value.toFixed(2) 
+      : 'N/A';
+    const supportLevel = analysisData.supportLevel || 'N/A';
+    const resistanceLevel = analysisData.resistanceLevel || 'N/A';
+    const reasons = Array.isArray(analysisData.reasons) 
+      ? analysisData.reasons.join('. ') 
+      : 'No reasons provided';
+
     // Construct the prompt for Gemini
-    const prompt = `
-You are an elite financial analyst and algorithmic trader.
+    const prompt = `You are an elite financial analyst and algorithmic trader.
 Please write a concise, professional, and easily readable 1-2 paragraph summary of the current market conditions for the asset: ${symbol}.
 Use the provided technical and fundamental analysis data to formulate your summary.
 Do not list out stats mechanically; weave them into a narrative like a professional market report.
@@ -37,20 +48,21 @@ Keep it under 100 words. Focus on the most important indicators, trend, and the 
 
 Data context:
 - Asset: ${symbol}
-- Trend: ${analysisData.trend}
-- Signal: ${analysisData.signal}
-- Confidence: ${analysisData.confidence}%
-- Technical Score: ${analysisData.technical?.score}/100
-- ADX (Market Context): ${analysisData.technical?.adx?.trendStrength} ${analysisData.technical?.adx?.trendDirection}
-- MACD Signal: ${analysisData.technical?.macd?.signal}
-- RSI Value: ${analysisData.technical?.rsi?.value?.toFixed(2)}
-- Key Support: ${analysisData.supportLevel}
-- Key Resistance: ${analysisData.resistanceLevel}
-- Primary Reasons: ${analysisData.reasons?.join('. ')}
-`;
+- Trend: ${trend}
+- Signal: ${signal}
+- Confidence: ${confidence}%
+- Technical Score: ${techScore}/100
+- MACD Signal: ${macdSignal}
+- RSI Value: ${rsiValue}
+- Key Support: ${supportLevel}
+- Key Resistance: ${resistanceLevel}
+- Primary Reasons: ${reasons}`;
 
-    // Select the model (gemini-1.5-flash is fast and good for text)
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    // Initialize Gemini API inside the handler to ensure fresh key read
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+    // Use gemini-2.0-flash (latest stable fast model)
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
     
     // Generate content
     const result = await model.generateContent(prompt);
@@ -61,10 +73,11 @@ Data context:
       success: true,
       summary: text,
     });
-  } catch (error: any) {
-    console.error('Error generating AI summary:', error);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('AI Summary Error:', errorMessage);
     return NextResponse.json(
-      { success: false, error: 'Failed to generate AI summary', details: error.message },
+      { success: false, error: `AI analysis failed: ${errorMessage}` },
       { status: 500 }
     );
   }
