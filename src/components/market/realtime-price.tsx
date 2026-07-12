@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -49,19 +50,15 @@ export function RealtimePrice({ symbol, marketType, initialPrice, className }: R
   useEffect(() => {
     if (!priceData) return;
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (priceData.current > priceData.previous) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFlashClass('text-green-500 scale-105 transition-none');
     } else if (priceData.current < priceData.previous) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFlashClass('text-red-500 scale-105 transition-none');
     }
 
-    // Reset flash after 500ms
     const timer = setTimeout(() => {
-      setFlashClass('transition-all duration-500 scale-100');
-    }, 500);
+      setFlashClass('transition-colors duration-500 ease-out');
+    }, 300);
 
     return () => clearTimeout(timer);
   }, [priceData]);

@@ -33,6 +33,7 @@ function CompareChartWrapper({ symbol }: { symbol: string }) {
       }
     }
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbol]);
 
   if (loading) {

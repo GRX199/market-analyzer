@@ -13,6 +13,21 @@ const COLORS = [
   '#22c55e', '#14b8a6', '#06b6d4', '#3b82f6',
 ];
 
+const CustomTooltip = ({ active, payload }: any) => {
+  if (active && payload && payload.length) {
+    const item = payload[0].payload;
+    return (
+      <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-xl">
+        <p className="font-semibold text-sm">{item.name}</p>
+        <p className="text-xs text-muted-foreground">
+          ${item.value.toLocaleString()} ({item.percentage}%)
+        </p>
+      </div>
+    );
+  }
+  return null;
+};
+
 export function AllocationChart({ positions }: AllocationChartProps) {
   const openPositions = positions.filter(p => p.isOpen);
 
@@ -41,20 +56,7 @@ export function AllocationChart({ positions }: AllocationChartProps) {
     }))
     .sort((a, b) => b.value - a.value);
 
-  const CustomTooltip = ({ active, payload }: any) => {
-    if (active && payload && payload.length) {
-      const item = payload[0].payload;
-      return (
-        <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-xl">
-          <p className="font-semibold text-sm">{item.name}</p>
-          <p className="text-xs text-muted-foreground">
-            ${item.value.toLocaleString()} ({item.percentage}%)
-          </p>
-        </div>
-      );
-    }
-    return null;
-  };
+
 
   return (
     <div className="flex items-center gap-4">

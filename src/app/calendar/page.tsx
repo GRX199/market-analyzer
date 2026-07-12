@@ -66,7 +66,7 @@ export default function EconomicCalendarPage() {
             <div className="flex items-center justify-between">
               <CardTitle className="text-base flex items-center gap-2">
                 <Clock className="w-4 h-4 text-muted-foreground" />
-                Today's Events ({new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })})
+                Today&apos;s Events ({new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })})
               </CardTitle>
               <Badge variant="outline" className="font-mono text-xs">UTC-4 (EST)</Badge>
             </div>

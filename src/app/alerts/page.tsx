@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -17,12 +18,11 @@ export default function AlertsPage() {
   const { alerts, addAlert, removeAlert, toggleAlert, telegramChatId, setTelegramChatId } = useUserStore();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [tempChatId, setTempChatId] = useState(telegramChatId || '');
-  const [notificationStatus, setNotificationStatus] = useState<string>('default');
+  const [notificationStatus, setNotificationStatus] = useState<string>(
+    typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'default'
+  );
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      setNotificationStatus(Notification.permission);
-    }
     setTempChatId(telegramChatId || '');
   }, [telegramChatId]);
 

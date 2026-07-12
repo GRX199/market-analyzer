@@ -7,6 +7,23 @@ interface PerformanceChartProps {
   history: PortfolioSnapshot[];
 }
 
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-xl">
+        <p className="text-xs text-muted-foreground mb-1">{label}</p>
+        <p className="font-semibold text-sm">
+          ${payload[0]?.value?.toLocaleString()}
+        </p>
+        <p className={`text-xs ${payload[1]?.value >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+          P&L: ${payload[1]?.value?.toLocaleString()}
+        </p>
+      </div>
+    );
+  }
+  return null;
+};
+
 export function PerformanceChart({ history }: PerformanceChartProps) {
   if (history.length === 0) {
     return (
@@ -26,22 +43,7 @@ export function PerformanceChart({ history }: PerformanceChartProps) {
   const gradientColor = latestPnl >= 0 ? '#22c55e' : '#ef4444';
   const lineColor = latestPnl >= 0 ? '#22c55e' : '#ef4444';
 
-  const CustomTooltip = ({ active, payload, label }: any) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-xl">
-          <p className="text-xs text-muted-foreground mb-1">{label}</p>
-          <p className="font-semibold text-sm">
-            ${payload[0]?.value?.toLocaleString()}
-          </p>
-          <p className={`text-xs ${payload[1]?.value >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-            P&L: ${payload[1]?.value?.toLocaleString()}
-          </p>
-        </div>
-      );
-    }
-    return null;
-  };
+
 
   return (
     <div className="h-[250px] w-full">
