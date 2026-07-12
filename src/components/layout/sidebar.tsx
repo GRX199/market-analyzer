@@ -16,6 +16,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Wallet,
+  FlaskConical,
+  CalendarDays,
+  ScanSearch,
+  BookOpen,
+  Columns3,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useUserStore } from '@/stores/user-store';
@@ -23,9 +28,14 @@ import { useUserStore } from '@/stores/user-store';
 export const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/market', label: 'Market Explorer', icon: Globe },
+  { href: '/screener', label: 'Screener', icon: ScanSearch },
   { href: '/watchlist', label: 'Watchlist', icon: Star },
   { href: '/portfolio', label: 'Portfolio', icon: Wallet },
   { href: '/signals', label: 'Signal History', icon: History },
+  { href: '/backtest', label: 'Backtesting', icon: FlaskConical },
+  { href: '/compare', label: 'Multi-Chart', icon: Columns3 },
+  { href: '/journal', label: 'Journal', icon: BookOpen },
+  { href: '/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/alerts', label: 'Alerts', icon: Bell },
   { href: '/news', label: 'News & Sentiment', icon: Newspaper },
   { href: '/settings', label: 'Settings', icon: Settings },

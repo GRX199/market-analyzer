@@ -50,3 +50,16 @@ export interface UserNote {
   createdAt: string;
   updatedAt: string;
 }
+
+export type Emotion = 'confident' | 'fearful' | 'greedy' | 'neutral' | 'frustrated';
+
+export interface JournalEntry {
+  id: string;
+  title: string;
+  content: string;
+  symbol?: string; // Optional related symbol
+  emotion: Emotion;
+  tradeId?: string; // Optional related trade from portfolio
+  createdAt: string;
+  updatedAt: string;
+}

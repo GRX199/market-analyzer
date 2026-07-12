@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useUserStore } from '@/stores/user-store';
 import { MarketSelector } from '@/components/market/market-selector';
-import { Moon, Sun, Monitor, Bell, Shield, User, Save, CheckCircle } from 'lucide-react';
+import { Moon, Sun, Monitor, Bell, Shield, User, Save, CheckCircle, Download, Upload, Database } from 'lucide-react';
 import { DisclaimerBanner } from '@/components/common/disclaimer-banner';
 
 export default function SettingsPage() {
@@ -42,6 +42,44 @@ export default function SettingsPage() {
   const initials = displayName
     ? displayName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
     : 'U';
+
+  const handleExportData = () => {
+    const data = localStorage.getItem('user-store');
+    if (!data) return;
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `market-analyzer-backup-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const content = event.target?.result as string;
+        const parsed = JSON.parse(content);
+        if (parsed && parsed.state) {
+          const { importData } = useUserStore.getState();
+          importData(parsed.state);
+          alert('Data imported successfully! The page will now reload.');
+          window.location.reload();
+        } else {
+          alert('Invalid backup file format.');
+        }
+      } catch (err) {
+        alert('Failed to parse backup file.');
+      }
+    };
+    reader.readAsText(file);
+  };
 
   return (
     <DashboardLayout>
@@ -169,6 +207,45 @@ export default function SettingsPage() {
                   <p className="text-sm text-muted-foreground">Receive a daily summary of market conditions.</p>
                 </div>
                 <Switch />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Data Management */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><Database className="h-5 w-5" /> Data Management</CardTitle>
+              <CardDescription>Export or import your locally stored data (portfolio, journal, watchlist).</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">Export Backup</p>
+                  <p className="text-sm text-muted-foreground">Download a JSON file containing all your data.</p>
+                </div>
+                <Button onClick={handleExportData} variant="outline" className="gap-2">
+                  <Download className="w-4 h-4" /> Export JSON
+                </Button>
+              </div>
+              <div className="flex items-center justify-between border-t pt-4">
+                <div>
+                  <p className="font-medium">Import Backup</p>
+                  <p className="text-sm text-muted-foreground text-red-500/80">Warning: This will overwrite your current data.</p>
+                </div>
+                <div>
+                  <input
+                    type="file"
+                    id="import-file"
+                    accept=".json"
+                    className="hidden"
+                    onChange={handleImportData}
+                  />
+                  <Label htmlFor="import-file" className="cursor-pointer">
+                    <div className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 gap-2">
+                      <Upload className="w-4 h-4" /> Import JSON
+                    </div>
+                  </Label>
+                </div>
               </div>
             </CardContent>
           </Card>

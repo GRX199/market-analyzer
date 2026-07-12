@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { UserProfile, WatchlistItem, UserAlert } from '@/types/user';
+import { UserProfile, WatchlistItem, UserAlert, JournalEntry } from '@/types/user';
 import { PortfolioPosition, PortfolioSnapshot } from '@/types/portfolio';
 
 interface UserState {
@@ -14,6 +14,7 @@ interface UserState {
   telegramChatId: string | null;
   positions: PortfolioPosition[];
   portfolioHistory: PortfolioSnapshot[];
+  journals: JournalEntry[];
   setUser: (user: UserProfile | null) => void;
   setAuthenticated: (isAuth: boolean) => void;
   acceptDisclaimer: () => void;
@@ -33,6 +34,9 @@ interface UserState {
   removePosition: (id: string) => void;
   updatePositionPrice: (symbol: string, price: number) => void;
   snapshotPortfolio: (totalValue: number, totalPnl: number, totalPnlPercent: number) => void;
+  addJournal: (journal: JournalEntry) => void;
+  removeJournal: (id: string) => void;
+  importData: (data: Partial<UserState>) => void;
 }
 
 export const useUserStore = create<UserState>()(
@@ -48,6 +52,7 @@ export const useUserStore = create<UserState>()(
       telegramChatId: null,
       positions: [],
       portfolioHistory: [],
+      journals: [],
       setUser: (user) => set({ user, isAuthenticated: !!user }),
       setAuthenticated: (isAuth) => set({ isAuthenticated: isAuth }),
       acceptDisclaimer: () => set({ disclaimerAccepted: true }),
@@ -124,6 +129,9 @@ export const useUserStore = create<UserState>()(
         }
         return { portfolioHistory: [...state.portfolioHistory, snapshot].slice(-90) }; // Keep 90 days max
       }),
+      addJournal: (journal) => set((state) => ({ journals: [journal, ...state.journals] })),
+      removeJournal: (id) => set((state) => ({ journals: state.journals.filter(j => j.id !== id) })),
+      importData: (data) => set((state) => ({ ...state, ...data })),
     }),
     {
       name: 'user-store',
