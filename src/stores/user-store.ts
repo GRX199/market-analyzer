@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { UserProfile, WatchlistItem, UserAlert } from '@/types/user';
+import { PortfolioPosition, PortfolioSnapshot } from '@/types/portfolio';
 
 interface UserState {
   user: UserProfile | null;
@@ -11,6 +12,8 @@ interface UserState {
   watchlist: WatchlistItem[];
   alerts: UserAlert[];
   telegramChatId: string | null;
+  positions: PortfolioPosition[];
+  portfolioHistory: PortfolioSnapshot[];
   setUser: (user: UserProfile | null) => void;
   setAuthenticated: (isAuth: boolean) => void;
   acceptDisclaimer: () => void;
@@ -25,6 +28,11 @@ interface UserState {
   removeAlert: (id: string) => void;
   toggleAlert: (id: string) => void;
   markAlertTriggered: (id: string) => void;
+  addPosition: (position: PortfolioPosition) => void;
+  closePosition: (id: string, closedPrice: number) => void;
+  removePosition: (id: string) => void;
+  updatePositionPrice: (symbol: string, price: number) => void;
+  snapshotPortfolio: (totalValue: number, totalPnl: number, totalPnlPercent: number) => void;
 }
 
 export const useUserStore = create<UserState>()(
@@ -38,6 +46,8 @@ export const useUserStore = create<UserState>()(
       watchlist: [],
       alerts: [],
       telegramChatId: null,
+      positions: [],
+      portfolioHistory: [],
       setUser: (user) => set({ user, isAuthenticated: !!user }),
       setAuthenticated: (isAuth) => set({ isAuthenticated: isAuth }),
       acceptDisclaimer: () => set({ disclaimerAccepted: true }),
@@ -72,12 +82,48 @@ export const useUserStore = create<UserState>()(
       markAlertTriggered: (id) => set((state) => ({
         alerts: state.alerts.map(a => a.id === id ? { 
           ...a, 
-          isActive: false, // Turn off alert after triggered to prevent spam
+          isActive: false,
           isTriggered: true, 
           triggeredAt: new Date().toISOString(),
           triggerCount: a.triggerCount + 1
         } : a),
       })),
+      addPosition: (position) => set((state) => ({
+        positions: [...state.positions, position],
+      })),
+      closePosition: (id, closedPrice) => set((state) => ({
+        positions: state.positions.map(p => p.id === id ? {
+          ...p,
+          isOpen: false,
+          closedPrice,
+          closedAt: new Date().toISOString(),
+        } : p),
+      })),
+      removePosition: (id) => set((state) => ({
+        positions: state.positions.filter(p => p.id !== id),
+      })),
+      updatePositionPrice: (symbol, price) => set((state) => ({
+        positions: state.positions.map(p => p.symbol === symbol ? { ...p, currentPrice: price } : p),
+      })),
+      snapshotPortfolio: (totalValue, totalPnl, totalPnlPercent) => set((state) => {
+        const today = new Date().toISOString().split('T')[0];
+        const openCount = state.positions.filter(p => p.isOpen).length;
+        // Replace today's snapshot if it exists, otherwise add new
+        const existing = state.portfolioHistory.findIndex(s => s.date === today);
+        const snapshot: PortfolioSnapshot = {
+          date: today,
+          totalValue,
+          totalPnl,
+          totalPnlPercent,
+          positionCount: openCount,
+        };
+        if (existing >= 0) {
+          const updated = [...state.portfolioHistory];
+          updated[existing] = snapshot;
+          return { portfolioHistory: updated };
+        }
+        return { portfolioHistory: [...state.portfolioHistory, snapshot].slice(-90) }; // Keep 90 days max
+      }),
     }),
     {
       name: 'user-store',

@@ -15,6 +15,7 @@ import {
   TrendingUp,
   ChevronLeft,
   ChevronRight,
+  Wallet,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useUserStore } from '@/stores/user-store';
@@ -23,6 +24,7 @@ export const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/market', label: 'Market Explorer', icon: Globe },
   { href: '/watchlist', label: 'Watchlist', icon: Star },
+  { href: '/portfolio', label: 'Portfolio', icon: Wallet },
   { href: '/signals', label: 'Signal History', icon: History },
   { href: '/alerts', label: 'Alerts', icon: Bell },
   { href: '/news', label: 'News & Sentiment', icon: Newspaper },
