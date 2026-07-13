@@ -78,16 +78,16 @@ export default function ScalpingDashboard() {
 
   // Alert Logic (Overkill Scalping Engine)
   useEffect(() => {
-    if (recentTrades.length < 20 || !isAudioEnabled) return;
+    if (recentTrades.length < 20) return;
 
     // Extreme Buy Pressure > 85%
     if (buyPressurePct > 85 && flashSignal !== 'buy') {
       setFlashSignal('buy');
-      playAlertSound('buy');
+      if (isAudioEnabled) playAlertSound('buy');
       setTimeout(() => setFlashSignal(null), 1000);
     } else if (buyPressurePct < 15 && flashSignal !== 'sell') {
       setFlashSignal('sell');
-      playAlertSound('sell');
+      if (isAudioEnabled) playAlertSound('sell');
       setTimeout(() => setFlashSignal(null), 1000);
     }
   }, [buyPressurePct, isAudioEnabled, recentTrades.length, flashSignal]);
