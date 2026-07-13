@@ -5,9 +5,13 @@ import { useUserStore } from '@/stores/user-store';
 import { useRealtimeStore } from '@/stores/realtime-store';
 
 export function AlertWatcher() {
-  const { alerts, markAlertTriggered, telegramChatId } = useUserStore();
+  const { alerts, markAlertTriggered, telegramChatId, loadFromSupabase } = useUserStore();
   const { prices } = useRealtimeStore();
   const checkingRef = useRef(false);
+
+  useEffect(() => {
+    loadFromSupabase();
+  }, [loadFromSupabase]);
 
   useEffect(() => {
     if (checkingRef.current) return;
