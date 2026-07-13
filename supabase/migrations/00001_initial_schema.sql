@@ -1,6 +1,6 @@
--- Create users table
+-- Create users table (maps to Supabase Auth users)
 CREATE TABLE public.users (
-    id TEXT PRIMARY KEY,
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     telegram_chat_id TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
@@ -9,7 +9,7 @@ CREATE TABLE public.users (
 -- Create alerts table
 CREATE TABLE public.alerts (
     id TEXT PRIMARY KEY,
-    user_id TEXT REFERENCES public.users(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
     symbol TEXT NOT NULL,
     market_type TEXT NOT NULL,
     alert_type TEXT NOT NULL,
@@ -24,7 +24,7 @@ CREATE TABLE public.alerts (
 -- Create journals table
 CREATE TABLE public.journals (
     id TEXT PRIMARY KEY,
-    user_id TEXT REFERENCES public.users(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
     content TEXT NOT NULL,
     symbol TEXT,
@@ -36,7 +36,7 @@ CREATE TABLE public.journals (
 -- Create portfolios table
 CREATE TABLE public.portfolios (
     id TEXT PRIMARY KEY,
-    user_id TEXT REFERENCES public.users(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
     symbol TEXT NOT NULL,
     market_type TEXT NOT NULL,
     entry_price NUMERIC NOT NULL,
@@ -45,15 +45,52 @@ CREATE TABLE public.portfolios (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Insert the default admin user
-INSERT INTO public.users (id, telegram_chat_id) 
-VALUES ('admin_user', null)
-ON CONFLICT (id) DO NOTHING;
+-- Enable RLS
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.alerts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.journals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.portfolios ENABLE ROW LEVEL SECURITY;
 
--- Turn off RLS (Row Level Security) because this is a single user personal app
--- And we will access it via Anon Key from the browser safely because the URL isn't public, 
--- or we can just leave RLS disabled.
-ALTER TABLE public.users DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.alerts DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.journals DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.portfolios DISABLE ROW LEVEL SECURITY;
+-- Create RLS Policies
+-- Users can only access their own profile
+CREATE POLICY "Users can view own profile" 
+ON public.users FOR SELECT 
+USING (auth.uid() = id);
+
+CREATE POLICY "Users can update own profile" 
+ON public.users FOR UPDATE 
+USING (auth.uid() = id);
+
+CREATE POLICY "Users can insert own profile" 
+ON public.users FOR INSERT 
+WITH CHECK (auth.uid() = id);
+
+-- Alerts Policies
+CREATE POLICY "Users can CRUD own alerts" 
+ON public.alerts FOR ALL 
+USING (auth.uid() = user_id);
+
+-- Journals Policies
+CREATE POLICY "Users can CRUD own journals" 
+ON public.journals FOR ALL 
+USING (auth.uid() = user_id);
+
+-- Portfolios Policies
+CREATE POLICY "Users can CRUD own portfolios" 
+ON public.portfolios FOR ALL 
+USING (auth.uid() = user_id);
+
+-- Function to automatically create a user profile when a new auth user signs up
+CREATE OR REPLACE FUNCTION public.handle_new_user() 
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.users (id)
+  VALUES (new.id);
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Trigger to call the function
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();

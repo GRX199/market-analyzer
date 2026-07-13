@@ -11,22 +11,20 @@ export async function GET(request: Request) {
 
     console.log('Running Cron Job: Checking Alerts...');
 
-    // 1. Fetch active alerts and the admin user
-    const [alertsRes, userRes] = await Promise.all([
-      supabaseAdmin.from('alerts').select('*').eq('is_active', true).eq('is_triggered', false),
-      supabaseAdmin.from('users').select('telegram_chat_id').eq('id', 'admin_user').single()
-    ]);
+    // 1. Fetch active alerts with their user's telegram_chat_id
+    const { data: activeAlerts, error } = await supabaseAdmin
+      .from('alerts')
+      .select('*, users (telegram_chat_id)')
+      .eq('is_active', true)
+      .eq('is_triggered', false);
 
-    if (!alertsRes.data || alertsRes.data.length === 0) {
+    if (error) {
+      throw error;
+    }
+
+    if (!activeAlerts || activeAlerts.length === 0) {
       return NextResponse.json({ success: true, message: 'No active alerts to check.' });
     }
-
-    const telegramChatId = userRes.data?.telegram_chat_id;
-    if (!telegramChatId) {
-      return NextResponse.json({ success: true, message: 'No Telegram Chat ID configured. Skipping.' });
-    }
-
-    const activeAlerts = alertsRes.data;
     
     // Group symbols by market type
     const cryptoSymbols = activeAlerts.filter(a => a.market_type === 'crypto').map(a => a.symbol);
@@ -100,7 +98,9 @@ export async function GET(request: Request) {
         const message = `🚨 *BACKGROUND ALERT* 🚨\n\n*Symbol:* ${alert.symbol}\n*Condition:* ${alert.alert_type === 'price_above' ? 'Above' : 'Below'} ${alert.target_value}\n*Current Price:* ${alert.currentPrice}\n\n_Market Analyzer Web_`;
         
         const botToken = process.env.TELEGRAM_BOT_TOKEN;
-        if (botToken) {
+        const telegramChatId = alert.users?.telegram_chat_id;
+
+        if (botToken && telegramChatId) {
            await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -109,7 +109,7 @@ export async function GET(request: Request) {
         }
 
         // Update in Supabase
-        await supabaseAdmin.from('alerts').update({ 
+        await supabaseAdmin.from('alerts').update({  
           is_active: false, 
           is_triggered: true, 
           triggered_at: new Date().toISOString(),

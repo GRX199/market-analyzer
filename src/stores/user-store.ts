@@ -4,8 +4,6 @@ import { UserProfile, WatchlistItem, UserAlert, JournalEntry } from '@/types/use
 import { PortfolioPosition, PortfolioSnapshot } from '@/types/portfolio';
 import { supabase } from '@/lib/supabase/client';
 
-const ADMIN_USER_ID = 'admin_user';
-
 interface UserState {
   user: UserProfile | null;
   isAuthenticated: boolean;
@@ -46,6 +44,7 @@ interface UserState {
   syncAlertToSupabase: (alert: UserAlert | { id: string, deleted: boolean }) => Promise<void>;
   syncJournalToSupabase: (journal: JournalEntry | { id: string, deleted: boolean }) => Promise<void>;
   syncPortfolioToSupabase: (position: PortfolioPosition | { id: string, deleted: boolean }) => Promise<void>;
+  logout: () => Promise<void>;
 }
 
 export const useUserStore = create<UserState>()(
@@ -65,9 +64,12 @@ export const useUserStore = create<UserState>()(
       setUser: (user) => set({ user, isAuthenticated: !!user }),
       setAuthenticated: (isAuth) => set({ isAuthenticated: isAuth }),
       acceptDisclaimer: () => set({ disclaimerAccepted: true }),
-      setTelegramChatId: (id) => {
+      setTelegramChatId: async (id) => {
         set({ telegramChatId: id });
-        supabase.from('users').upsert({ id: ADMIN_USER_ID, telegram_chat_id: id }).then();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          supabase.from('users').upsert({ id: user.id, telegram_chat_id: id }).then();
+        }
       },
       toggleTheme: () => set((state) => {
         const newTheme = state.theme === 'dark' ? 'light' : 'dark';
@@ -178,11 +180,16 @@ export const useUserStore = create<UserState>()(
       // Supabase Sync Implementations
       loadFromSupabase: async () => {
         try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) return; // Not logged in
+
+          const userId = user.id;
+
           const [alertsRes, journalsRes, portfoliosRes, userRes] = await Promise.all([
-            supabase.from('alerts').select('*').eq('user_id', ADMIN_USER_ID),
-            supabase.from('journals').select('*').eq('user_id', ADMIN_USER_ID).order('created_at', { ascending: false }),
-            supabase.from('portfolios').select('*').eq('user_id', ADMIN_USER_ID),
-            supabase.from('users').select('*').eq('id', ADMIN_USER_ID).single()
+            supabase.from('alerts').select('*').eq('user_id', userId),
+            supabase.from('journals').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
+            supabase.from('portfolios').select('*').eq('user_id', userId),
+            supabase.from('users').select('*').eq('id', userId).single()
           ]);
 
           if (userRes.data) {
@@ -240,12 +247,16 @@ export const useUserStore = create<UserState>()(
 
       syncAlertToSupabase: async (alert) => {
         try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) return;
+          const userId = user.id;
+
           if ('deleted' in alert) {
-            await supabase.from('alerts').delete().eq('id', alert.id).eq('user_id', ADMIN_USER_ID);
+            await supabase.from('alerts').delete().eq('id', alert.id).eq('user_id', userId);
           } else {
             const data = {
               id: alert.id,
-              user_id: ADMIN_USER_ID,
+              user_id: userId,
               symbol: alert.symbol,
               market_type: alert.marketType,
               alert_type: alert.alertType,
@@ -263,12 +274,16 @@ export const useUserStore = create<UserState>()(
 
       syncJournalToSupabase: async (journal) => {
         try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) return;
+          const userId = user.id;
+
           if ('deleted' in journal) {
-            await supabase.from('journals').delete().eq('id', journal.id).eq('user_id', ADMIN_USER_ID);
+            await supabase.from('journals').delete().eq('id', journal.id).eq('user_id', userId);
           } else {
             const data = {
               id: journal.id,
-              user_id: ADMIN_USER_ID,
+              user_id: userId,
               title: journal.title,
               content: journal.content,
               symbol: journal.symbol || null,
@@ -283,12 +298,16 @@ export const useUserStore = create<UserState>()(
 
       syncPortfolioToSupabase: async (position) => {
         try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) return;
+          const userId = user.id;
+
           if ('deleted' in position) {
-            await supabase.from('portfolios').delete().eq('id', position.id).eq('user_id', ADMIN_USER_ID);
+            await supabase.from('portfolios').delete().eq('id', position.id).eq('user_id', userId);
           } else {
             const data = {
               id: position.id,
-              user_id: ADMIN_USER_ID,
+              user_id: userId,
               symbol: position.symbol,
               market_type: position.marketType,
               entry_price: position.entryPrice,
@@ -299,6 +318,19 @@ export const useUserStore = create<UserState>()(
             await supabase.from('portfolios').upsert(data);
           }
         } catch (e) { console.error("Sync portfolio failed", e); }
+      },
+      
+      logout: async () => {
+        await supabase.auth.signOut();
+        set({
+          user: null,
+          isAuthenticated: false,
+          watchlist: [],
+          alerts: [],
+          positions: [],
+          journals: [],
+          telegramChatId: null,
+        });
       },
     }),
     {
