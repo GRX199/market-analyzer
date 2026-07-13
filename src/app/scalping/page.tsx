@@ -5,8 +5,10 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { useBinanceWebSocket } from '@/hooks/useBinanceWebSocket';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { Activity, Zap, Volume2, VolumeX, Flame } from 'lucide-react';
+import { Activity, Zap, Volume2, VolumeX, Flame, BookOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { ALL_SYMBOLS } from '@/lib/constants';
@@ -133,6 +135,61 @@ export default function ScalpingDashboard() {
               {isAudioEnabled ? <Volume2 className="h-4 w-4 mr-2" /> : <VolumeX className="h-4 w-4 mr-2" />}
               {isAudioEnabled ? "Audio Alerts ON" : "Audio Alerts OFF"}
             </Button>
+            
+            <Dialog>
+              {/* @ts-expect-error asChild is used by Shadcn but Base UI might use render */}
+              <DialogTrigger asChild>
+                <Button variant="outline" className="gap-2">
+                  <BookOpen className="h-4 w-4" /> Guide
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Ultimate Scalping Guide</DialogTitle>
+                </DialogHeader>
+                <ScrollArea className="h-[60vh] mt-4 pr-4">
+                  <div className="space-y-6 text-sm">
+                    <div className="bg-destructive/10 text-destructive p-4 rounded-lg border border-destructive/20">
+                      <strong>⚠️ Risiko Ekstrem:</strong> Scalping memiliki risiko yang sangat tinggi karena Anda bertransaksi dengan jumlah lot/leverage besar untuk mengejar pergerakan 0.1% hingga 1%. Pastikan Anda menggunakan Stop Loss yang ketat.
+                    </div>
+
+                    <div>
+                      <h3 className="text-lg font-bold mb-2">1. Real-Time Order Flow (Pressure Gauge)</h3>
+                      <p className="text-muted-foreground mb-2">Menghitung 50 transaksi real-time terakhir secara instan.</p>
+                      <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
+                        <li><strong className="text-green-500">Buy Pressure:</strong> Persentase transaksi yang dibeli secara agresif.</li>
+                        <li><strong className="text-red-500">Sell Pressure:</strong> Persentase transaksi yang dijual secara agresif.</li>
+                      </ul>
+                      <div className="bg-primary/10 p-3 rounded mt-2 border border-primary/20">
+                        💡 <strong>TIP:</strong> Jika Buy Pressure melonjak di atas 80%, ini menandakan ada Whale yang sedang masuk. Momen terbaik untuk menumpang naik.
+                      </div>
+                    </div>
+
+                    <div>
+                      <h3 className="text-lg font-bold mb-2">2. Order Book (Depth 5)</h3>
+                      <p className="text-muted-foreground mb-2">Buku Antrean menunjukkan tembok pertahanan harga.</p>
+                      <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
+                        <li><strong className="text-green-500">Bid (Bawah):</strong> Mengantre ingin membeli di harga murah.</li>
+                        <li><strong className="text-red-500">Ask (Atas):</strong> Mengantre ingin menjual di harga mahal.</li>
+                      </ul>
+                      <p className="mt-2 text-muted-foreground">Jika ada jumlah (Amount) raksasa di Ask, itu adalah Resistance Buatan. Jika tertembus, harga biasanya meledak naik (Breakout Scalping).</p>
+                    </div>
+
+                    <div>
+                      <h3 className="text-lg font-bold mb-2">3. Strategi: Momentum Breakout (Audio)</h3>
+                      <ol className="list-decimal pl-5 space-y-1 text-muted-foreground">
+                        <li>Nyalakan <strong>Audio Alerts ON</strong>.</li>
+                        <li>Tunggu sampai alarm berbunyi keras dan layar berkedip Hijau.</li>
+                        <li>Artinya Buy Pressure menembus 85%. Langsung eksekusi Buy/Long.</li>
+                        <li>Take Profit saat naik 0.3% - 0.5%.</li>
+                        <li>Stop Loss otomatis di 0.3% di bawah harga beli.</li>
+                      </ol>
+                    </div>
+
+                  </div>
+                </ScrollArea>
+              </DialogContent>
+            </Dialog>
           </div>
         </div>
 
