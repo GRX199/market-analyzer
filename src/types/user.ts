@@ -33,6 +33,7 @@ export interface UserAlert {
   alertType: 'price_above' | 'price_below' | 'score_above' | 'score_below' | 'signal_change' | 'trend_change';
   targetValue: number | null;
   targetSignal: string | null;
+  timeframe: string | null;
   isActive: boolean;
   isTriggered: boolean;
   triggeredAt: string | null;

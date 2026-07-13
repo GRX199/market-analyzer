@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/server';
+import { getOHLCV, getAssetPrice } from '@/services/market-data';
+import { calculateTechnicalScore } from '@/lib/analysis/technical';
+import { calculateFinalScore } from '@/lib/analysis/scoring';
+import { FundamentalAnalysis, SentimentAnalysis } from '@/types/analysis';
 
 export async function GET(request: Request) {
   try {
@@ -27,41 +31,23 @@ export async function GET(request: Request) {
     }
     
     // Group symbols by market type
-    const cryptoSymbols = activeAlerts.filter(a => a.market_type === 'crypto').map(a => a.symbol);
-    const stockSymbols = activeAlerts.filter(a => a.market_type === 'stocks').map(a => a.symbol);
-    const forexSymbols = activeAlerts.filter(a => a.market_type === 'forex').map(a => a.symbol);
-
     const prices: Record<string, number> = {};
 
-    // Fetch Crypto Prices from Binance (miniTicker)
-    if (cryptoSymbols.length > 0) {
-      try {
-        const binanceRes = await fetch('https://api.binance.com/api/v3/ticker/price');
-        const binanceData = await binanceRes.json();
-        binanceData.forEach((item: any) => {
-          prices[item.symbol] = parseFloat(item.price);
-        });
-      } catch (err) {
-        console.error('Failed to fetch Binance prices for cron', err);
-      }
-    }
+    // Get unique symbols for price-based alerts
+    const priceAlertSymbols = activeAlerts
+      .filter(a => a.alert_type === 'price_above' || a.alert_type === 'price_below')
+      .map(a => a.symbol);
 
-    // Fetch Stocks & Forex Prices from Finnhub if API key is present
-    const finnhubKey = process.env.NEXT_PUBLIC_FINNHUB_API_KEY;
-    if (finnhubKey && (stockSymbols.length > 0 || forexSymbols.length > 0)) {
-      const symbolsToFetch = [...stockSymbols, ...forexSymbols];
-      // Note: Finnhub REST API requires individual calls for quotes, or bulk endpoints if paid.
-      // We will do parallel individual calls for free tier (be careful of rate limits: 60/min)
-      await Promise.all(symbolsToFetch.map(async (sym) => {
+    // Fetch prices using the new Yahoo API service wrapper
+    if (priceAlertSymbols.length > 0) {
+      await Promise.all(priceAlertSymbols.map(async (sym) => {
         try {
-          const formattedSym = sym.includes('/') ? `OANDA:${sym.replace('/', '_')}` : sym;
-          const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${formattedSym}&token=${finnhubKey}`);
-          const data = await res.json();
-          if (data && data.c) {
-            prices[sym] = parseFloat(data.c);
+          const assetData = await getAssetPrice(sym);
+          if (assetData) {
+            prices[sym] = assetData.price;
           }
         } catch (err) {
-          console.error(`Failed to fetch Finnhub price for ${sym}`, err);
+          console.error(`Failed to fetch price for ${sym}`, err);
         }
       }));
     }
@@ -70,24 +56,48 @@ export async function GET(request: Request) {
 
     // Evaluate Alerts
     for (const alert of activeAlerts) {
-      const streamSymbol = alert.market_type === 'crypto' 
-        ? alert.symbol.replace('/', '').toUpperCase() 
-        : alert.symbol;
-        
-      const currentPrice = prices[streamSymbol];
-      
-      if (currentPrice && alert.target_value !== null) {
-        let isTriggered = false;
-        
-        if (alert.alert_type === 'price_above' && currentPrice >= alert.target_value) {
-          isTriggered = true;
-        } else if (alert.alert_type === 'price_below' && currentPrice <= alert.target_value) {
-          isTriggered = true;
-        }
+      let isTriggered = false;
+      let triggerMessage = '';
 
-        if (isTriggered) {
-          triggeredAlerts.push({ ...alert, currentPrice });
+      if (alert.alert_type === 'signal_change' && alert.timeframe && alert.target_signal) {
+        // --- SIGNAL ALERT LOGIC ---
+        try {
+          const ohlcv = await getOHLCV(alert.symbol, alert.timeframe);
+          if (ohlcv.length > 0) {
+            const currentPrice = ohlcv[ohlcv.length - 1].close;
+            const technical = calculateTechnicalScore(ohlcv);
+            
+            // Mock fundamental and sentiment for cron
+            const mockFund: FundamentalAnalysis = { marketType: alert.market_type as any, data: {} as any, score: 50, reasons: [] };
+            const mockSent: SentimentAnalysis = { overallSentiment: 'neutral', newsScore: 50, socialScore: 50, score: 50, reasons: [] };
+            
+            const final = calculateFinalScore(alert.symbol, alert.market_type as any, currentPrice, technical, mockFund, mockSent);
+            
+            if (final.signal === alert.target_signal) {
+              isTriggered = true;
+              triggerMessage = `Sinyal ${alert.symbol} di timeframe ${alert.timeframe} telah berubah menjadi *${final.signal.toUpperCase().replace('_', ' ')}*!`;
+            }
+          }
+        } catch (err) {
+          console.error(`Failed to evaluate signal alert for ${alert.symbol}`, err);
         }
+      } else {
+        // --- PRICE ALERT LOGIC ---
+        const currentPrice = prices[alert.symbol];
+        
+        if (currentPrice && alert.target_value !== null) {
+          if (alert.alert_type === 'price_above' && currentPrice >= alert.target_value) {
+            isTriggered = true;
+            triggerMessage = `Harga ${alert.symbol} telah NAIK menembus batas *${alert.target_value}* (Harga Saat Ini: ${currentPrice})`;
+          } else if (alert.alert_type === 'price_below' && currentPrice <= alert.target_value) {
+            isTriggered = true;
+            triggerMessage = `Harga ${alert.symbol} telah TURUN menembus batas *${alert.target_value}* (Harga Saat Ini: ${currentPrice})`;
+          }
+        }
+      }
+
+      if (isTriggered) {
+        triggeredAlerts.push({ ...alert, triggerMessage });
       }
     }
 
@@ -95,7 +105,7 @@ export async function GET(request: Request) {
     for (const alert of triggeredAlerts) {
       try {
         // Send to Telegram
-        const message = `🚨 *BACKGROUND ALERT* 🚨\n\n*Symbol:* ${alert.symbol}\n*Condition:* ${alert.alert_type === 'price_above' ? 'Above' : 'Below'} ${alert.target_value}\n*Current Price:* ${alert.currentPrice}\n\n_Market Analyzer Web_`;
+        const message = `🚨 *MARKET ALERT* 🚨\n\n${alert.triggerMessage}\n\n_Market Analyzer Web_`;
         
         const botToken = process.env.TELEGRAM_BOT_TOKEN;
         const telegramChatId = alert.users?.telegram_chat_id;

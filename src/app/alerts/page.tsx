@@ -43,6 +43,8 @@ export default function AlertsPage() {
     marketType: 'crypto' as 'crypto' | 'stocks' | 'forex',
     alertType: 'price_above' as 'price_above' | 'price_below' | 'signal_change',
     targetValue: '',
+    targetSignal: 'strong_buy',
+    timeframe: '1H',
   });
 
   const handleCreateAlert = () => {
@@ -54,8 +56,9 @@ export default function AlertsPage() {
       symbol: newAlert.symbol.toUpperCase(),
       marketType: newAlert.marketType,
       alertType: newAlert.alertType,
-      targetValue: parseFloat(newAlert.targetValue),
-      targetSignal: null,
+      targetValue: newAlert.alertType === 'signal_change' ? null : parseFloat(newAlert.targetValue),
+      targetSignal: newAlert.alertType === 'signal_change' ? newAlert.targetSignal : null,
+      timeframe: newAlert.alertType === 'signal_change' ? newAlert.timeframe : null,
       isActive: true,
       isTriggered: false,
       triggeredAt: null,
@@ -111,27 +114,55 @@ export default function AlertsPage() {
               <div className="space-y-2">
                 <label className="text-sm font-medium">Condition</label>
                 <Select value={newAlert.alertType} onValueChange={(v: any) => setNewAlert({...newAlert, alertType: v})}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select condition" />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Select condition" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="price_above">Price goes above</SelectItem>
                     <SelectItem value="price_below">Price goes below</SelectItem>
+                    <SelectItem value="signal_change">Signal changes to</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Target Price</label>
-                <Input 
-                  type="number" 
-                  placeholder="e.g. 60000" 
-                  value={newAlert.targetValue} 
-                  onChange={e => setNewAlert({...newAlert, targetValue: e.target.value})}
-                />
-              </div>
-              <Button className="w-full mt-4" onClick={handleCreateAlert}>
-                Save Alert
-              </Button>
+
+              {newAlert.alertType === 'signal_change' ? (
+                <>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Timeframe</label>
+                    <Select value={newAlert.timeframe} onValueChange={(v: any) => setNewAlert({...newAlert, timeframe: v})}>
+                      <SelectTrigger><SelectValue placeholder="Select timeframe" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="15m">15 Minutes</SelectItem>
+                        <SelectItem value="1H">1 Hour</SelectItem>
+                        <SelectItem value="4H">4 Hours</SelectItem>
+                        <SelectItem value="1D">1 Day</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Target Signal</label>
+                    <Select value={newAlert.targetSignal} onValueChange={(v: any) => setNewAlert({...newAlert, targetSignal: v})}>
+                      <SelectTrigger><SelectValue placeholder="Select target signal" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="strong_buy">Strong Buy</SelectItem>
+                        <SelectItem value="buy">Buy</SelectItem>
+                        <SelectItem value="sell">Sell</SelectItem>
+                        <SelectItem value="strong_sell">Strong Sell</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Target Price</label>
+                  <Input 
+                    type="number"
+                    placeholder="e.g. 60000" 
+                    value={newAlert.targetValue} 
+                    onChange={e => setNewAlert({...newAlert, targetValue: e.target.value})}
+                  />
+                </div>
+              )}
+              
+              <Button className="w-full" onClick={handleCreateAlert}>Save Alert</Button>
             </div>
           </DialogContent>
         </Dialog>
