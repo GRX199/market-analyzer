@@ -21,6 +21,7 @@ import {
   ScanSearch,
   BookOpen,
   Columns3,
+  Flame,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useUserStore } from '@/stores/user-store';
@@ -34,6 +35,7 @@ export const navItems = [
   { href: '/signals', label: 'Signal History', icon: History },
   { href: '/backtest', label: 'Backtesting', icon: FlaskConical },
   { href: '/compare', label: 'Multi-Chart', icon: Columns3 },
+  { href: '/scalping', label: 'Hyper Scalping', icon: Flame },
   { href: '/journal', label: 'Journal', icon: BookOpen },
   { href: '/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/alerts', label: 'Alerts', icon: Bell },
