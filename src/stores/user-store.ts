@@ -198,10 +198,13 @@ export const useUserStore = create<UserState>()(
             supabase.from('journals').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
             supabase.from('portfolios').select('*').eq('user_id', userId),
             supabase.from('watchlists').select('*').eq('user_id', userId).order('sort_order', { ascending: true }),
-            supabase.from('users').select('*').eq('id', userId).single()
+            supabase.from('users').select('*').eq('id', userId).maybeSingle()
           ]);
 
-          if (userRes.data) {
+          // Auto-heal missing profile
+          if (!userRes.data && !userRes.error) {
+            await supabase.from('users').upsert({ id: userId }).then();
+          } else if (userRes.data) {
             set({ telegramChatId: userRes.data.telegram_chat_id });
           }
 
