@@ -12,7 +12,11 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Send, BellRing, Info } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { ALL_SYMBOLS } from '@/lib/constants';
+import { Send, BellRing, Info, Check, ChevronsUpDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 export default function AlertsPage() {
   const { alerts, addAlert, removeAlert, toggleAlert, telegramChatId, setTelegramChatId } = useUserStore();
@@ -46,6 +50,7 @@ export default function AlertsPage() {
     targetSignal: 'strong_buy',
     timeframe: '1H',
   });
+  const [openSymbol, setOpenSymbol] = useState(false);
 
   const handleCreateAlert = () => {
     if (!newAlert.symbol || !newAlert.targetValue) return;
@@ -92,11 +97,50 @@ export default function AlertsPage() {
             <div className="space-y-4 py-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Asset Symbol</label>
-                <Input 
-                  placeholder="e.g. BTC/USDT" 
-                  value={newAlert.symbol} 
-                  onChange={e => setNewAlert({...newAlert, symbol: e.target.value})}
-                />
+                <Popover open={openSymbol} onOpenChange={setOpenSymbol}>
+                  {/* @ts-expect-error asChild is used by Shadcn but Base UI might use render */}
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={openSymbol}
+                      className="w-full justify-between font-normal"
+                    >
+                      {newAlert.symbol || "Select or type symbol..."}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[300px] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search asset (e.g., BTC/USDT)..." onValueChange={(val) => setNewAlert({...newAlert, symbol: val.toUpperCase()})}/>
+                      <CommandList>
+                        <CommandEmpty>
+                          Type custom symbol manually...
+                        </CommandEmpty>
+                        <CommandGroup>
+                          {ALL_SYMBOLS.map((asset) => (
+                            <CommandItem
+                              key={asset.symbol}
+                              value={asset.symbol}
+                              onSelect={(currentValue) => {
+                                setNewAlert({...newAlert, symbol: currentValue.toUpperCase(), marketType: asset.marketType as any});
+                                setOpenSymbol(false);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  newAlert.symbol.toUpperCase() === asset.symbol.toUpperCase() ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              {asset.symbol} <span className="ml-2 text-xs text-muted-foreground line-clamp-1">{asset.name}</span>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Market Type</label>
