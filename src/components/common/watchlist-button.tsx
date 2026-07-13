@@ -28,13 +28,15 @@ export function WatchlistButton({ symbol, name = symbol, marketType, className }
       toast.success(`${symbol} removed from watchlist`);
     } else {
       const newItem: WatchlistItem = {
-        id: crypto.randomUUID(),
-        userId: 'local',
-        symbol,
+        id: Date.now().toString(),
+        userId: 'local-user',
+        symbol: symbol,
+        marketType: marketType,
         displayName: name,
         notes: null,
-        sortOrder: 0,
-        marketType,
+        sortOrder: watchlist.length,
+        timeframe: '1H',
+        lastSignal: null,
         createdAt: new Date().toISOString(),
       };
       addToWatchlist(newItem);

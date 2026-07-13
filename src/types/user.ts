@@ -22,6 +22,8 @@ export interface WatchlistItem {
   displayName: string;
   notes: string | null;
   sortOrder: number;
+  timeframe: string;
+  lastSignal: string | null;
   createdAt: string;
 }
 

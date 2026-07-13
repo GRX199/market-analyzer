@@ -44,6 +44,7 @@ interface UserState {
   syncAlertToSupabase: (alert: UserAlert | { id: string, deleted: boolean }) => Promise<void>;
   syncJournalToSupabase: (journal: JournalEntry | { id: string, deleted: boolean }) => Promise<void>;
   syncPortfolioToSupabase: (position: PortfolioPosition | { id: string, deleted: boolean }) => Promise<void>;
+  syncWatchlistToSupabase: (item: WatchlistItem | { id: string, deleted: boolean }) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -85,13 +86,20 @@ export const useUserStore = create<UserState>()(
         set({ theme });
       },
       toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
-      addToWatchlist: (item) => set((state) => {
-        if (state.watchlist.some(w => w.symbol === item.symbol)) return state;
-        return { watchlist: [...state.watchlist, item] };
-      }),
-      removeFromWatchlist: (symbol) => set((state) => ({
-        watchlist: state.watchlist.filter(w => w.symbol !== symbol),
-      })),
+      addToWatchlist: (item) => {
+        set((state) => {
+          if (state.watchlist.some(w => w.symbol === item.symbol)) return state;
+          return { watchlist: [...state.watchlist, item] };
+        });
+        get().syncWatchlistToSupabase(item);
+      },
+      removeFromWatchlist: (symbol) => {
+        const item = get().watchlist.find(w => w.symbol === symbol);
+        if (item) {
+          set((state) => ({ watchlist: state.watchlist.filter(w => w.symbol !== symbol) }));
+          get().syncWatchlistToSupabase({ id: item.id, deleted: true });
+        }
+      },
       isInWatchlist: (symbol) => get().watchlist.some(w => w.symbol === symbol),
       addAlert: (alert) => {
         set((state) => ({ alerts: [...state.alerts, alert] }));
@@ -185,15 +193,32 @@ export const useUserStore = create<UserState>()(
 
           const userId = user.id;
 
-          const [alertsRes, journalsRes, portfoliosRes, userRes] = await Promise.all([
+          const [alertsRes, journalsRes, portfoliosRes, watchlistsRes, userRes] = await Promise.all([
             supabase.from('alerts').select('*').eq('user_id', userId),
             supabase.from('journals').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
             supabase.from('portfolios').select('*').eq('user_id', userId),
+            supabase.from('watchlists').select('*').eq('user_id', userId).order('sort_order', { ascending: true }),
             supabase.from('users').select('*').eq('id', userId).single()
           ]);
 
           if (userRes.data) {
             set({ telegramChatId: userRes.data.telegram_chat_id });
+          }
+
+          if (watchlistsRes.data) {
+            const mappedWatchlists: WatchlistItem[] = watchlistsRes.data.map((w: any) => ({
+              id: w.id,
+              userId: w.user_id,
+              symbol: w.symbol,
+              marketType: w.market_type as any,
+              displayName: w.display_name,
+              notes: w.notes,
+              sortOrder: w.sort_order,
+              timeframe: w.timeframe,
+              lastSignal: w.last_signal,
+              createdAt: w.created_at,
+            }));
+            set({ watchlist: mappedWatchlists });
           }
 
           if (alertsRes.data) {
@@ -321,6 +346,32 @@ export const useUserStore = create<UserState>()(
             await supabase.from('portfolios').upsert(data);
           }
         } catch (e) { console.error("Sync portfolio failed", e); }
+      },
+
+      syncWatchlistToSupabase: async (item) => {
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) return;
+          const userId = user.id;
+
+          if ('deleted' in item) {
+            await supabase.from('watchlists').delete().eq('id', item.id).eq('user_id', userId);
+          } else {
+            const data = {
+              id: item.id,
+              user_id: userId,
+              symbol: item.symbol,
+              market_type: item.marketType,
+              display_name: item.displayName,
+              notes: item.notes,
+              sort_order: item.sortOrder,
+              timeframe: item.timeframe,
+              last_signal: item.lastSignal,
+              created_at: item.createdAt
+            };
+            await supabase.from('watchlists').upsert(data);
+          }
+        } catch (e) { console.error("Sync watchlist failed", e); }
       },
       
       logout: async () => {

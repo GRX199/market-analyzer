@@ -108,7 +108,9 @@ export default function AssetClientPage({ symbol }: { symbol: string }) {
         marketType: asset.marketType,
         displayName: asset.name,
         notes: null,
-        sortOrder: 0,
+        sortOrder: watchlist.length,
+        timeframe: '1H',
+        lastSignal: null,
         createdAt: new Date().toISOString(),
       });
     }

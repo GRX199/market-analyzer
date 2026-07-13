@@ -15,18 +15,25 @@ export async function GET(request: Request) {
 
     console.log('Running Cron Job: Checking Alerts...');
 
-    // 1. Fetch active alerts with their user's telegram_chat_id
-    const { data: activeAlerts, error } = await supabaseAdmin
-      .from('alerts')
-      .select('*, users (telegram_chat_id)')
-      .eq('is_active', true)
-      .eq('is_triggered', false);
+    // 1. Fetch active alerts and watchlists with their user's telegram_chat_id
+    const [alertsRes, watchlistsRes] = await Promise.all([
+      supabaseAdmin
+        .from('alerts')
+        .select('*, users (telegram_chat_id)')
+        .eq('is_active', true)
+        .eq('is_triggered', false),
+      supabaseAdmin
+        .from('watchlists')
+        .select('*, users (telegram_chat_id)')
+    ]);
 
-    if (error) {
-      throw error;
-    }
+    if (alertsRes.error) throw alertsRes.error;
+    if (watchlistsRes.error) throw watchlistsRes.error;
 
-    if (!activeAlerts || activeAlerts.length === 0) {
+    const activeAlerts = alertsRes.data || [];
+    const watchlists = watchlistsRes.data || [];
+
+    if (activeAlerts.length === 0 && watchlists.length === 0) {
       return NextResponse.json({ success: true, message: 'No active alerts to check.' });
     }
     
@@ -101,6 +108,42 @@ export async function GET(request: Request) {
       }
     }
 
+    // Evaluate Watchlists (Auto-Scanner)
+    for (const item of watchlists) {
+      if (!item.timeframe) continue;
+
+      try {
+        const ohlcv = await getOHLCV(item.symbol, item.timeframe);
+        if (ohlcv.length > 0) {
+          const currentPrice = ohlcv[ohlcv.length - 1].close;
+          const technical = calculateTechnicalScore(ohlcv);
+          
+          const mockFund: FundamentalAnalysis = { marketType: item.market_type as any, data: {} as any, score: 50, reasons: [] };
+          const mockSent: SentimentAnalysis = { overallSentiment: 'neutral', newsScore: 50, socialScore: 50, score: 50, reasons: [] };
+          
+          const final = calculateFinalScore(item.symbol, item.market_type as any, currentPrice, technical, mockFund, mockSent);
+          
+          const currentSignal = final.signal; // e.g., 'strong_buy', 'buy', 'hold', 'sell', 'strong_sell'
+
+          // Only alert if it's a STRONG signal and it's DIFFERENT from the last alerted signal
+          if ((currentSignal === 'strong_buy' || currentSignal === 'strong_sell') && currentSignal !== item.last_signal) {
+            
+            const triggerMessage = `🤖 *AUTO-SCANNER ALERT*\n\nSinyal ${item.symbol} di timeframe ${item.timeframe} baru saja berubah menjadi *${currentSignal.toUpperCase().replace('_', ' ')}*!`;
+            triggeredAlerts.push({ 
+              id: item.id,
+              isWatchlist: true,
+              symbol: item.symbol,
+              triggerMessage,
+              users: item.users,
+              newSignal: currentSignal
+            });
+          }
+        }
+      } catch (err) {
+        console.error(`Failed to evaluate watchlist scanner for ${item.symbol}`, err);
+      }
+    }
+
     // Send Telegram Notifications and Update Supabase
     for (const alert of triggeredAlerts) {
       try {
@@ -118,13 +161,20 @@ export async function GET(request: Request) {
           });
         }
 
-        // Update in Supabase
-        await supabaseAdmin.from('alerts').update({  
-          is_active: false, 
-          is_triggered: true, 
-          triggered_at: new Date().toISOString(),
-          trigger_count: alert.trigger_count + 1
-        }).eq('id', alert.id);
+        if (alert.isWatchlist) {
+          // Update last_signal in watchlists
+          await supabaseAdmin.from('watchlists').update({ 
+            last_signal: alert.newSignal
+          }).eq('id', alert.id);
+        } else {
+          // Update in alerts
+          await supabaseAdmin.from('alerts').update({ 
+            is_active: false, 
+            is_triggered: true, 
+            triggered_at: new Date().toISOString(),
+            trigger_count: alert.trigger_count + 1
+          }).eq('id', alert.id);
+        }
 
       } catch (err) {
         console.error('Failed to process triggered alert', alert.id, err);
