@@ -41,6 +41,7 @@ interface UserState {
   
   // Supabase Sync
   loadFromSupabase: () => Promise<void>;
+  createAutoTrade: (symbol: string, marketType: string, action: 'buy' | 'sell', volume?: number) => Promise<void>;
   syncAlertToSupabase: (alert: UserAlert | { id: string, deleted: boolean }) => Promise<void>;
   syncJournalToSupabase: (journal: JournalEntry | { id: string, deleted: boolean }) => Promise<void>;
   syncPortfolioToSupabase: (position: PortfolioPosition | { id: string, deleted: boolean }) => Promise<void>;
@@ -271,6 +272,23 @@ export const useUserStore = create<UserState>()(
           }
         } catch (error) {
           console.error("Failed to load from Supabase:", error);
+        }
+      },
+
+      createAutoTrade: async (symbol, marketType, action, volume = 0.01) => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        try {
+          await supabase.from('auto_trades').insert({
+            user_id: user.id,
+            symbol,
+            market_type: marketType,
+            action,
+            volume,
+            status: 'pending'
+          });
+        } catch (error) {
+          console.error('Failed to create auto trade', error);
         }
       },
 

@@ -8,10 +8,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { Activity, Zap, Volume2, VolumeX, Flame, BookOpen } from 'lucide-react';
+import { Activity, Zap, Volume2, VolumeX, Flame, BookOpen, Bot } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { ALL_SYMBOLS } from '@/lib/constants';
+import { useUserStore } from '@/stores/user-store';
 
 // Sound Generator using Web Audio API
 const playAlertSound = (type: 'buy' | 'sell') => {
@@ -48,9 +49,11 @@ const playAlertSound = (type: 'buy' | 'sell') => {
 export default function ScalpingDashboard() {
   const [symbol, setSymbol] = useState('BTC/USDT');
   const [isAudioEnabled, setIsAudioEnabled] = useState(false);
+  const [isAutoTradingEnabled, setIsAutoTradingEnabled] = useState(false);
   const [flashSignal, setFlashSignal] = useState<'buy' | 'sell' | null>(null);
 
   const { currentPrice, recentTrades, orderBook, currentKline, isConnected } = useBinanceWebSocket(symbol);
+  const { createAutoTrade } = useUserStore();
 
   // Derived Metrics
   const { buyVolume, sellVolume, totalVolume } = useMemo(() => {
@@ -84,13 +87,15 @@ export default function ScalpingDashboard() {
     if (buyPressurePct > 85 && flashSignal !== 'buy') {
       setFlashSignal('buy');
       if (isAudioEnabled) playAlertSound('buy');
+      if (isAutoTradingEnabled) createAutoTrade(symbol, 'crypto', 'buy', 0.01);
       setTimeout(() => setFlashSignal(null), 1000);
     } else if (buyPressurePct < 15 && flashSignal !== 'sell') {
       setFlashSignal('sell');
       if (isAudioEnabled) playAlertSound('sell');
+      if (isAutoTradingEnabled) createAutoTrade(symbol, 'crypto', 'sell', 0.01);
       setTimeout(() => setFlashSignal(null), 1000);
     }
-  }, [buyPressurePct, isAudioEnabled, recentTrades.length, flashSignal]);
+  }, [buyPressurePct, isAudioEnabled, isAutoTradingEnabled, recentTrades.length, flashSignal, symbol, createAutoTrade]);
 
   const cryptoSymbols = ALL_SYMBOLS.filter(s => s.marketType === 'crypto');
 
@@ -134,6 +139,15 @@ export default function ScalpingDashboard() {
             >
               {isAudioEnabled ? <Volume2 className="h-4 w-4 mr-2" /> : <VolumeX className="h-4 w-4 mr-2" />}
               {isAudioEnabled ? "Audio Alerts ON" : "Audio Alerts OFF"}
+            </Button>
+            
+            <Button 
+              variant={isAutoTradingEnabled ? "default" : "outline"}
+              className={isAutoTradingEnabled ? "bg-emerald-600 hover:bg-emerald-700 animate-pulse" : "border-emerald-500/50 text-emerald-500 hover:bg-emerald-500/10"}
+              onClick={() => setIsAutoTradingEnabled(!isAutoTradingEnabled)}
+            >
+              <Bot className="h-4 w-4 mr-2" />
+              {isAutoTradingEnabled ? "ROBOT ACTIVE" : "Enable Robot"}
             </Button>
             
             <Dialog>
