@@ -87,12 +87,12 @@ export default function ScalpingDashboard() {
     if (buyPressurePct > 85 && flashSignal !== 'buy') {
       setFlashSignal('buy');
       if (isAudioEnabled) playAlertSound('buy');
-      if (isAutoTradingEnabled) createAutoTrade(symbol, 'crypto', 'buy', 0.01);
+      if (isAutoTradingEnabled) createAutoTrade(symbol, 'crypto', 'buy', 0.1);
       setTimeout(() => setFlashSignal(null), 1000);
     } else if (buyPressurePct < 15 && flashSignal !== 'sell') {
       setFlashSignal('sell');
       if (isAudioEnabled) playAlertSound('sell');
-      if (isAutoTradingEnabled) createAutoTrade(symbol, 'crypto', 'sell', 0.01);
+      if (isAutoTradingEnabled) createAutoTrade(symbol, 'crypto', 'sell', 0.1);
       setTimeout(() => setFlashSignal(null), 1000);
     }
   }, [buyPressurePct, isAudioEnabled, isAutoTradingEnabled, recentTrades.length, flashSignal, symbol, createAutoTrade]);
