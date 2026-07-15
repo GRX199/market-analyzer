@@ -69,7 +69,7 @@ export function useBinanceWebSocket(symbol: string) {
           
           setRecentTrades(prev => {
             const newTrades = [{ price, qty, isBuyerMaker, time }, ...prev];
-            return newTrades.slice(0, 50); // Keep last 50 trades for tape
+            return newTrades.slice(0, 200); // Keep last 200 trades for smoother order flow
           });
         } 
         else if (stream.endsWith('@kline_1m')) {

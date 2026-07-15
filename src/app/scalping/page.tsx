@@ -51,23 +51,37 @@ export default function ScalpingDashboard() {
   const [isAudioEnabled, setIsAudioEnabled] = useState(false);
   const [isAutoTradingEnabled, setIsAutoTradingEnabled] = useState(false);
   const [flashSignal, setFlashSignal] = useState<'buy' | 'sell' | null>(null);
+  const lastOrderTime = useRef<number>(0);
 
   const { currentPrice, recentTrades, orderBook, currentKline, isConnected } = useBinanceWebSocket(symbol);
   const { createAutoTrade } = useUserStore();
 
   // Derived Metrics
-  const { buyVolume, sellVolume, totalVolume } = useMemo(() => {
-    let bVol = 0;
-    let sVol = 0;
+  const { buyVolume, sellVolume, totalVolume, averagePrice } = useMemo(() => {
+    let buy = 0;
+    let sell = 0;
+    let sumPrice = 0;
     recentTrades.forEach(t => {
       // isBuyerMaker = true means seller matched with a buyer maker -> it's a SELL market order
-      if (t.isBuyerMaker) sVol += t.qty;
-      else bVol += t.qty; 
+      if (t.isBuyerMaker) {
+        sell += t.qty;
+      } else {
+        buy += t.qty;
+      }
+      sumPrice += t.price;
     });
-    return { buyVolume: bVol, sellVolume: sVol, totalVolume: bVol + sVol };
+    return {
+      buyVolume: buy,
+      sellVolume: sell,
+      totalVolume: buy + sell,
+      averagePrice: recentTrades.length > 0 ? sumPrice / recentTrades.length : 0
+    };
   }, [recentTrades]);
 
   const buyPressurePct = totalVolume > 0 ? (buyVolume / totalVolume) * 100 : 50;
+  
+  const isTrendingUp = currentPrice > averagePrice;
+  const isTrendingDown = currentPrice < averagePrice;
 
   // Track price momentum
   const prevPriceRef = useRef(currentPrice);
@@ -79,23 +93,32 @@ export default function ScalpingDashboard() {
     prevPriceRef.current = currentPrice;
   }, [currentPrice]);
 
-  // Alert Logic (Overkill Scalping Engine)
+  // Alert Logic (Dual-Confirmation Scalping Engine)
   useEffect(() => {
-    if (recentTrades.length < 20) return;
+    // Wait until we have enough data (at least 50 trades) to calculate meaningful average
+    if (recentTrades.length < 50) return;
 
-    // Extreme Buy Pressure > 85%
-    if (buyPressurePct > 85 && flashSignal !== 'buy') {
+    const now = Date.now();
+    // 15 seconds cooldown between orders
+    if (now - lastOrderTime.current < 15000) return;
+
+    // Extreme Buy Pressure > 80% AND Price is actually moving UP (Confirmation)
+    if (buyPressurePct > 80 && isTrendingUp && flashSignal !== 'buy') {
       setFlashSignal('buy');
+      lastOrderTime.current = now;
       if (isAudioEnabled) playAlertSound('buy');
       if (isAutoTradingEnabled) createAutoTrade(symbol, 'crypto', 'buy', 0.1);
       setTimeout(() => setFlashSignal(null), 1000);
-    } else if (buyPressurePct < 15 && flashSignal !== 'sell') {
+    } 
+    // Extreme Sell Pressure > 80% AND Price is actually moving DOWN (Confirmation)
+    else if (buyPressurePct < 20 && isTrendingDown && flashSignal !== 'sell') {
       setFlashSignal('sell');
+      lastOrderTime.current = now;
       if (isAudioEnabled) playAlertSound('sell');
       if (isAutoTradingEnabled) createAutoTrade(symbol, 'crypto', 'sell', 0.1);
       setTimeout(() => setFlashSignal(null), 1000);
     }
-  }, [buyPressurePct, isAudioEnabled, isAutoTradingEnabled, recentTrades.length, flashSignal, symbol, createAutoTrade]);
+  }, [buyPressurePct, isTrendingUp, isTrendingDown, isAudioEnabled, isAutoTradingEnabled, recentTrades.length, flashSignal, symbol, createAutoTrade]);
 
   const cryptoSymbols = ALL_SYMBOLS.filter(s => s.marketType === 'crypto');
 
