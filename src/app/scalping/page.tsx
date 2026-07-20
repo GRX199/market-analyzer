@@ -43,13 +43,11 @@ const playAlertSound = (type: 'buy' | 'sell') => {
 export default function ScalpingDashboard() {
   const [symbol, setSymbol] = useState('BTC/USDT');
   const [isAudioEnabled, setIsAudioEnabled] = useState(false);
-  const [isAutoTradingEnabled, setIsAutoTradingEnabled] = useState(false);
   const [flashSignal, setFlashSignal] = useState<'buy' | 'sell' | null>(null);
   const lastOrderTime = useRef<number>(0);
   const [cooldownLeft, setCooldownLeft] = useState(0);
 
   const { currentPrice, recentTrades, orderBook, currentKline, klineHistory, isConnected } = useBinanceWebSocket(symbol);
-  const { createAutoTrade } = useUserStore();
 
   // ===========================
   // ORDER FLOW (200 Trades)
@@ -166,17 +164,15 @@ export default function ScalpingDashboard() {
       setFlashSignal('buy');
       lastOrderTime.current = now;
       if (isAudioEnabled) playAlertSound('buy');
-      if (isAutoTradingEnabled) createAutoTrade(symbol, 'crypto', 'buy', 0.1);
       setTimeout(() => setFlashSignal(null), 1500);
     } 
     else if (momentum.direction === 'sell' && momentum.strength >= 50 && flashSignal !== 'sell') {
       setFlashSignal('sell');
       lastOrderTime.current = now;
       if (isAudioEnabled) playAlertSound('sell');
-      if (isAutoTradingEnabled) createAutoTrade(symbol, 'crypto', 'sell', 0.1);
       setTimeout(() => setFlashSignal(null), 1500);
     }
-  }, [momentum, isAudioEnabled, isAutoTradingEnabled, klineHistory.length, flashSignal, symbol, createAutoTrade]);
+  }, [momentum, isAudioEnabled, klineHistory.length, flashSignal]);
 
   const cryptoSymbols = ALL_SYMBOLS.filter(s => s.marketType === 'crypto');
 
@@ -220,12 +216,11 @@ export default function ScalpingDashboard() {
             </Button>
             
             <Button 
-              variant={isAutoTradingEnabled ? "default" : "outline"}
-              className={isAutoTradingEnabled ? "bg-emerald-600 hover:bg-emerald-700 animate-pulse" : "border-emerald-500/50 text-emerald-500 hover:bg-emerald-500/10"}
-              onClick={() => setIsAutoTradingEnabled(!isAutoTradingEnabled)}
+              variant="default"
+              className="bg-emerald-600 hover:bg-emerald-700 animate-pulse cursor-default"
             >
               <Bot className="h-4 w-4 mr-2" />
-              {isAutoTradingEnabled ? "ROBOT ON" : "Robot"}
+              PYTHON HFT RUNNING LOKAL
             </Button>
 
             <Dialog>
