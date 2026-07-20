@@ -93,18 +93,16 @@ export default function ScalpingDashboard() {
     return lastEma5 > lastEma13 ? 'bullish' : lastEma5 < lastEma13 ? 'bearish' : 'neutral';
   }, [klineHistory, currentKline]);
 
-  // 3. Momentum Candle
+  // 3. Momentum Candle (Diubah jadi 2 candle: 1 tutup + 1 berjalan agar lebih responsif)
   const momentum = useMemo(() => {
-    if (klineHistory.length < 5 || !currentKline) return { direction: 'wait', strength: 0 };
+    if (klineHistory.length < 2 || !currentKline) return { direction: 'wait', strength: 0 };
     
-    const last2 = klineHistory.slice(-2);
-    const dir0 = last2[0].close > last2[0].open ? 'up' : 'down';
-    const dir1 = last2[1].close > last2[1].open ? 'up' : 'down';
-    const currDir = currentKline.close > currentKline.open ? 'up' : 'down';
+    const last1 = klineHistory[klineHistory.length - 1];
+    const dir1 = last1.close >= last1.open ? 'up' : 'down';
+    const currDir = currentKline.close >= currentKline.open ? 'up' : 'down';
 
-    // Harus 2 candle terakhir searah PLUS candle berjalan juga searah
-    if (dir0 === 'up' && dir1 === 'up' && currDir === 'up') return { direction: 'buy', strength: 100 };
-    if (dir0 === 'down' && dir1 === 'down' && currDir === 'down') return { direction: 'sell', strength: 100 };
+    if (dir1 === 'up' && currDir === 'up') return { direction: 'buy', strength: 100 };
+    if (dir1 === 'down' && currDir === 'down') return { direction: 'sell', strength: 100 };
     
     return { direction: 'wait', strength: 0 };
   }, [klineHistory, currentKline]);
@@ -180,6 +178,16 @@ export default function ScalpingDashboard() {
               <Bot className="h-4 w-4 mr-2" />
               {isAutoTradingEnabled ? "ROBOT ON" : "Robot"}
             </Button>
+
+            <Button 
+              variant="outline" 
+              className="border-blue-500/50 text-blue-500 hover:bg-blue-500/10"
+              onClick={() => {
+                createAutoTrade(symbol, 'crypto', 'buy', 0.1);
+              }}
+            >
+              Force Test Signal
+            </Button>
           </div>
         </div>
 
@@ -204,7 +212,7 @@ export default function ScalpingDashboard() {
             <CardContent className="p-4 text-center">
               <div className="text-xs font-bold text-muted-foreground uppercase mb-1">Momentum Candle</div>
               <div className={cn("text-xl font-black", momentum.direction === 'buy' ? "text-green-500" : momentum.direction === 'sell' ? "text-red-500" : "text-muted-foreground")}>
-                {momentum.direction === 'wait' ? 'WAIT' : `${momentum.direction.toUpperCase()} (3 Streak)`}
+                {momentum.direction === 'wait' ? 'WAIT' : `${momentum.direction.toUpperCase()} (2 Streak)`}
               </div>
             </CardContent>
           </Card>
