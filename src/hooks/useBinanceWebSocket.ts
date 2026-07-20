@@ -3,13 +3,13 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 export type TradeStreamData = {
   price: number;
   qty: number;
-  isBuyerMaker: boolean; // if true, it's a SELL order (maker was buyer, taker sold to them)
+  isBuyerMaker: boolean;
   time: number;
 };
 
 export type OrderBookData = {
-  bids: [number, number][]; // [price, qty]
-  asks: [number, number][]; // [price, qty]
+  bids: [number, number][];
+  asks: [number, number][];
 };
 
 export type KlineData = {
@@ -27,6 +27,7 @@ export function useBinanceWebSocket(symbol: string) {
   const [recentTrades, setRecentTrades] = useState<TradeStreamData[]>([]);
   const [orderBook, setOrderBook] = useState<OrderBookData>({ bids: [], asks: [] });
   const [currentKline, setCurrentKline] = useState<KlineData | null>(null);
+  const [klineHistory, setKlineHistory] = useState<KlineData[]>([]);
   const [isConnected, setIsConnected] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -34,14 +35,13 @@ export function useBinanceWebSocket(symbol: string) {
   const connect = useCallback(() => {
     if (!symbol) return;
     
-    // Close existing connection if any
     if (wsRef.current) {
       wsRef.current.close();
     }
 
     const formattedSymbol = symbol.replace('/', '').toLowerCase();
     
-    // Connect to multiple streams: trade (every execution), kline_1m, and depth5 (100ms update)
+    // Connect to multiple streams
     const wsUrl = `wss://stream.binance.com:9443/stream?streams=${formattedSymbol}@trade/${formattedSymbol}@kline_1m/${formattedSymbol}@depth5@100ms`;
     
     const ws = new WebSocket(wsUrl);
@@ -69,12 +69,12 @@ export function useBinanceWebSocket(symbol: string) {
           
           setRecentTrades(prev => {
             const newTrades = [{ price, qty, isBuyerMaker, time }, ...prev];
-            return newTrades.slice(0, 200); // Keep last 200 trades for smoother order flow
+            return newTrades.slice(0, 200);
           });
         } 
         else if (stream.endsWith('@kline_1m')) {
           const k = data.k;
-          setCurrentKline({
+          const kline: KlineData = {
             open: parseFloat(k.o),
             high: parseFloat(k.h),
             low: parseFloat(k.l),
@@ -82,7 +82,19 @@ export function useBinanceWebSocket(symbol: string) {
             volume: parseFloat(k.v),
             isFinal: k.x,
             startTime: k.t
-          });
+          };
+          
+          setCurrentKline(kline);
+          
+          // Ketika candle selesai (isFinal = true), simpan ke riwayat
+          if (kline.isFinal) {
+            setKlineHistory(prev => {
+              const exists = prev.some(h => h.startTime === kline.startTime);
+              if (exists) return prev;
+              const newHistory = [...prev, kline];
+              return newHistory.slice(-30); // Simpan 30 candle terakhir untuk EMA/RSI
+            });
+          }
         }
         else if (stream.endsWith('@depth5@100ms')) {
           setOrderBook({
@@ -116,5 +128,5 @@ export function useBinanceWebSocket(symbol: string) {
     };
   }, [connect]);
 
-  return { currentPrice, recentTrades, orderBook, currentKline, isConnected, reconnect: connect };
+  return { currentPrice, recentTrades, orderBook, currentKline, klineHistory, isConnected, reconnect: connect };
 }

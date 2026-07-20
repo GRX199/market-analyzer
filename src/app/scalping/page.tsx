@@ -1,14 +1,14 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { useBinanceWebSocket } from '@/hooks/useBinanceWebSocket';
+import { useBinanceWebSocket, KlineData } from '@/hooks/useBinanceWebSocket';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { Activity, Zap, Volume2, VolumeX, Flame, BookOpen, Bot } from 'lucide-react';
+import { Activity, Zap, Volume2, VolumeX, Flame, BookOpen, Bot, ShieldCheck, ShieldAlert, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { ALL_SYMBOLS } from '@/lib/constants';
@@ -26,16 +26,16 @@ const playAlertSound = (type: 'buy' | 'sell') => {
     
     if (type === 'buy') {
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(880, ctx.currentTime); // A5
-      osc.frequency.exponentialRampToValueAtTime(1760, ctx.currentTime + 0.1); // A6
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(1760, ctx.currentTime + 0.1);
       gainNode.gain.setValueAtTime(0.5, ctx.currentTime);
       gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
       osc.start();
       osc.stop(ctx.currentTime + 0.3);
     } else {
       osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(440, ctx.currentTime); // A4
-      osc.frequency.exponentialRampToValueAtTime(220, ctx.currentTime + 0.2); // A3
+      osc.frequency.setValueAtTime(440, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(220, ctx.currentTime + 0.2);
       gainNode.gain.setValueAtTime(0.5, ctx.currentTime);
       gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
       osc.start();
@@ -46,6 +46,62 @@ const playAlertSound = (type: 'buy' | 'sell') => {
   }
 };
 
+// ===========================
+// TECHNICAL INDICATOR MATH
+// ===========================
+
+function calculateEMA(closes: number[], period: number): number[] {
+  if (closes.length < period) return [];
+  const multiplier = 2 / (period + 1);
+  const ema: number[] = [];
+  
+  // SMA awal sebagai seed EMA
+  let sum = 0;
+  for (let i = 0; i < period; i++) sum += closes[i];
+  ema.push(sum / period);
+  
+  for (let i = period; i < closes.length; i++) {
+    ema.push(closes[i] * multiplier + ema[ema.length - 1] * (1 - multiplier));
+  }
+  return ema;
+}
+
+function calculateRSI(closes: number[], period: number = 14): number {
+  if (closes.length < period + 1) return 50; // default netral
+  
+  let avgGain = 0;
+  let avgLoss = 0;
+  
+  for (let i = 1; i <= period; i++) {
+    const change = closes[i] - closes[i - 1];
+    if (change > 0) avgGain += change;
+    else avgLoss += Math.abs(change);
+  }
+  
+  avgGain /= period;
+  avgLoss /= period;
+  
+  // Smoothed RSI
+  for (let i = period + 1; i < closes.length; i++) {
+    const change = closes[i] - closes[i - 1];
+    if (change > 0) {
+      avgGain = (avgGain * (period - 1) + change) / period;
+      avgLoss = (avgLoss * (period - 1)) / period;
+    } else {
+      avgGain = (avgGain * (period - 1)) / period;
+      avgLoss = (avgLoss * (period - 1) + Math.abs(change)) / period;
+    }
+  }
+  
+  if (avgLoss === 0) return 100;
+  const rs = avgGain / avgLoss;
+  return 100 - (100 / (1 + rs));
+}
+
+// ===========================
+// MAIN COMPONENT
+// ===========================
+
 export default function ScalpingDashboard() {
   const [symbol, setSymbol] = useState('BTC/USDT');
   const [isAudioEnabled, setIsAudioEnabled] = useState(false);
@@ -53,37 +109,106 @@ export default function ScalpingDashboard() {
   const [flashSignal, setFlashSignal] = useState<'buy' | 'sell' | null>(null);
   const lastOrderTime = useRef<number>(0);
 
-  const { currentPrice, recentTrades, orderBook, currentKline, isConnected } = useBinanceWebSocket(symbol);
+  const { currentPrice, recentTrades, orderBook, currentKline, klineHistory, isConnected } = useBinanceWebSocket(symbol);
   const { createAutoTrade } = useUserStore();
 
-  // Derived Metrics
-  const { buyVolume, sellVolume, totalVolume, averagePrice } = useMemo(() => {
+  // ===========================
+  // INDIKATOR 1: Order Flow Pressure (200 Trades)
+  // ===========================
+  const { buyVolume, sellVolume, totalVolume } = useMemo(() => {
     let buy = 0;
     let sell = 0;
-    let sumPrice = 0;
     recentTrades.forEach(t => {
-      // isBuyerMaker = true means seller matched with a buyer maker -> it's a SELL market order
-      if (t.isBuyerMaker) {
-        sell += t.qty;
-      } else {
-        buy += t.qty;
-      }
-      sumPrice += t.price;
+      if (t.isBuyerMaker) sell += t.qty;
+      else buy += t.qty;
     });
-    return {
-      buyVolume: buy,
-      sellVolume: sell,
-      totalVolume: buy + sell,
-      averagePrice: recentTrades.length > 0 ? sumPrice / recentTrades.length : 0
-    };
+    return { buyVolume: buy, sellVolume: sell, totalVolume: buy + sell };
   }, [recentTrades]);
 
   const buyPressurePct = totalVolume > 0 ? (buyVolume / totalVolume) * 100 : 50;
-  
-  const isTrendingUp = currentPrice > averagePrice;
-  const isTrendingDown = currentPrice < averagePrice;
 
-  // Track price momentum
+  // ===========================
+  // INDIKATOR 2: EMA Crossover (5 vs 13) dari Kline History
+  // ===========================
+  const emaSignal = useMemo(() => {
+    // Gabungkan kline history (selesai) dengan currentKline (sedang berjalan)
+    const allKlines = [...klineHistory];
+    if (currentKline) allKlines.push(currentKline);
+    
+    if (allKlines.length < 14) return { signal: 'wait' as const, ema5: 0, ema13: 0 };
+
+    const closes = allKlines.map(k => k.close);
+    const ema5 = calculateEMA(closes, 5);
+    const ema13 = calculateEMA(closes, 13);
+    
+    if (ema5.length === 0 || ema13.length === 0) return { signal: 'wait' as const, ema5: 0, ema13: 0 };
+    
+    const lastEma5 = ema5[ema5.length - 1];
+    const lastEma13 = ema13[ema13.length - 1];
+    
+    return {
+      signal: lastEma5 > lastEma13 ? 'bullish' as const : lastEma5 < lastEma13 ? 'bearish' as const : 'neutral' as const,
+      ema5: lastEma5,
+      ema13: lastEma13
+    };
+  }, [klineHistory, currentKline]);
+
+  // ===========================
+  // INDIKATOR 3: RSI (14 Periode)
+  // ===========================
+  const rsiData = useMemo(() => {
+    const allKlines = [...klineHistory];
+    if (currentKline) allKlines.push(currentKline);
+    
+    if (allKlines.length < 15) return { value: 50, zone: 'neutral' as const };
+
+    const closes = allKlines.map(k => k.close);
+    const rsi = calculateRSI(closes, 14);
+    
+    let zone: 'overbought' | 'oversold' | 'neutral' = 'neutral';
+    if (rsi > 70) zone = 'overbought';
+    else if (rsi < 30) zone = 'oversold';
+    
+    return { value: rsi, zone };
+  }, [klineHistory, currentKline]);
+
+  // ===========================
+  // INDIKATOR 4: Volume Spike (1.5x Rata-rata)
+  // ===========================
+  const volumeData = useMemo(() => {
+    if (klineHistory.length < 5 || !currentKline) return { isSpike: false, ratio: 0 };
+
+    const avgVolume = klineHistory.reduce((sum, k) => sum + k.volume, 0) / klineHistory.length;
+    const currentVol = currentKline.volume;
+    const ratio = avgVolume > 0 ? currentVol / avgVolume : 0;
+
+    return { isSpike: ratio >= 1.5, ratio };
+  }, [klineHistory, currentKline]);
+
+  // ===========================
+  // TRIPLE-CONFIRMATION ENGINE
+  // ===========================
+  const confirmations = useMemo(() => {
+    const emaBuy = emaSignal.signal === 'bullish';
+    const emaSell = emaSignal.signal === 'bearish';
+    const rsiOK = rsiData.zone === 'neutral'; // Hanya masuk saat RSI netral (bukan jenuh)
+    const volumeOK = volumeData.isSpike;
+    const flowBuy = buyPressurePct > 60; // Diturunkan dari 80% karena sudah ada 3 konfirmasi lain
+    const flowSell = buyPressurePct < 40;
+
+    const buyCount = [emaBuy, rsiOK, volumeOK, flowBuy].filter(Boolean).length;
+    const sellCount = [emaSell, rsiOK, volumeOK, flowSell].filter(Boolean).length;
+
+    return {
+      canBuy: buyCount >= 3, // Minimal 3 dari 4 syarat terpenuhi
+      canSell: sellCount >= 3,
+      buyCount,
+      sellCount,
+      details: { emaBuy, emaSell, rsiOK, volumeOK, flowBuy, flowSell }
+    };
+  }, [emaSignal, rsiData, volumeData, buyPressurePct]);
+
+  // Track price momentum for visual
   const prevPriceRef = useRef(currentPrice);
   const [priceDirection, setPriceDirection] = useState<'up' | 'down' | 'flat'>('flat');
 
@@ -93,32 +218,32 @@ export default function ScalpingDashboard() {
     prevPriceRef.current = currentPrice;
   }, [currentPrice]);
 
-  // Alert Logic (Dual-Confirmation Scalping Engine)
+  // ===========================
+  // SIGNAL EXECUTION (Triple-Confirmation)
+  // ===========================
   useEffect(() => {
-    // Wait until we have enough data (at least 50 trades) to calculate meaningful average
-    if (recentTrades.length < 50) return;
+    // Harus ada cukup data kline (minimal 14 candle)
+    if (klineHistory.length < 14) return;
 
     const now = Date.now();
-    // 15 seconds cooldown between orders
-    if (now - lastOrderTime.current < 15000) return;
+    // 30 detik cooldown (lebih longgar karena sinyal sudah lebih selektif)
+    if (now - lastOrderTime.current < 30000) return;
 
-    // Extreme Buy Pressure > 80% AND Price is actually moving UP (Confirmation)
-    if (buyPressurePct > 80 && isTrendingUp && flashSignal !== 'buy') {
+    if (confirmations.canBuy && flashSignal !== 'buy') {
       setFlashSignal('buy');
       lastOrderTime.current = now;
       if (isAudioEnabled) playAlertSound('buy');
       if (isAutoTradingEnabled) createAutoTrade(symbol, 'crypto', 'buy', 0.1);
-      setTimeout(() => setFlashSignal(null), 1000);
+      setTimeout(() => setFlashSignal(null), 1500);
     } 
-    // Extreme Sell Pressure > 80% AND Price is actually moving DOWN (Confirmation)
-    else if (buyPressurePct < 20 && isTrendingDown && flashSignal !== 'sell') {
+    else if (confirmations.canSell && flashSignal !== 'sell') {
       setFlashSignal('sell');
       lastOrderTime.current = now;
       if (isAudioEnabled) playAlertSound('sell');
       if (isAutoTradingEnabled) createAutoTrade(symbol, 'crypto', 'sell', 0.1);
-      setTimeout(() => setFlashSignal(null), 1000);
+      setTimeout(() => setFlashSignal(null), 1500);
     }
-  }, [buyPressurePct, isTrendingUp, isTrendingDown, isAudioEnabled, isAutoTradingEnabled, recentTrades.length, flashSignal, symbol, createAutoTrade]);
+  }, [confirmations, isAudioEnabled, isAutoTradingEnabled, klineHistory.length, flashSignal, symbol, createAutoTrade]);
 
   const cryptoSymbols = ALL_SYMBOLS.filter(s => s.marketType === 'crypto');
 
@@ -137,13 +262,14 @@ export default function ScalpingDashboard() {
             <div className="flex items-center gap-2">
               <Zap className="h-6 w-6 text-yellow-500" />
               <h1 className="text-2xl font-black uppercase tracking-tighter">Hyper Scalping</h1>
+              <Badge variant="outline" className="text-xs">v4 Sniper</Badge>
             </div>
             <Badge variant={isConnected ? "default" : "destructive"} className={isConnected ? "bg-emerald-500" : ""}>
               {isConnected ? "WS Connected" : "Connecting..."}
             </Badge>
           </div>
 
-          <div className="flex items-center gap-4 w-full md:w-auto">
+          <div className="flex items-center gap-4 w-full md:w-auto flex-wrap">
             <Select value={symbol} onValueChange={setSymbol}>
               <SelectTrigger className="w-[180px] font-bold">
                 <SelectValue placeholder="Select Asset" />
@@ -161,7 +287,7 @@ export default function ScalpingDashboard() {
               onClick={() => setIsAudioEnabled(!isAudioEnabled)}
             >
               {isAudioEnabled ? <Volume2 className="h-4 w-4 mr-2" /> : <VolumeX className="h-4 w-4 mr-2" />}
-              {isAudioEnabled ? "Audio Alerts ON" : "Audio Alerts OFF"}
+              {isAudioEnabled ? "Audio ON" : "Audio OFF"}
             </Button>
             
             <Button 
@@ -182,47 +308,28 @@ export default function ScalpingDashboard() {
               </DialogTrigger>
               <DialogContent className="max-w-2xl">
                 <DialogHeader>
-                  <DialogTitle>Ultimate Scalping Guide</DialogTitle>
+                  <DialogTitle>Scalping Guide v4 (Triple-Confirmation)</DialogTitle>
                 </DialogHeader>
                 <ScrollArea className="h-[60vh] mt-4 pr-4">
                   <div className="space-y-6 text-sm">
                     <div className="bg-destructive/10 text-destructive p-4 rounded-lg border border-destructive/20">
-                      <strong>⚠️ Risiko Ekstrem:</strong> Scalping memiliki risiko yang sangat tinggi karena Anda bertransaksi dengan jumlah lot/leverage besar untuk mengejar pergerakan 0.1% hingga 1%. Pastikan Anda menggunakan Stop Loss yang ketat.
+                      <strong>⚠️ Risiko Ekstrem:</strong> Scalping memiliki risiko tinggi. Gunakan hanya uang yang siap Anda kehilangan.
                     </div>
 
                     <div>
-                      <h3 className="text-lg font-bold mb-2">1. Real-Time Order Flow (Pressure Gauge)</h3>
-                      <p className="text-muted-foreground mb-2">Menghitung 50 transaksi real-time terakhir secara instan.</p>
-                      <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
-                        <li><strong className="text-green-500">Buy Pressure:</strong> Persentase transaksi yang dibeli secara agresif.</li>
-                        <li><strong className="text-red-500">Sell Pressure:</strong> Persentase transaksi yang dijual secara agresif.</li>
-                      </ul>
-                      <div className="bg-primary/10 p-3 rounded mt-2 border border-primary/20">
-                        💡 <strong>TIP:</strong> Jika Buy Pressure melonjak di atas 80%, ini menandakan ada Whale yang sedang masuk. Momen terbaik untuk menumpang naik.
-                      </div>
-                    </div>
-
-                    <div>
-                      <h3 className="text-lg font-bold mb-2">2. Order Book (Depth 5)</h3>
-                      <p className="text-muted-foreground mb-2">Buku Antrean menunjukkan tembok pertahanan harga.</p>
-                      <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
-                        <li><strong className="text-green-500">Bid (Bawah):</strong> Mengantre ingin membeli di harga murah.</li>
-                        <li><strong className="text-red-500">Ask (Atas):</strong> Mengantre ingin menjual di harga mahal.</li>
-                      </ul>
-                      <p className="mt-2 text-muted-foreground">Jika ada jumlah (Amount) raksasa di Ask, itu adalah Resistance Buatan. Jika tertembus, harga biasanya meledak naik (Breakout Scalping).</p>
-                    </div>
-
-                    <div>
-                      <h3 className="text-lg font-bold mb-2">3. Strategi: Momentum Breakout (Audio)</h3>
-                      <ol className="list-decimal pl-5 space-y-1 text-muted-foreground">
-                        <li>Nyalakan <strong>Audio Alerts ON</strong>.</li>
-                        <li>Tunggu sampai alarm berbunyi keras dan layar berkedip Hijau.</li>
-                        <li>Artinya Buy Pressure menembus 85%. Langsung eksekusi Buy/Long.</li>
-                        <li>Take Profit saat naik 0.3% - 0.5%.</li>
-                        <li>Stop Loss otomatis di 0.3% di bawah harga beli.</li>
+                      <h3 className="text-lg font-bold mb-2">Cara Kerja v4 (Triple-Confirmation)</h3>
+                      <p className="text-muted-foreground mb-2">Robot HANYA akan menembak jika minimal 3 dari 4 syarat terpenuhi:</p>
+                      <ol className="list-decimal pl-5 space-y-2 text-muted-foreground">
+                        <li><strong className="text-foreground">EMA Crossover:</strong> EMA 5 harus di atas EMA 13 (konfirmasi tren naik).</li>
+                        <li><strong className="text-foreground">RSI Netral:</strong> RSI harus antara 30-70 (bukan zona jenuh/overbought).</li>
+                        <li><strong className="text-foreground">Volume Spike:</strong> Volume candle saat ini harus 1.5x di atas rata-rata.</li>
+                        <li><strong className="text-foreground">Order Flow:</strong> Buy Pressure harus di atas 60%.</li>
                       </ol>
                     </div>
 
+                    <div className="bg-primary/10 p-3 rounded border border-primary/20">
+                      💡 <strong>Filosofi Baru:</strong> Lebih sedikit tembakan, tapi hampir pasti mengenai sasaran. Robot sekarang berperan sebagai Sniper, bukan Senapan Mesin.
+                    </div>
                   </div>
                 </ScrollArea>
               </DialogContent>
@@ -230,7 +337,68 @@ export default function ScalpingDashboard() {
           </div>
         </div>
 
-        {/* Top Indicators */}
+        {/* Triple-Confirmation Status Panel */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Card className={cn("border-2", emaSignal.signal === 'bullish' ? "border-green-500/50 bg-green-500/5" : emaSignal.signal === 'bearish' ? "border-red-500/50 bg-red-500/5" : "border-muted")}>
+            <CardContent className="p-4 text-center">
+              <div className="text-xs font-bold text-muted-foreground uppercase mb-1">EMA 5/13</div>
+              <div className="flex items-center justify-center gap-1">
+                {emaSignal.signal === 'bullish' ? <TrendingUp className="h-5 w-5 text-green-500" /> : emaSignal.signal === 'bearish' ? <TrendingDown className="h-5 w-5 text-red-500" /> : <Minus className="h-5 w-5 text-muted-foreground" />}
+                <span className={cn("text-lg font-black", emaSignal.signal === 'bullish' ? "text-green-500" : emaSignal.signal === 'bearish' ? "text-red-500" : "text-muted-foreground")}>
+                  {emaSignal.signal === 'bullish' ? 'BULLISH' : emaSignal.signal === 'bearish' ? 'BEARISH' : 'WAIT'}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className={cn("border-2", rsiData.zone === 'neutral' ? "border-green-500/50 bg-green-500/5" : "border-yellow-500/50 bg-yellow-500/5")}>
+            <CardContent className="p-4 text-center">
+              <div className="text-xs font-bold text-muted-foreground uppercase mb-1">RSI (14)</div>
+              <div className={cn("text-2xl font-black", rsiData.zone === 'overbought' ? "text-red-500" : rsiData.zone === 'oversold' ? "text-blue-500" : "text-green-500")}>
+                {rsiData.value.toFixed(1)}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {rsiData.zone === 'overbought' ? '⛔ Overbought' : rsiData.zone === 'oversold' ? '⛔ Oversold' : '✅ Netral'}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className={cn("border-2", volumeData.isSpike ? "border-green-500/50 bg-green-500/5" : "border-muted")}>
+            <CardContent className="p-4 text-center">
+              <div className="text-xs font-bold text-muted-foreground uppercase mb-1">Volume</div>
+              <div className={cn("text-2xl font-black", volumeData.isSpike ? "text-green-500" : "text-muted-foreground")}>
+                {volumeData.ratio.toFixed(1)}x
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {volumeData.isSpike ? '🔥 Spike Aktif' : '😴 Normal'}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className={cn("border-2", confirmations.canBuy ? "border-green-500/50 bg-green-500/5 animate-pulse" : confirmations.canSell ? "border-red-500/50 bg-red-500/5 animate-pulse" : "border-muted")}>
+            <CardContent className="p-4 text-center">
+              <div className="text-xs font-bold text-muted-foreground uppercase mb-1">Sinyal</div>
+              {confirmations.canBuy ? (
+                <div className="flex items-center justify-center gap-1">
+                  <ShieldCheck className="h-5 w-5 text-green-500" />
+                  <span className="text-lg font-black text-green-500">BUY</span>
+                </div>
+              ) : confirmations.canSell ? (
+                <div className="flex items-center justify-center gap-1">
+                  <ShieldAlert className="h-5 w-5 text-red-500" />
+                  <span className="text-lg font-black text-red-500">SELL</span>
+                </div>
+              ) : (
+                <div className="text-lg font-black text-muted-foreground">STANDBY</div>
+              )}
+              <div className="text-xs text-muted-foreground">
+                {Math.max(confirmations.buyCount, confirmations.sellCount)}/4 Konfirmasi
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Price + Order Flow */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card className="md:col-span-1 overflow-hidden border-2 border-primary/20">
             <CardContent className="p-6 flex flex-col items-center justify-center min-h-[160px]">
@@ -247,7 +415,7 @@ export default function ScalpingDashboard() {
           <Card className="md:col-span-2">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
-                <Activity className="h-4 w-4" /> Real-time Order Flow (Last 50 Trades)
+                <Activity className="h-4 w-4" /> Real-time Order Flow (Last 200 Trades)
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -257,8 +425,8 @@ export default function ScalpingDashboard() {
                     <div className="text-3xl font-black text-green-500">{buyPressurePct.toFixed(1)}%</div>
                     <div className="text-xs text-muted-foreground uppercase font-semibold">Buy Pressure</div>
                   </div>
-                  {flashSignal === 'buy' && <Badge className="bg-green-500 text-white animate-pulse px-4 py-1 text-lg">STRONG BUY SIGNAL</Badge>}
-                  {flashSignal === 'sell' && <Badge className="bg-red-500 text-white animate-pulse px-4 py-1 text-lg">STRONG SELL SIGNAL</Badge>}
+                  {flashSignal === 'buy' && <Badge className="bg-green-500 text-white animate-pulse px-4 py-1 text-lg">CONFIRMED BUY</Badge>}
+                  {flashSignal === 'sell' && <Badge className="bg-red-500 text-white animate-pulse px-4 py-1 text-lg">CONFIRMED SELL</Badge>}
                   <div className="text-right">
                     <div className="text-3xl font-black text-red-500">{(100 - buyPressurePct).toFixed(1)}%</div>
                     <div className="text-xs text-muted-foreground uppercase font-semibold">Sell Pressure</div>
