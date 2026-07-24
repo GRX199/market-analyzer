@@ -277,10 +277,9 @@ export const useUserStore = create<UserState>()(
 
       createAutoTrade: async (symbol, marketType, action, volume = 0.01) => {
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
         try {
           await supabase.from('auto_trades').insert({
-            user_id: user.id,
+            user_id: user ? user.id : null,
             symbol,
             market_type: marketType,
             action,
