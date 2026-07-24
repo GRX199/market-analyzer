@@ -150,8 +150,8 @@ export default function ScalpingDashboard() {
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <ShieldCheck className="h-6 w-6 text-emerald-500" />
-              <h1 className="text-2xl font-black uppercase tracking-tighter">Hybrid Sniper</h1>
-              <Badge variant="outline">v7 Stable</Badge>
+              <h1 className="text-2xl font-black uppercase tracking-tighter">Ultimate Scalper</h1>
+              <Badge variant="outline">v8 Ultimate</Badge>
             </div>
             <Badge variant={isConnected ? "default" : "destructive"}>{isConnected ? "LIVE" : "..."}</Badge>
           </div>
