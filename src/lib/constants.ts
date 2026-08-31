@@ -1,5 +1,5 @@
-import { MarketType, Timeframe } from '@/types/market';
-import { SignalType, RiskLevel } from '@/types/analysis';
+import type { MarketType, Timeframe } from '@/types/market';
+import type { SignalType, RiskLevel } from '@/types/analysis';
 
 export const SIGNAL_COLORS: Record<SignalType, string> = {
   strong_buy: '#00C853',

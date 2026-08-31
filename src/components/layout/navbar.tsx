@@ -1,46 +1,55 @@
 'use client';
 
-import { Search, Bell, User, Menu, TrendingUp } from 'lucide-react';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
+import { Search, Bell, LogOut, Menu, Settings, TrendingUp } from 'lucide-react';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ThemeToggle } from '@/components/common/theme-toggle';
-import { useMarketStore } from '@/stores/market-store';
-import { Badge } from '@/components/ui/badge';
 import { useRouter, usePathname } from 'next/navigation';
 import { useState, useCallback } from 'react';
 import Link from 'next/link';
-import { ALL_SYMBOLS } from '@/lib/constants';
 import { navItems } from './sidebar';
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
+import { useUserStore } from '@/stores/user-store';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 export function Navbar() {
-  const { searchQuery, setSearchQuery } = useMarketStore();
+  const user = useUserStore((state) => state.user);
+  const alerts = useUserStore((state) => state.alerts);
+  const logout = useUserStore((state) => state.logout);
   const router = useRouter();
   const pathname = usePathname();
-  const [showResults, setShowResults] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const filteredSymbols = searchQuery.length > 0
-    ? ALL_SYMBOLS.filter(s =>
-        s.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.name.toLowerCase().includes(searchQuery.toLowerCase())
-      ).slice(0, 8)
-    : [];
+  const activeAlertCount = alerts.filter((alert) => alert.isActive && !alert.isTriggered).length;
+  const displayName = user?.displayName || user?.email?.split('@')[0] || 'Pengguna';
+  const initials = displayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2) || 'U';
 
-  const handleSelect = useCallback((symbol: string) => {
-    setSearchQuery('');
-    setShowResults(false);
-    router.push(`/asset/${encodeURIComponent(symbol)}`);
-  }, [setSearchQuery, router]);
+  const handleLogout = useCallback(async () => {
+    await logout();
+    router.push('/login');
+    router.refresh();
+  }, [logout, router]);
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-card/80 backdrop-blur-xl px-4 md:px-6">
       <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
         {/* @ts-expect-error asChild is used by Shadcn but Base UI might use render */}
         <SheetTrigger asChild>
-          <Button variant="ghost" size="icon" className="md:hidden shrink-0">
+          <Button variant="ghost" size="icon" className="md:hidden shrink-0" aria-label="Buka menu navigasi">
             <Menu className="h-5 w-5" />
           </Button>
         </SheetTrigger>
@@ -91,30 +100,61 @@ export function Navbar() {
             document.dispatchEvent(event);
           }}
           className="flex items-center gap-2 w-full px-3 py-2 rounded-lg border border-border/50 bg-muted/30 text-muted-foreground text-sm hover:bg-muted/50 transition-colors"
+          aria-label="Buka pencarian cepat"
         >
           <Search className="h-3.5 w-3.5 shrink-0" />
           <span className="text-xs truncate">Search assets, pages...</span>
           <kbd className="ml-auto pointer-events-none hidden sm:inline-flex h-5 select-none items-center gap-0.5 rounded border border-border/50 bg-muted/50 px-1.5 text-[10px] font-medium text-muted-foreground shrink-0">
-            <span className="text-xs">⌘</span>K
+            Ctrl K
           </kbd>
         </button>
       </div>
 
       <div className="flex items-center gap-2">
         <ThemeToggle />
-        <Link href="/alerts">
-          <Button variant="ghost" size="icon" className="relative h-9 w-9 rounded-full">
-            <Bell className="h-4 w-4" />
-            <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-blue-500 text-[10px] font-bold text-white flex items-center justify-center">0</span>
-          </Button>
+        <Link
+          href="/alerts"
+          className={buttonVariants({ variant: 'ghost', size: 'icon', className: 'relative h-9 w-9 rounded-full' })}
+          aria-label={`Peringatan aktif: ${activeAlertCount}`}
+        >
+          <Bell className="h-4 w-4" />
+          {activeAlertCount > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-blue-500 text-[10px] font-bold text-white flex items-center justify-center">
+              {activeAlertCount > 9 ? '9+' : activeAlertCount}
+            </span>
+          )}
         </Link>
-        <Link href="/settings">
-          <Avatar className="h-9 w-9 cursor-pointer hover:opacity-80 transition-opacity">
-            <AvatarFallback className="bg-gradient-to-br from-blue-600 to-indigo-600 text-white text-sm">
-              U
-            </AvatarFallback>
-          </Avatar>
-        </Link>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label="Buka menu akun"
+          >
+            <Avatar className="h-9 w-9 cursor-pointer hover:opacity-80 transition-opacity">
+              <AvatarFallback className="bg-gradient-to-br from-blue-600 to-indigo-600 text-white text-sm">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-64">
+            <DropdownMenuLabel className="px-2 py-2">
+              <span className="block truncate font-medium text-foreground">{displayName}</span>
+              <span className="block truncate font-normal">{user?.email || 'Akun terverifikasi'}</span>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => router.push('/settings')} className="px-2 py-2">
+              <Settings className="mr-2 h-4 w-4" />
+              Pengaturan akun
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              variant="destructive"
+              onClick={() => void handleLogout()}
+              className="px-2 py-2"
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              Keluar
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   );

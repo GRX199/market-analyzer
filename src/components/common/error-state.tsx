@@ -7,7 +7,7 @@ interface ErrorStateProps {
   onRetry?: () => void;
 }
 
-export function ErrorState({ title = 'Something went wrong', message = 'Failed to load data. Please try again.', onRetry }: ErrorStateProps) {
+export function ErrorState({ title = 'Terjadi gangguan', message = 'Data gagal dimuat. Silakan coba lagi.', onRetry }: ErrorStateProps) {
   return (
     <div className="flex flex-col items-center justify-center py-16 px-4">
       <div className="flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10 mb-4">
@@ -18,7 +18,7 @@ export function ErrorState({ title = 'Something went wrong', message = 'Failed t
       {onRetry && (
         <Button variant="outline" onClick={onRetry} className="gap-2">
           <RefreshCcw className="h-4 w-4" />
-          Try Again
+          Coba lagi
         </Button>
       )}
     </div>

@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ScanSearch, SlidersHorizontal, ArrowUpDown, ExternalLink } from 'lucide-react';
+import { AlertTriangle, ScanSearch, ArrowUpDown, ExternalLink } from 'lucide-react';
 import { SIGNAL_COLORS, SIGNAL_LABELS } from '@/lib/constants';
 import Link from 'next/link';
 import { SignalType } from '@/types/analysis';
@@ -15,6 +15,7 @@ import { SignalType } from '@/types/analysis';
 export default function ScreenerPage() {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   
   // Filters
   const [search, setSearch] = useState('');
@@ -25,6 +26,7 @@ export default function ScreenerPage() {
   useEffect(() => {
     async function loadData() {
       setLoading(true);
+      setError(null);
       try {
         const [signalsRes, marketRes] = await Promise.all([
           fetch('/api/signals?timeframe=1D'),
@@ -33,7 +35,7 @@ export default function ScreenerPage() {
         const signals = await signalsRes.json();
         const markets = await marketRes.json();
         
-        if (signals.success && markets.success) {
+        if (signals.success && markets.success && Array.isArray(signals.data) && Array.isArray(markets.data)) {
           // Merge data
           const merged = signals.data.map((sig: any) => {
             const mkt = markets.data.find((m: any) => m.symbol === sig.symbol);
@@ -45,9 +47,12 @@ export default function ScreenerPage() {
             };
           });
           setData(merged);
+        } else {
+          throw new Error(signals.error || markets.error || 'Respons screener tidak valid.');
         }
       } catch (err) {
         console.error('Failed to load screener data', err);
+        setError(err instanceof Error ? err.message : 'Screener gagal dimuat.');
       } finally {
         setLoading(false);
       }
@@ -80,7 +85,7 @@ export default function ScreenerPage() {
             <ScanSearch className="w-7 h-7 text-primary" />
             Advanced Screener
           </h1>
-          <p className="text-muted-foreground mt-1">Filter and sort assets based on technical indicators and AI signals.</p>
+          <p className="text-muted-foreground mt-1">Filter dan urutkan aset berdasarkan indikator teknikal dan skor analisis.</p>
         </div>
 
         {/* Filters */}
@@ -130,8 +135,8 @@ export default function ScreenerPage() {
                   </div>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="score_desc">AI Score (High-Low)</SelectItem>
-                  <SelectItem value="score_asc">AI Score (Low-High)</SelectItem>
+                  <SelectItem value="score_desc">Skor Analisis (Tinggi-Rendah)</SelectItem>
+                  <SelectItem value="score_asc">Skor Analisis (Rendah-Tinggi)</SelectItem>
                   <SelectItem value="rsi_desc">RSI (High-Low)</SelectItem>
                   <SelectItem value="rsi_asc">RSI (Low-High)</SelectItem>
                   <SelectItem value="change_desc">24h Change (High-Low)</SelectItem>
@@ -142,6 +147,16 @@ export default function ScreenerPage() {
           </CardContent>
         </Card>
 
+        {error && (
+          <div role="alert" className="flex items-start gap-3 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-500">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+            <div>
+              <p className="font-medium">Screener belum dapat dimuat</p>
+              <p className="mt-1 text-red-500/80">{error}</p>
+            </div>
+          </div>
+        )}
+
         {/* Table */}
         <Card>
           <CardContent className="p-0">
@@ -151,7 +166,7 @@ export default function ScreenerPage() {
                   <tr className="border-b border-border/50">
                     <th className="text-left py-3 px-4 font-medium text-muted-foreground">Asset</th>
                     <th className="text-left py-3 px-4 font-medium text-muted-foreground">Price & 24h</th>
-                    <th className="text-center py-3 px-4 font-medium text-muted-foreground">AI Signal</th>
+                    <th className="text-center py-3 px-4 font-medium text-muted-foreground">Sinyal Analisis</th>
                     <th className="text-center py-3 px-4 font-medium text-muted-foreground">Score</th>
                     <th className="text-right py-3 px-4 font-medium text-muted-foreground">RSI (14)</th>
                     <th className="text-right py-3 px-4 font-medium text-muted-foreground">MACD</th>

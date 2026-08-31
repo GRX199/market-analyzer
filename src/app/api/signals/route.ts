@@ -7,7 +7,12 @@ import { calculateTechnicalScore } from '@/lib/analysis/technical';
 import { analyzeForexFundamentals, analyzeStockFundamentals, analyzeCryptoFundamentals } from '@/lib/analysis/fundamental';
 import { analyzeSentiment } from '@/lib/analysis/sentiment';
 import { calculateFinalScore } from '@/lib/analysis/scoring';
-import { MarketType } from '@/types/market';
+import {
+  parseMarketType,
+  parseSignalMode,
+  parseSupportedSymbol,
+  parseTimeframe,
+} from '@/lib/market-input';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -15,11 +20,27 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const symbol = searchParams.get('symbol');
+    const rawSymbol = searchParams.get('symbol');
+    const symbol = rawSymbol === null ? null : parseSupportedSymbol(rawSymbol);
     const marketParam = searchParams.get('market');
-    const timeframe = searchParams.get('timeframe') || '1D';
-    const mode = searchParams.get('mode') || 'combined';
-    const targetMarket = (marketParam === 'all' || !marketParam) ? undefined : marketParam as MarketType;
+    const timeframe = parseTimeframe(searchParams.get('timeframe'));
+    const mode = parseSignalMode(searchParams.get('mode'));
+    const parsedMarket = parseMarketType(marketParam, {
+      allowAll: true,
+      optional: true,
+    });
+    if (
+      (rawSymbol !== null && symbol === null)
+      || timeframe === null
+      || mode === null
+      || parsedMarket === null
+    ) {
+      return NextResponse.json(
+        { success: false, error: 'Unsupported symbol, market, timeframe, or mode' },
+        { status: 400 },
+      );
+    }
+    const targetMarket = parsedMarket === 'all' ? undefined : parsedMarket;
 
     if (symbol) {
       // Analyze single symbol

@@ -10,6 +10,22 @@ import { Label } from '@/components/ui/label';
 import { AlertCircle, Lock } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
+function getLoginErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : '';
+  const normalized = message.toLowerCase();
+
+  if (normalized.includes('invalid login credentials')) {
+    return 'Email atau password tidak cocok.';
+  }
+  if (normalized.includes('email not confirmed')) {
+    return 'Email belum dikonfirmasi.';
+  }
+  if (normalized.includes('rate limit') || normalized.includes('too many')) {
+    return 'Terlalu banyak percobaan. Tunggu sebentar lalu coba lagi.';
+  }
+  return 'Login gagal. Periksa koneksi dan kredensial Anda.';
+}
+
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -31,10 +47,10 @@ export default function LoginPage() {
       if (error) throw error;
       
       // Successfully logged in
-      router.push('/dashboard');
+      router.replace('/dashboard');
       router.refresh();
-    } catch (err: any) {
-      setError(err.message || 'Failed to login');
+    } catch (err: unknown) {
+      setError(getLoginErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -48,18 +64,18 @@ export default function LoginPage() {
             <Lock className="w-8 h-8" />
           </div>
           <h1 className="text-3xl font-bold tracking-tight">Market Analyzer</h1>
-          <p className="text-muted-foreground mt-2">Sign in to your private trading desk</p>
+          <p className="text-muted-foreground mt-2">Masuk ke ruang kerja trading privat Anda</p>
         </div>
 
         <Card className="border-border/50 shadow-2xl bg-card/50 backdrop-blur-xl">
           <form onSubmit={handleLogin}>
             <CardHeader>
-              <CardTitle>Secure Access</CardTitle>
-              <CardDescription>Enter your credentials to continue.</CardDescription>
+              <CardTitle>Akses Aman</CardTitle>
+              <CardDescription>Masukkan akun Supabase yang sudah terdaftar.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {error && (
-                <Alert variant="destructive" className="py-2">
+                <Alert id="login-error" variant="destructive" className="py-2" role="alert" aria-live="assertive">
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription className="text-xs ml-2">{error}</AlertDescription>
                 </Alert>
@@ -70,9 +86,13 @@ export default function LoginPage() {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="admin@example.com"
+                  placeholder="nama@contoh.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  aria-describedby={error ? 'login-error' : undefined}
                   required
                 />
               </div>
@@ -83,20 +103,22 @@ export default function LoginPage() {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                  aria-describedby={error ? 'login-error' : undefined}
                   required
                 />
               </div>
             </CardContent>
             <CardFooter>
               <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? 'Authenticating...' : 'Sign In'}
+                {loading ? 'Memverifikasi…' : 'Masuk'}
               </Button>
             </CardFooter>
           </form>
         </Card>
         
         <p className="text-center text-xs text-muted-foreground mt-8">
-          Secured by Supabase Row Level Security (RLS)
+          Sesi diverifikasi oleh Supabase dan dilindungi Row Level Security (RLS)
         </p>
       </div>
     </div>

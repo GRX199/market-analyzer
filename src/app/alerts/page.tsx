@@ -17,9 +17,17 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { ALL_SYMBOLS } from '@/lib/constants';
 import { Send, BellRing, Info, Check, ChevronsUpDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
+import {
+  validateAlertDraft,
+  type AlertTargetSignal,
+  type AlertTimeframe,
+  type CreatableAlertType,
+} from '@/lib/alerts/draft';
 
 export default function AlertsPage() {
   const { alerts, addAlert, removeAlert, toggleAlert, telegramChatId, setTelegramChatId } = useUserStore();
+  const authenticatedUserId = useUserStore((state) => state.authenticatedUserId);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [tempChatId, setTempChatId] = useState(telegramChatId || '');
   const [notificationStatus, setNotificationStatus] = useState<string>(
@@ -45,7 +53,7 @@ export default function AlertsPage() {
   const [newAlert, setNewAlert] = useState({
     symbol: '',
     marketType: 'crypto' as 'crypto' | 'stocks' | 'forex',
-    alertType: 'price_above' as 'price_above' | 'price_below' | 'signal_change',
+    alertType: 'price_above' as CreatableAlertType,
     targetValue: '',
     targetSignal: 'strong_buy',
     timeframe: '1H',
@@ -53,17 +61,26 @@ export default function AlertsPage() {
   const [openSymbol, setOpenSymbol] = useState(false);
 
   const handleCreateAlert = () => {
-    if (!newAlert.symbol || !newAlert.targetValue) return;
+    if (!authenticatedUserId) {
+      toast.error('Login diperlukan untuk membuat alert.');
+      return;
+    }
+    const validation = validateAlertDraft(newAlert);
+    if (!validation.valid) {
+      toast.error(validation.error);
+      return;
+    }
+    const validated = validation.value;
 
     addAlert({
-      id: Date.now().toString(),
-      userId: 'local-user',
-      symbol: newAlert.symbol.toUpperCase(),
-      marketType: newAlert.marketType,
-      alertType: newAlert.alertType,
-      targetValue: newAlert.alertType === 'signal_change' ? null : parseFloat(newAlert.targetValue),
-      targetSignal: newAlert.alertType === 'signal_change' ? newAlert.targetSignal : null,
-      timeframe: newAlert.alertType === 'signal_change' ? newAlert.timeframe : null,
+      id: globalThis.crypto.randomUUID(),
+      userId: authenticatedUserId,
+      symbol: validated.symbol,
+      marketType: validated.marketType,
+      alertType: validated.alertType,
+      targetValue: validated.targetValue,
+      targetSignal: validated.targetSignal,
+      timeframe: validated.timeframe,
       isActive: true,
       isTriggered: false,
       triggeredAt: null,
@@ -106,24 +123,26 @@ export default function AlertsPage() {
                       aria-expanded={openSymbol}
                       className="w-full justify-between font-normal"
                     >
-                      {newAlert.symbol || "Select or type symbol..."}
+                      {newAlert.symbol || "Select a supported symbol..."}
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-[300px] p-0" align="start">
                     <Command>
-                      <CommandInput placeholder="Search asset (e.g., BTC/USDT)..." onValueChange={(val) => setNewAlert({...newAlert, symbol: val.toUpperCase()})}/>
+                      <CommandInput placeholder="Search asset (e.g., BTC/USDT)..." />
                       <CommandList>
-                        <CommandEmpty>
-                          Type custom symbol manually...
-                        </CommandEmpty>
+                        <CommandEmpty>No supported asset found.</CommandEmpty>
                         <CommandGroup>
                           {ALL_SYMBOLS.map((asset) => (
                             <CommandItem
                               key={asset.symbol}
                               value={asset.symbol}
-                              onSelect={(currentValue) => {
-                                setNewAlert({...newAlert, symbol: currentValue.toUpperCase(), marketType: asset.marketType as any});
+                              onSelect={() => {
+                                setNewAlert({
+                                  ...newAlert,
+                                  symbol: asset.symbol,
+                                  marketType: asset.marketType,
+                                });
                                 setOpenSymbol(false);
                               }}
                             >
@@ -144,7 +163,7 @@ export default function AlertsPage() {
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Market Type</label>
-                <Select value={newAlert.marketType} onValueChange={(v: any) => setNewAlert({...newAlert, marketType: v})}>
+                <Select value={newAlert.marketType} disabled>
                   <SelectTrigger>
                     <SelectValue placeholder="Select market" />
                   </SelectTrigger>
@@ -157,7 +176,16 @@ export default function AlertsPage() {
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Condition</label>
-                <Select value={newAlert.alertType} onValueChange={(v: any) => setNewAlert({...newAlert, alertType: v})}>
+                <Select
+                  value={newAlert.alertType}
+                  onValueChange={(value) => {
+                    if (!value) return;
+                    setNewAlert({
+                      ...newAlert,
+                      alertType: value as CreatableAlertType,
+                    });
+                  }}
+                >
                   <SelectTrigger><SelectValue placeholder="Select condition" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="price_above">Price goes above</SelectItem>
@@ -171,7 +199,16 @@ export default function AlertsPage() {
                 <>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Timeframe</label>
-                    <Select value={newAlert.timeframe} onValueChange={(v: any) => setNewAlert({...newAlert, timeframe: v})}>
+                    <Select
+                      value={newAlert.timeframe}
+                      onValueChange={(value) => {
+                        if (!value) return;
+                        setNewAlert({
+                          ...newAlert,
+                          timeframe: value as AlertTimeframe,
+                        });
+                      }}
+                    >
                       <SelectTrigger><SelectValue placeholder="Select timeframe" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="15m">15 Minutes</SelectItem>
@@ -183,7 +220,16 @@ export default function AlertsPage() {
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Target Signal</label>
-                    <Select value={newAlert.targetSignal} onValueChange={(v: any) => setNewAlert({...newAlert, targetSignal: v})}>
+                    <Select
+                      value={newAlert.targetSignal}
+                      onValueChange={(value) => {
+                        if (!value) return;
+                        setNewAlert({
+                          ...newAlert,
+                          targetSignal: value as AlertTargetSignal,
+                        });
+                      }}
+                    >
                       <SelectTrigger><SelectValue placeholder="Select target signal" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="strong_buy">Strong Buy</SelectItem>
@@ -314,7 +360,7 @@ export default function AlertsPage() {
         <EmptyState
           icon={Bell}
           title="No alerts set"
-          description="You haven't set up any alerts. Create an alert to get notified when prices hit your targets or when AI signals change."
+          description="Belum ada alert. Buat aturan untuk menerima notifikasi saat harga mencapai target atau sinyal analisis berubah."
           action={
             <Button className="mt-4 gap-2" onClick={() => setIsDialogOpen(true)}>
               <Plus className="h-4 w-4" /> Create First Alert

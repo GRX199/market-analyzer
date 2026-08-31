@@ -127,8 +127,15 @@ export default function DashboardPage() {
     );
   }
 
-  const marketTrend = overview.bullishCount > overview.bearishCount ? 'Bullish' : 'Bearish';
-  const marketTrendColor = marketTrend === 'Bullish' ? 'text-green-500' : 'text-red-500';
+  const marketTrend = overview.bullishCount === overview.bearishCount
+    ? 'Neutral'
+    : overview.bullishCount > overview.bearishCount ? 'Bullish' : 'Bearish';
+  const marketTrendColor = marketTrend === 'Bullish'
+    ? 'text-green-500'
+    : marketTrend === 'Bearish' ? 'text-red-500' : 'text-yellow-500';
+  const marketPercentage = (count: number) => overview.totalAssets > 0
+    ? Math.round((count / overview.totalAssets) * 100)
+    : 0;
 
   return (
     <DashboardLayout>
@@ -138,7 +145,7 @@ export default function DashboardPage() {
           {lastRefresh && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <span className="w-2 h-2 rounded-full bg-green-500 live-pulse-dot" />
-              <span className="hidden sm:inline">Live</span>
+              <span className="hidden sm:inline">Refresh 30 dtk</span>
               <span className="hidden sm:inline">·</span>
               <span>{lastRefresh.toLocaleTimeString()}</span>
             </div>
@@ -152,7 +159,9 @@ export default function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Overall Trend</CardTitle>
-            <TrendingUp className={`h-4 w-4 ${marketTrendColor}`} />
+            {marketTrend === 'Neutral'
+              ? <Activity className={`h-4 w-4 ${marketTrendColor}`} />
+              : <TrendingUp className={`h-4 w-4 ${marketTrendColor}`} />}
           </CardHeader>
           <CardContent>
             <div className={`text-2xl font-bold ${marketTrendColor}`}>{marketTrend}</div>
@@ -170,7 +179,7 @@ export default function DashboardPage() {
           <CardContent>
             <div className="text-2xl font-bold text-green-500">{overview.bullishCount}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              {Math.round((overview.bullishCount / overview.totalAssets) * 100)}% of market
+              {marketPercentage(overview.bullishCount)}% of market
             </p>
           </CardContent>
         </Card>
@@ -183,7 +192,7 @@ export default function DashboardPage() {
           <CardContent>
             <div className="text-2xl font-bold text-red-500">{overview.bearishCount}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              {Math.round((overview.bearishCount / overview.totalAssets) * 100)}% of market
+              {marketPercentage(overview.bearishCount)}% of market
             </p>
           </CardContent>
         </Card>
@@ -196,7 +205,7 @@ export default function DashboardPage() {
           <CardContent>
             <div className="text-2xl font-bold text-yellow-500">{overview.sidewaysCount}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              {Math.round((overview.sidewaysCount / overview.totalAssets) * 100)}% of market
+              {marketPercentage(overview.sidewaysCount)}% of market
             </p>
           </CardContent>
         </Card>
@@ -300,8 +309,8 @@ export default function DashboardPage() {
           <p className="text-muted-foreground text-sm max-w-3xl">
             <strong>Fitur Signal</strong> adalah fitur otomatis yang menganalisis aset-aset paling populer 
             menggunakan algoritma Analisis Teknikal (RSI, MACD, Moving Averages). Fitur ini akan mendeteksi apabila suatu aset 
-            sedang berada dalam kondisi <em>Oversold</em> (siap untuk dibeli / <strong>Buy</strong>) atau 
-            <em>Overbought</em> (siap untuk dijual / <strong>Sell</strong>).
+            sedang berada dalam kondisi <em>Oversold</em> atau <em>Overbought</em> sebagai kandidat
+            peninjauan. Kondisi tersebut bukan instruksi transaksi dan tetap dapat berlanjut melawan posisi.
           </p>
         </div>
 

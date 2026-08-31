@@ -1,28 +1,41 @@
 import type { NextConfig } from "next";
 import { execSync } from "child_process";
 
-let commitHash = 'unknown';
+let commitHash = process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) || 'unknown';
 try {
-  commitHash = execSync('git rev-parse --short HEAD', { stdio: 'pipe' }).toString().trim();
-} catch (e) {
-  // Fallback if git is not available
+  if (commitHash === 'unknown') {
+    commitHash = execSync('git rev-parse --short HEAD', { stdio: 'pipe' }).toString().trim();
+  }
+} catch {
+  // Standalone and Docker builds may not include the Git directory.
 }
 
 const nextConfig: NextConfig = {
+  allowedDevOrigins: ['127.0.0.1'],
+  poweredByHeader: false,
   env: {
     NEXT_PUBLIC_GIT_COMMIT: commitHash,
   },
-  output: 'standalone', // Required for Docker deployments
+  output: 'standalone',
   serverExternalPackages: ['yahoo-finance2'],
-  typescript: {
-    // !! WARN !!
-    // Dangerously allow production builds to successfully complete even if
-    // your project has type errors.
-    // !! WARN !!
-    ignoreBuildErrors: true,
-  },
   turbopack: {
     root: process.cwd(),
+  },
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          {
+            key: 'Permissions-Policy',
+            value: 'camera=(), microphone=(), geolocation=(), payment=()',
+          },
+        ],
+      },
+    ];
   },
 };
 

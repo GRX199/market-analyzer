@@ -35,6 +35,30 @@ let forexPollingInterval: NodeJS.Timeout | null = null;
 
 let isCryptoConnecting = false;
 let isStocksConnecting = false;
+const stockSubscriptionCounts = new Map<string, number>();
+const forexSubscriptionCounts = new Map<string, number>();
+
+function addSubscription(
+  subscriptions: Map<string, number>,
+  symbol: string,
+): boolean {
+  const nextCount = (subscriptions.get(symbol) ?? 0) + 1;
+  subscriptions.set(symbol, nextCount);
+  return nextCount === 1;
+}
+
+function removeSubscription(
+  subscriptions: Map<string, number>,
+  symbol: string,
+): boolean {
+  const currentCount = subscriptions.get(symbol) ?? 0;
+  if (currentCount <= 1) {
+    subscriptions.delete(symbol);
+    return currentCount === 1;
+  }
+  subscriptions.set(symbol, currentCount - 1);
+  return false;
+}
 
 export const useRealtimeStore = create<RealtimeState>((set, get) => ({
   prices: {},
@@ -50,11 +74,13 @@ export const useRealtimeStore = create<RealtimeState>((set, get) => ({
     
     const { activeSymbols, isStocksConnected } = get();
     if (type === 'stocks') {
+      if (!addSubscription(stockSubscriptionCounts, symbol)) return;
       activeSymbols.stocks.add(symbol);
       if (isStocksConnected && stocksWs?.readyState === WebSocket.OPEN) {
         stocksWs.send(JSON.stringify({ type: 'subscribe', symbol }));
       }
     } else if (type === 'forex') {
+      if (!addSubscription(forexSubscriptionCounts, symbol)) return;
       activeSymbols.forex.add(symbol);
       // Poller will automatically pick it up
     }
@@ -65,11 +91,13 @@ export const useRealtimeStore = create<RealtimeState>((set, get) => ({
     
     const { activeSymbols, isStocksConnected } = get();
     if (type === 'stocks') {
+      if (!removeSubscription(stockSubscriptionCounts, symbol)) return;
       activeSymbols.stocks.delete(symbol);
       if (isStocksConnected && stocksWs?.readyState === WebSocket.OPEN) {
         stocksWs.send(JSON.stringify({ type: 'unsubscribe', symbol }));
       }
     } else if (type === 'forex') {
+      if (!removeSubscription(forexSubscriptionCounts, symbol)) return;
       activeSymbols.forex.delete(symbol);
     }
   },
@@ -239,8 +267,30 @@ export const useRealtimeStore = create<RealtimeState>((set, get) => ({
     if (forexPollingInterval) clearInterval(forexPollingInterval);
     forexPollingInterval = null;
     
-    if (cryptoWs) { cryptoWs.close(); cryptoWs = null; }
-    if (stocksWs) { stocksWs.close(); stocksWs = null; }
+    if (cryptoWs) {
+      cryptoWs.onopen = null;
+      cryptoWs.onmessage = null;
+      cryptoWs.onerror = null;
+      cryptoWs.onclose = null;
+      cryptoWs.close();
+      cryptoWs = null;
+    }
+    if (stocksWs) {
+      stocksWs.onopen = null;
+      stocksWs.onmessage = null;
+      stocksWs.onerror = null;
+      stocksWs.onclose = null;
+      stocksWs.close();
+      stocksWs = null;
+    }
+    isCryptoConnecting = false;
+    isStocksConnecting = false;
+
+    const { activeSymbols } = get();
+    activeSymbols.stocks.clear();
+    activeSymbols.forex.clear();
+    stockSubscriptionCounts.clear();
+    forexSubscriptionCounts.clear();
     
     set({ isCryptoConnected: false, isStocksConnected: false });
   },

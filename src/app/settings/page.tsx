@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -12,31 +11,79 @@ import { useUserStore } from '@/stores/user-store';
 import { MarketSelector } from '@/components/market/market-selector';
 import { Moon, Sun, Monitor, Bell, Shield, User, Save, CheckCircle, Download, Upload, Database } from 'lucide-react';
 import { DisclaimerBanner } from '@/components/common/disclaimer-banner';
+import { cn } from '@/lib/utils';
+import { supabase } from '@/lib/supabase/client';
+import { toast } from 'sonner';
 
 export default function SettingsPage() {
-  const { theme, toggleTheme, user, setUser } = useUserStore();
+  const {
+    theme,
+    toggleTheme,
+    user,
+    setUser,
+    isAuthenticated,
+    disclaimerAccepted,
+    telegramChatId,
+  } = useUserStore();
   
   // Profile form state
-  const [displayName, setDisplayName] = useState(user?.displayName || 'Admin');
-  const [email, setEmail] = useState(user?.email || 'admin@marketanalyzer.app');
+  const [displayName, setDisplayName] = useState(
+    user?.displayName || user?.email?.split('@')[0] || '',
+  );
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const email = user?.email ?? '';
 
-  const handleSaveProfile = () => {
-    setUser({
-      id: user?.id || 'local-user-1',
-      email,
-      username: displayName.toLowerCase().replace(/\s/g, '_'),
-      displayName,
-      avatarUrl: null,
-      preferredMarket: user?.preferredMarket || 'crypto',
-      theme: theme,
-      disclaimerAccepted: true,
-      disclaimerAcceptedAt: user?.disclaimerAcceptedAt || new Date().toISOString(),
-      createdAt: user?.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  const handleSaveProfile = async () => {
+    const normalizedDisplayName = displayName.trim().replace(/\s+/g, ' ');
+    if (!user || !isAuthenticated) {
+      toast.error('Sesi belum terverifikasi. Muat ulang lalu coba lagi.');
+      return;
+    }
+    if (normalizedDisplayName.length < 2 || normalizedDisplayName.length > 80) {
+      toast.error('Nama tampilan harus berisi 2-80 karakter.');
+      return;
+    }
+
+    const username = normalizedDisplayName
+      .toLowerCase()
+      .normalize('NFKD')
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 40) || null;
+
+    setSaving(true);
+    try {
+      const { data, error } = await supabase.auth.updateUser({
+        data: {
+          display_name: normalizedDisplayName,
+          username,
+        },
+      });
+      if (error) throw error;
+      if (data.user?.id !== user.id) {
+        throw new Error('Identitas sesi berubah saat profil disimpan.');
+      }
+
+      const updatedAt = new Date().toISOString();
+      setDisplayName(normalizedDisplayName);
+      setUser({
+        ...user,
+        username,
+        displayName: normalizedDisplayName,
+        theme,
+        updatedAt,
+      });
+      setSaved(true);
+      toast.success('Profil tersimpan di akun Supabase.');
+      setTimeout(() => setSaved(false), 2000);
+    } catch (error) {
+      toast.error('Profil gagal disimpan.', {
+        description: error instanceof Error ? error.message : 'Kesalahan tidak diketahui.',
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const initials = displayName
@@ -44,8 +91,21 @@ export default function SettingsPage() {
     : 'U';
 
   const handleExportData = () => {
-    const data = localStorage.getItem('user-store');
-    if (!data) return;
+    const state = useUserStore.getState();
+    if (!state.isAuthenticated || !state.authenticatedUserId) {
+      toast.error('Sesi harus terverifikasi sebelum membuat backup.');
+      return;
+    }
+    const data = JSON.stringify({
+      version: 1,
+      ownerUserId: state.authenticatedUserId,
+      exportedAt: new Date().toISOString(),
+      state: {
+        theme: state.theme,
+        sidebarCollapsed: state.sidebarCollapsed,
+        portfolioHistory: state.portfolioHistory,
+      },
+    }, null, 2);
     const blob = new Blob([data], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -65,17 +125,16 @@ export default function SettingsPage() {
     reader.onload = (event) => {
       try {
         const content = event.target?.result as string;
-        const parsed = JSON.parse(content);
-        if (parsed && parsed.state) {
-          const { importData } = useUserStore.getState();
-          importData(parsed.state);
-          alert('Data imported successfully! The page will now reload.');
-          window.location.reload();
-        } else {
-          alert('Invalid backup file format.');
-        }
-      } catch (err) {
-        alert('Failed to parse backup file.');
+        const parsed: unknown = JSON.parse(content);
+        const { importData } = useUserStore.getState();
+        importData(parsed);
+        toast.success('Preferensi dan histori snapshot lokal berhasil dipulihkan.');
+      } catch (error) {
+        toast.error('Backup tidak dapat diimpor.', {
+          description: error instanceof Error ? error.message : 'Format JSON tidak valid.',
+        });
+      } finally {
+        e.target.value = '';
       }
     };
     reader.readAsText(file);
@@ -96,7 +155,7 @@ export default function SettingsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><User className="h-5 w-5" /> Account Profile</CardTitle>
-              <CardDescription>Your personal information. Data is stored locally in your browser.</CardDescription>
+              <CardDescription>Nama profil disimpan pada metadata Supabase Auth; email mengikuti akun terverifikasi.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               {/* Avatar & Name */}
@@ -109,7 +168,9 @@ export default function SettingsPage() {
                 <div className="flex-1 space-y-1">
                   <p className="text-lg font-semibold">{displayName || 'User'}</p>
                   <p className="text-sm text-muted-foreground">{email}</p>
-                  <p className="text-xs text-muted-foreground">Member since {new Date(user?.createdAt || "2026-01-01").toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                  {user?.createdAt && (
+                    <p className="text-xs text-muted-foreground">Member since {new Date(user.createdAt).toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                  )}
                 </div>
               </div>
 
@@ -129,18 +190,24 @@ export default function SettingsPage() {
                     id="email"
                     type="email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="your@email.com"
+                    readOnly
+                    aria-readonly="true"
+                    placeholder="Email akun belum tersedia"
                   />
+                  <p className="text-xs text-muted-foreground">Email dikelola oleh penyedia autentikasi dan tidak diubah dari halaman ini.</p>
                 </div>
-                <Button onClick={handleSaveProfile} className="gap-2">
+                <Button
+                  onClick={() => void handleSaveProfile()}
+                  className="gap-2"
+                  disabled={saving || !user || !isAuthenticated}
+                >
                   {saved ? (
                     <>
                       <CheckCircle className="h-4 w-4" /> Saved!
                     </>
                   ) : (
                     <>
-                      <Save className="h-4 w-4" /> Save Profile
+                      <Save className="h-4 w-4" /> {saving ? 'Saving…' : 'Save Profile'}
                     </>
                   )}
                 </Button>
@@ -184,29 +251,29 @@ export default function SettingsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><Bell className="h-5 w-5" /> Notifications</CardTitle>
-              <CardDescription>Configure how you receive alerts and updates.</CardDescription>
+              <CardDescription>Delivery follows each active alert and the server-side Telegram allow-list.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
-                  <Label>Price Alerts</Label>
-                  <p className="text-sm text-muted-foreground">Receive push notifications when price targets hit.</p>
+                  <Label>Browser alerts</Label>
+                  <p className="text-sm text-muted-foreground">Evaluated while this application is open. Activate or disable each rule on the Alerts page.</p>
                 </div>
-                <Switch defaultChecked />
+                <span className="rounded-full bg-blue-500/10 px-3 py-1 text-xs font-medium text-blue-500">Per alert</span>
               </div>
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
-                  <Label>Signal Changes</Label>
-                  <p className="text-sm text-muted-foreground">Get notified when an AI signal changes (e.g. Hold to Buy).</p>
+                  <Label>Telegram delivery</Label>
+                  <p className="text-sm text-muted-foreground">Requires a saved Chat ID plus matching server allow-lists. Missing configuration leaves scheduled alerts active.</p>
                 </div>
-                <Switch defaultChecked />
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="space-y-1">
-                  <Label>Email Digest</Label>
-                  <p className="text-sm text-muted-foreground">Receive a daily summary of market conditions.</p>
-                </div>
-                <Switch />
+                <span className={cn(
+                  'rounded-full px-3 py-1 text-xs font-medium',
+                  telegramChatId
+                    ? 'bg-green-500/10 text-green-500'
+                    : 'bg-amber-500/10 text-amber-500',
+                )}>
+                  {telegramChatId ? 'Chat ID saved' : 'Not configured'}
+                </span>
               </div>
             </CardContent>
           </Card>
@@ -215,13 +282,13 @@ export default function SettingsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><Database className="h-5 w-5" /> Data Management</CardTitle>
-              <CardDescription>Export or import your locally stored data (portfolio, journal, watchlist).</CardDescription>
+              <CardDescription>Backup lokal hanya mencakup preferensi dan histori snapshot portofolio untuk akun yang sama. Data utama tetap berada di Supabase.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-medium">Export Backup</p>
-                  <p className="text-sm text-muted-foreground">Download a JSON file containing all your data.</p>
+                  <p className="text-sm text-muted-foreground">Download preferensi dan maksimal 90 snapshot portofolio lokal.</p>
                 </div>
                 <Button onClick={handleExportData} variant="outline" className="gap-2">
                   <Download className="w-4 h-4" /> Export JSON
@@ -230,7 +297,7 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between border-t pt-4">
                 <div>
                   <p className="font-medium">Import Backup</p>
-                  <p className="text-sm text-muted-foreground text-red-500/80">Warning: This will overwrite your current data.</p>
+                  <p className="text-sm text-muted-foreground text-amber-500/80">Hanya backup dengan owner UUID akun aktif yang diterima.</p>
                 </div>
                 <div>
                   <input
@@ -254,20 +321,31 @@ export default function SettingsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><Shield className="h-5 w-5" /> Security & Legal</CardTitle>
-              <CardDescription>Authentication is managed via Basic Auth in the proxy middleware.</CardDescription>
+              <CardDescription>Authentication uses Supabase Auth sessions and database Row Level Security.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-medium">Authentication</p>
-                  <p className="text-sm text-muted-foreground">Protected via Basic Auth (configured in environment variables)</p>
+                  <p className="text-sm text-muted-foreground">Supabase session verified by the Next.js proxy and server routes</p>
                 </div>
-                <span className="text-xs font-medium text-green-500 bg-green-500/10 px-3 py-1 rounded-full">Active</span>
+                <span className={cn(
+                  'rounded-full px-3 py-1 text-xs font-medium',
+                  isAuthenticated
+                    ? 'bg-green-500/10 text-green-500'
+                    : 'bg-amber-500/10 text-amber-500',
+                )}>
+                  {isAuthenticated ? 'Verified' : 'Not verified'}
+                </span>
               </div>
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-medium">Risk Disclaimer</p>
-                  <p className="text-sm text-muted-foreground">Accepted on {new Date(user?.disclaimerAcceptedAt || "2026-01-01").toLocaleDateString()}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {disclaimerAccepted && user?.disclaimerAcceptedAt
+                      ? `Accepted on ${new Date(user.disclaimerAcceptedAt).toLocaleDateString('id-ID')}`
+                      : 'Not accepted for this account'}
+                  </p>
                 </div>
                 <a href="/disclaimer">
                   <Button variant="outline" size="sm">View Document</Button>

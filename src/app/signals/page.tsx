@@ -60,7 +60,7 @@ export default function SignalScannerPage() {
             Live Market Scanner
           </h1>
           <p className="text-muted-foreground mt-2">
-            Our AI continuously scans {selectedMarket || 'all'} markets on the <strong>{selectedTimeframe}</strong> timeframe to find high-probability entry opportunities based on technical confluence.
+            Mesin scoring memindai pasar {selectedMarket || 'all'} pada timeframe <strong>{selectedTimeframe}</strong> untuk menampilkan kandidat yang memenuhi ambang indikator. Hasilnya perlu diverifikasi dan bukan prediksi kepastian profit.
           </p>
           
           <div className="mt-4 md:mt-6 flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-3 md:gap-4">
@@ -91,9 +91,9 @@ export default function SignalScannerPage() {
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground bg-card px-4 py-2 rounded-full border shadow-sm self-start sm:self-auto mt-4 sm:mt-0">
-          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-          Scanner Active
+        <div className="flex items-center gap-2 text-sm text-muted-foreground bg-card px-4 py-2 rounded-full border shadow-sm self-start sm:self-auto mt-4 sm:mt-0" role="status">
+          <div className={`w-2 h-2 rounded-full ${error ? 'bg-red-500' : loading ? 'bg-amber-500 animate-pulse' : 'bg-green-500'}`} />
+          {error ? 'Scanner bermasalah' : loading ? 'Memindai…' : 'Pemindaian selesai'}
         </div>
       </div>
 
@@ -251,7 +251,7 @@ export default function SignalScannerPage() {
           </div>
           <h3 className="text-2xl font-bold mb-2">No Active Signals</h3>
           <p className="text-muted-foreground text-lg mb-6">
-            The scanner didn&apos;t find any high-probability entry opportunities meeting our strict confluence criteria at this moment.
+            Belum ada kandidat yang memenuhi ambang confluence pada pemindaian saat ini.
           </p>
           <div className="px-6 py-3 rounded-xl bg-background border text-sm font-medium">
             Waiting for next market movement...

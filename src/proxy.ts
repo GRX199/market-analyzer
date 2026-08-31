@@ -1,7 +1,25 @@
-import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 export async function proxy(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
+  const isWorkerRoute = pathname === '/api/trades/claim'
+    || (request.method === 'PATCH' && /^\/api\/trades\/[^/]+$/.test(pathname));
+
+  // Machine-to-machine routes authenticate their bearer secret in the route
+  // handler. Avoid coupling them to Supabase browser-session availability.
+  if (
+    pathname.startsWith('/api/cron')
+    || pathname.startsWith('/_next')
+    || isWorkerRoute
+  ) {
+    return NextResponse.next({
+      request: {
+        headers: request.headers,
+      },
+    });
+  }
+
   let response = NextResponse.next({
     request: {
       headers: request.headers,
@@ -13,41 +31,20 @@ export async function proxy(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name: string) {
-          return request.cookies.get(name)?.value;
+        getAll() {
+          return request.cookies.getAll();
         },
-        set(name: string, value: string, options: CookieOptions) {
-          request.cookies.set({
-            name,
-            value,
-            ...options,
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) => {
+            request.cookies.set(name, value);
           });
           response = NextResponse.next({
             request: {
               headers: request.headers,
             },
           });
-          response.cookies.set({
-            name,
-            value,
-            ...options,
-          });
-        },
-        remove(name: string, options: CookieOptions) {
-          request.cookies.set({
-            name,
-            value: '',
-            ...options,
-          });
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
-          });
-          response.cookies.set({
-            name,
-            value: '',
-            ...options,
+          cookiesToSet.forEach(({ name, value, options }) => {
+            response.cookies.set(name, value, options);
           });
         },
       },
@@ -57,18 +54,8 @@ export async function proxy(request: NextRequest) {
   // Refresh session if expired - required for Server Components
   const { data: { user } } = await supabase.auth.getUser();
 
-  // Exclude cron API and other public assets from auth checking
-  if (
-    request.nextUrl.pathname.startsWith('/api/cron') ||
-    request.nextUrl.pathname.startsWith('/api/proxy') ||
-    request.nextUrl.pathname.startsWith('/_next') ||
-    request.nextUrl.pathname.includes('.')
-  ) {
-    return response;
-  }
-
   // Auth Guard
-  if (request.nextUrl.pathname.startsWith('/login')) {
+  if (pathname.startsWith('/login')) {
     // If logged in and trying to access login, redirect to dashboard
     if (user) {
       return NextResponse.redirect(new URL('/dashboard', request.url));

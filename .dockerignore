@@ -7,5 +7,5 @@ README.md
 .git
 .env
 .env.*
-!.env.production
+!.env.example
 .vercel

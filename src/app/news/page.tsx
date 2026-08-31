@@ -1,34 +1,45 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { NewsItem } from '@/types/analysis';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ExternalLink, Newspaper, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { ErrorState } from '@/components/common/error-state';
+import { EmptyState } from '@/components/common/empty-state';
 
 export default function NewsPage() {
   const [news, setNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadNews = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/news?limit=20');
+      const result: unknown = await response.json().catch(() => null);
+      const row = typeof result === 'object' && result !== null
+        ? result as Record<string, unknown>
+        : {};
+      if (!response.ok || row.success !== true || !Array.isArray(row.data)) {
+        throw new Error(typeof row.error === 'string' ? row.error : 'Respons berita tidak valid.');
+      }
+      setNews(row.data as NewsItem[]);
+    } catch (caughtError) {
+      console.error('Failed to fetch news', caughtError);
+      setError(caughtError instanceof Error ? caughtError.message : 'Berita gagal dimuat.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    async function loadNews() {
-      setLoading(true);
-      try {
-        const response = await fetch(`/api/news?limit=20`);
-        const result = await response.json();
-        if (result.success && result.data) {
-          setNews(result.data);
-        }
-      } catch (error) {
-        console.error('Failed to fetch news', error);
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadNews();
-  }, []);
+    const initialTimer = globalThis.setTimeout(() => void loadNews(), 0);
+    return () => globalThis.clearTimeout(initialTimer);
+  }, [loadNews]);
 
   const getSentimentColor = (sentiment: string) => {
     switch (sentiment) {
@@ -50,7 +61,7 @@ export default function NewsPage() {
     <DashboardLayout>
       <div className="mb-8">
         <h1 className="text-2xl md:text-3xl font-bold mb-2">Market News &amp; Sentiment</h1>
-        <p className="text-muted-foreground">Latest headlines and AI-analyzed sentiment impact.</p>
+        <p className="text-muted-foreground">Headline terbaru dari provider beserta simbol pasar terkait.</p>
       </div>
 
       {loading ? (
@@ -59,6 +70,18 @@ export default function NewsPage() {
             <div key={i} className="h-32 rounded-xl bg-muted animate-pulse" />
           ))}
         </div>
+      ) : error ? (
+        <ErrorState
+          title="Berita belum dapat dimuat"
+          message={error}
+          onRetry={() => void loadNews()}
+        />
+      ) : news.length === 0 ? (
+        <EmptyState
+          icon={Newspaper}
+          title="Belum ada berita"
+          description="Provider tidak mengembalikan headline saat ini. Coba kembali beberapa saat lagi."
+        />
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {news.map(item => (
@@ -90,10 +113,12 @@ export default function NewsPage() {
                         {item.relatedSymbols.slice(0, 2).map(sym => (
                           <Badge key={sym} variant="outline" className="text-[10px]">{sym}</Badge>
                         ))}
-                        <Badge variant="outline" className={`text-[10px] flex items-center capitalize ${getSentimentColor(item.sentiment)}`}>
-                          <SentimentIcon sentiment={item.sentiment} />
-                          {item.sentiment}
-                        </Badge>
+                        {item.sentiment !== 'neutral' && (
+                          <Badge variant="outline" className={`text-[10px] flex items-center capitalize ${getSentimentColor(item.sentiment)}`}>
+                            <SentimentIcon sentiment={item.sentiment} />
+                            {item.sentiment}
+                          </Badge>
+                        )}
                       </div>
                     </div>
                   </div>

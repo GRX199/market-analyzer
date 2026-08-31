@@ -17,11 +17,11 @@ import {
   ChevronRight,
   Wallet,
   FlaskConical,
-  CalendarDays,
   ScanSearch,
   BookOpen,
   Columns3,
   Flame,
+  ServerCog,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useUserStore } from '@/stores/user-store';
@@ -36,8 +36,8 @@ export const navItems = [
   { href: '/backtest', label: 'Backtesting', icon: FlaskConical },
   { href: '/compare', label: 'Multi-Chart', icon: Columns3 },
   { href: '/scalping', label: 'Hyper Scalping', icon: Flame },
+  { href: '/operations', label: 'Robot & Sistem', icon: ServerCog },
   { href: '/journal', label: 'Journal', icon: BookOpen },
-  { href: '/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/alerts', label: 'Alerts', icon: Bell },
   { href: '/news', label: 'News & Sentiment', icon: Newspaper },
   { href: '/settings', label: 'Settings', icon: Settings },

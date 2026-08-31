@@ -6,6 +6,7 @@ import { calculateTechnicalScore } from '@/lib/analysis/technical';
 import { analyzeForexFundamentals, analyzeStockFundamentals, analyzeCryptoFundamentals } from '@/lib/analysis/fundamental';
 import { analyzeSentiment } from '@/lib/analysis/sentiment';
 import { calculateFinalScore } from '@/lib/analysis/scoring';
+import { parseSupportedSymbol, parseTimeframe } from '@/lib/market-input';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -16,10 +17,16 @@ export async function GET(
 ) {
   try {
     const { searchParams } = new URL(request.url);
-    const timeframe = searchParams.get('timeframe') || '1D';
+    const timeframe = parseTimeframe(searchParams.get('timeframe'));
     
     const resolvedParams = await params;
-    const symbol = decodeURIComponent(resolvedParams.symbol).replace('-', '/');
+    const symbol = parseSupportedSymbol(resolvedParams.symbol);
+    if (!symbol || !timeframe) {
+      return NextResponse.json(
+        { success: false, error: 'Unsupported symbol or timeframe' },
+        { status: 400 },
+      );
+    }
       
     const marketType = getMarketTypeForSymbol(symbol);
     

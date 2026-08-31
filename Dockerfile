@@ -1,4 +1,4 @@
-FROM node:18-alpine AS base
+FROM node:22-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
@@ -16,10 +16,24 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# NEXT_PUBLIC values are frozen into the browser bundle at build time. Only
+# browser-safe values belong in these arguments; server secrets are supplied
+# when the container starts.
+ARG NEXT_PUBLIC_SUPABASE_URL
+ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
+ARG NEXT_PUBLIC_TRADING_ENABLED=false
+ARG NEXT_PUBLIC_FINNHUB_API_KEY
+ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
+ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
+ENV NEXT_PUBLIC_TRADING_ENABLED=$NEXT_PUBLIC_TRADING_ENABLED
+ENV NEXT_PUBLIC_FINNHUB_API_KEY=$NEXT_PUBLIC_FINNHUB_API_KEY
+
 # Next.js telemetry is disabled
 ENV NEXT_TELEMETRY_DISABLED 1
 
-RUN npm run build
+RUN test -n "$NEXT_PUBLIC_SUPABASE_URL" \
+    && test -n "$NEXT_PUBLIC_SUPABASE_ANON_KEY" \
+    && npm run build
 
 # Production image, copy all the files and run next
 FROM base AS runner
@@ -47,9 +61,7 @@ USER nextjs
 EXPOSE 3000
 
 ENV PORT 3000
-# set hostname to localhost
 ENV HOSTNAME "0.0.0.0"
 
 # server.js is created by next build from the standalone output
-# https://nextjs.org/docs/pages/api-reference/next-config-js/output
 CMD ["node", "server.js"]

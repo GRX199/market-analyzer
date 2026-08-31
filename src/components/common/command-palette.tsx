@@ -13,18 +13,6 @@ import {
 } from '@/components/ui/command';
 import { ALL_SYMBOLS } from '@/lib/constants';
 import { navItems } from '@/components/layout/sidebar';
-import { Search, TrendingUp, Globe, Star, History, Bell, Newspaper, Settings, AlertTriangle, LayoutDashboard } from 'lucide-react';
-
-const iconMap: Record<string, any> = {
-  '/dashboard': LayoutDashboard,
-  '/market': Globe,
-  '/watchlist': Star,
-  '/signals': History,
-  '/alerts': Bell,
-  '/news': Newspaper,
-  '/settings': Settings,
-  '/disclaimer': AlertTriangle,
-};
 
 const marketIcons: Record<string, string> = {
   forex: '💱',
@@ -73,7 +61,7 @@ export function CommandPalette() {
           {/* Navigation */}
           <CommandGroup heading="Pages">
             {navItems.map((item) => {
-              const Icon = iconMap[item.href] || Globe;
+              const Icon = item.icon;
               return (
                 <CommandItem
                   key={item.href}

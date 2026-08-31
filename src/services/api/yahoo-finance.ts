@@ -5,6 +5,40 @@ import { StockFundamentals, NewsItem } from '@/types/analysis';
 // Initialize the v3 instance and suppress the survey notice
 const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey', 'ripHistorical'] });
 
+function finiteNumber(value: unknown, fallback = 0): number {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function positiveNumber(value: unknown, fallback = 0): number {
+  const parsed = finiteNumber(value, fallback);
+  return parsed > 0 ? parsed : fallback;
+}
+
+function aggregateFourHourCandles(candles: OHLCV[]): OHLCV[] {
+  const bucketSizeSeconds = 4 * 60 * 60;
+  const buckets = new Map<number, OHLCV>();
+
+  for (const candle of candles) {
+    const timestamp = Number(candle.time);
+    if (!Number.isFinite(timestamp)) continue;
+    const bucket = Math.floor(timestamp / bucketSizeSeconds) * bucketSizeSeconds;
+    const existing = buckets.get(bucket);
+    if (!existing) {
+      buckets.set(bucket, { ...candle, time: bucket });
+      continue;
+    }
+    existing.high = Math.max(existing.high, candle.high);
+    existing.low = Math.min(existing.low, candle.low);
+    existing.close = candle.close;
+    existing.volume += candle.volume;
+  }
+
+  return Array.from(buckets.values()).sort(
+    (first, second) => Number(first.time) - Number(second.time),
+  );
+}
+
 // ==========================================
 // SYMBOL MAPPING UTILITIES
 // ==========================================
@@ -61,10 +95,19 @@ export async function fetchYahooBatchQuotes(
         };
       }
 
-      const price = quote.regularMarketPrice || 0;
-      const previousClose = quote.regularMarketPreviousClose || price;
-      const change = quote.regularMarketChange || (price - previousClose);
-      const changePercent = quote.regularMarketChangePercent || (previousClose ? (change / previousClose) * 100 : 0);
+      const price = positiveNumber(quote.regularMarketPrice);
+      const previousClose = positiveNumber(
+        quote.regularMarketPreviousClose,
+        price,
+      );
+      const change = finiteNumber(
+        quote.regularMarketChange,
+        price - previousClose,
+      );
+      const changePercent = finiteNumber(
+        quote.regularMarketChangePercent,
+        previousClose > 0 ? (change / previousClose) * 100 : 0,
+      );
 
       return {
         symbol: s.symbol,
@@ -74,10 +117,10 @@ export async function fetchYahooBatchQuotes(
         previousClose,
         change,
         changePercent,
-        high24h: quote.regularMarketDayHigh || price,
-        low24h: quote.regularMarketDayLow || price,
-        volume: quote.regularMarketVolume || 0,
-        marketCap: quote.marketCap || undefined,
+        high24h: positiveNumber(quote.regularMarketDayHigh, price),
+        low24h: positiveNumber(quote.regularMarketDayLow, price),
+        volume: Math.max(0, finiteNumber(quote.regularMarketVolume)),
+        marketCap: positiveNumber(quote.marketCap) || undefined,
         trend: change >= 0 ? 'bullish' : 'bearish',
         marketState: quote.marketState,
       };
@@ -104,10 +147,20 @@ export async function fetchYahooQuote(
     
     if (!quote) return null;
 
-    const price = quote.regularMarketPrice || 0;
-    const previousClose = quote.regularMarketPreviousClose || price;
-    const change = quote.regularMarketChange || (price - previousClose);
-    const changePercent = quote.regularMarketChangePercent || ((change / previousClose) * 100);
+    const price = positiveNumber(quote.regularMarketPrice);
+    if (price <= 0) return null;
+    const previousClose = positiveNumber(
+      quote.regularMarketPreviousClose,
+      price,
+    );
+    const change = finiteNumber(
+      quote.regularMarketChange,
+      price - previousClose,
+    );
+    const changePercent = finiteNumber(
+      quote.regularMarketChangePercent,
+      previousClose > 0 ? (change / previousClose) * 100 : 0,
+    );
 
     return {
       symbol,
@@ -117,10 +170,10 @@ export async function fetchYahooQuote(
       previousClose,
       change,
       changePercent,
-      high24h: quote.regularMarketDayHigh || price,
-      low24h: quote.regularMarketDayLow || price,
-      volume: quote.regularMarketVolume || 0,
-      marketCap: quote.marketCap || undefined,
+      high24h: positiveNumber(quote.regularMarketDayHigh, price),
+      low24h: positiveNumber(quote.regularMarketDayLow, price),
+      volume: Math.max(0, finiteNumber(quote.regularMarketVolume)),
+      marketCap: positiveNumber(quote.marketCap) || undefined,
       trend: change >= 0 ? 'bullish' : 'bearish',
       marketState: quote.marketState,
     };
@@ -168,18 +221,30 @@ export async function fetchYahooOHLCV(
 
     if (!chartResult || !chartResult.quotes) return [];
 
-    return chartResult.quotes.map((item: any) => {
-      // Return UNIX timestamp in seconds for exact intraday times
+    const candles = chartResult.quotes.flatMap((item): OHLCV[] => {
       const timeInSeconds = Math.floor(new Date(item.date).getTime() / 1000);
-      return {
+      const close = positiveNumber(item.close);
+      if (!Number.isFinite(timeInSeconds) || close <= 0) return [];
+
+      const open = positiveNumber(item.open, close);
+      const high = positiveNumber(item.high, Math.max(open, close));
+      const low = positiveNumber(item.low, Math.min(open, close));
+      if (high < Math.max(open, close) || low > Math.min(open, close)) {
+        return [];
+      }
+
+      return [{
         time: timeInSeconds,
-        open: item.open || item.close, // Fallback if open is null
-        high: item.high || item.close,
-        low: item.low || item.close,
-        close: item.close,
-        volume: item.volume || 0,
-      };
-    }).filter(c => c.close !== null && c.close !== undefined);
+        open,
+        high,
+        low,
+        close,
+        volume: Math.max(0, finiteNumber(item.volume)),
+      }];
+    });
+    return timeframe === '4H'
+      ? aggregateFourHourCandles(candles)
+      : candles;
   } catch (error) {
     console.error(`[Yahoo] Failed to fetch OHLCV for ${symbol}:`, error);
     return [];

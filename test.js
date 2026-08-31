@@ -1,6 +1,0 @@
-﻿fetch('https://www.google.com/finance/quote/EUR-USD')
-  .then(res => res.text())
-  .then(html => {
-    const match = html.match(/class="YMlKec fxKbKc">([^<]+)<\/div>/);
-    console.log('Price:', match ? match[1] : 'Not found');
-  });

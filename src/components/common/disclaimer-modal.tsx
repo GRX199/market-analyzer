@@ -7,7 +7,7 @@ import { useUserStore } from '@/stores/user-store';
 import { DISCLAIMER_TEXT } from '@/lib/constants';
 
 export function DisclaimerModal() {
-  const { disclaimerAccepted, acceptDisclaimer } = useUserStore();
+  const { disclaimerAccepted, authenticatedUserId, acceptDisclaimer } = useUserStore();
 
   if (disclaimerAccepted) return null;
 
@@ -32,7 +32,11 @@ export function DisclaimerModal() {
           </div>
         </div>
         <DialogFooter className="mt-4">
-          <Button onClick={acceptDisclaimer} className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
+          <Button
+            onClick={acceptDisclaimer}
+            disabled={!authenticatedUserId}
+            className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+          >
             I Understand and Accept
           </Button>
         </DialogFooter>

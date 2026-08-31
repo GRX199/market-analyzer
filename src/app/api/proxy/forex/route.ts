@@ -1,7 +1,38 @@
 import { NextResponse } from 'next/server';
+import { FOREX_SYMBOLS } from '@/lib/constants';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
+
+const ALLOWED_FOREX_SYMBOLS = new Set(
+  FOREX_SYMBOLS.map(({ symbol }) => symbol),
+);
+const MAX_SYMBOLS_PER_REQUEST = 20;
+
+function parseGoogleFinancePrice(value: string): number | null {
+  const normalized = value
+    .replace(/\u00a0/g, '')
+    .replace(/[^\d,.-]/g, '');
+  if (!normalized) return null;
+
+  const commaIndex = normalized.lastIndexOf(',');
+  const dotIndex = normalized.lastIndexOf('.');
+  let canonical = normalized;
+
+  if (commaIndex >= 0 && dotIndex >= 0) {
+    canonical = commaIndex > dotIndex
+      ? normalized.replace(/\./g, '').replace(',', '.')
+      : normalized.replace(/,/g, '');
+  } else if (commaIndex >= 0) {
+    const decimalDigits = normalized.length - commaIndex - 1;
+    canonical = decimalDigits === 3
+      ? normalized.replace(/,/g, '')
+      : normalized.replace(',', '.');
+  }
+
+  const price = Number(canonical);
+  return Number.isFinite(price) && price > 0 ? price : null;
+}
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -11,20 +42,31 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Missing symbols parameter' }, { status: 400 });
   }
 
-  // Parse requested symbols (e.g., "EUR/USD,GBP/USD")
-  const requestedSymbols = symbolsParam.split(',');
+  const requestedSymbols = Array.from(new Set(
+    symbolsParam
+      .split(',')
+      .map((symbol) => symbol.trim().toUpperCase())
+      .filter(Boolean),
+  ));
+  if (
+    requestedSymbols.length < 1
+    || requestedSymbols.length > MAX_SYMBOLS_PER_REQUEST
+    || requestedSymbols.some((symbol) => !ALLOWED_FOREX_SYMBOLS.has(symbol))
+  ) {
+    return NextResponse.json(
+      { error: `symbols must contain 1-${MAX_SYMBOLS_PER_REQUEST} supported forex pairs` },
+      { status: 400 },
+    );
+  }
 
   try {
     const parsedPrices: Record<string, number> = {};
 
-    // Fetch all sequentially or parallel (Google Finance is fast)
     await Promise.all(
       requestedSymbols.map(async (sym) => {
-        if (!sym.includes('/')) return;
-        
-        // Convert "EUR/USD" to "EUR-USD"
         const gfSymbol = sym.replace('/', '-');
-        const url = `https://www.google.com/finance/quote/${gfSymbol}`;
+        const url =
+          `https://www.google.com/finance/quote/${encodeURIComponent(gfSymbol)}?hl=en`;
         
         try {
           const response = await fetch(url, {
@@ -33,23 +75,21 @@ export async function GET(request: Request) {
               'Accept': 'text/html',
               'Cache-Control': 'no-cache, no-store, must-revalidate',
             },
-            cache: 'no-store'
+            cache: 'no-store',
+            signal: AbortSignal.timeout(8_000),
           });
 
           if (response.ok) {
             const html = await response.text();
-            // Regex to find the main price div in Google Finance
             const match = html.match(/class="YMlKec fxKbKc">([^<]+)<\/div>/);
             if (match && match[1]) {
-              // Parse "1,0823" or "1.0823"
-              const priceStr = match[1].replace(/,/g, '');
-              const price = parseFloat(priceStr);
-              if (!isNaN(price)) {
+              const price = parseGoogleFinancePrice(match[1]);
+              if (price !== null) {
                 parsedPrices[sym] = price;
               }
             }
           }
-        } catch (err) {
+        } catch {
           // Ignore individual fetch errors
         }
       })
@@ -57,8 +97,11 @@ export async function GET(request: Request) {
 
     return NextResponse.json(parsedPrices);
 
-  } catch (error: any) {
-    console.error('Forex Proxy Error:', error.message);
+  } catch (error: unknown) {
+    console.error(
+      'Forex Proxy Error:',
+      error instanceof Error ? error.message : 'unknown error',
+    );
     return NextResponse.json({ error: 'Failed to fetch forex data' }, { status: 500 });
   }
 }

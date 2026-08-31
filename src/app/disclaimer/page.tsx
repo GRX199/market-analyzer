@@ -36,7 +36,7 @@ export default function DisclaimerPage() {
 
             <h3>3. No Guarantees of Performance</h3>
             <p>
-              Past performance of any trading system or methodology is not necessarily indicative of future results. The AI algorithms and technical indicators used in this application rely on historical data and probabilistic models, which cannot account for sudden market shocks, news events, or unforeseen black swan events. 
+              Past performance of any trading system or methodology is not necessarily indicative of future results. The scoring models and technical indicators used in this application rely on historical data and probabilistic assumptions, which cannot account for sudden market shocks, news events, or unforeseen black swan events.
             </p>
 
             <h3>4. Independent Verification</h3>
