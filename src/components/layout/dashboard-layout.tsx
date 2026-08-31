@@ -2,6 +2,7 @@
 
 import { Sidebar } from './sidebar';
 import { Navbar } from './navbar';
+import { MobileBottomNav } from './mobile-bottom-nav';
 import { DisclaimerModal } from '@/components/common/disclaimer-modal';
 import { CommandPalette } from '@/components/common/command-palette';
 import { useUserStore } from '@/stores/user-store';
@@ -109,7 +110,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-background flex">
+    <div className="min-h-screen bg-transparent flex">
       <DisclaimerModal />
       <CommandPalette />
       <Sidebar />
@@ -120,9 +121,10 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
         )}
       >
         <Navbar />
-        <main className="flex-1 p-4 md:p-6 w-full max-w-full overflow-x-hidden">
-          {children}
+        <main className="flex-1 w-full max-w-full overflow-x-hidden p-4 pb-28 md:p-6">
+          <div className="mx-auto w-full max-w-[1600px]">{children}</div>
         </main>
+        <MobileBottomNav />
       </div>
     </div>
   );

@@ -139,6 +139,21 @@ test('browser alerts use the server-side atomic trigger instead of direct Telegr
   assert.doesNotMatch(mirrorAction, /syncAlertToSupabase\(updatedAlert\)/);
 });
 
+test('forex polling batches the full symbol set within the server limit', async () => {
+  const [forexRoute, realtimeStore] = await Promise.all([
+    source('src/app/api/proxy/forex/route.ts'),
+    source('src/stores/realtime-store.ts'),
+  ]);
+
+  assert.match(forexRoute, /MAX_SYMBOLS_PER_REQUEST = 20/);
+  assert.match(realtimeStore, /FOREX_REQUEST_BATCH_SIZE = 20/);
+  assert.match(realtimeStore, /symbols\.slice\(index, index \+ FOREX_REQUEST_BATCH_SIZE\)/);
+  assert.match(realtimeStore, /Promise\.allSettled/);
+  assert.match(realtimeStore, /if \(isForexPolling\) return/);
+  assert.match(realtimeStore, /forexPollingAbortController\?\.abort\(\)/);
+  assert.doesNotMatch(realtimeStore, /&_t=\$\{Date\.now\(\)\}/);
+});
+
 test('terminal finalize supports identical response-loss replay', async () => {
   const finalizeRoute = await source('src/app/api/trades/[id]/route.ts');
 

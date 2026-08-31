@@ -5,53 +5,130 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { DashboardSkeleton } from '@/components/common/loading-skeleton';
 import { AssetCard } from '@/components/market/asset-card';
 import { MarketSelector } from '@/components/market/market-selector';
-import { MarketOverview, MarketType, AssetData } from '@/types/market';
+import { MarketOverview, AssetData, Timeframe } from '@/types/market';
+import { SignalType } from '@/types/analysis';
 import { useMarketStore } from '@/stores/market-store';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowUpRight, ArrowDownRight, Activity, TrendingUp, TrendingDown, Clock, Settings2 } from 'lucide-react';
+import {
+  ArrowDownRight,
+  ArrowRight,
+  ArrowUpRight,
+  Activity,
+  Clock,
+  RefreshCw,
+  ServerCog,
+  Settings2,
+  TrendingDown,
+  TrendingUp,
+} from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TIMEFRAMES } from '@/lib/constants';
 import Link from 'next/link';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+
+interface SignalOpportunity {
+  id: string;
+  symbol: string;
+  type: SignalType;
+  score: number;
+  reasons: string[];
+  entryPrice: number;
+  stopLoss: number;
+  takeProfit: number;
+  riskRewardRatio: number;
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
+async function fetchApiPayload(url: string, signal: AbortSignal): Promise<Record<string, unknown>> {
+  const response = await fetch(url, { cache: 'no-store', signal });
+  const payload: unknown = await response.json().catch(() => null);
+  const row = typeof payload === 'object' && payload !== null
+    ? payload as Record<string, unknown>
+    : {};
+  if (!response.ok) {
+    throw new Error(typeof row.error === 'string' ? row.error : `HTTP ${response.status}`);
+  }
+  return row;
+}
+
+function parseSignalOpportunities(value: unknown): SignalOpportunity[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((candidate) => {
+    if (typeof candidate !== 'object' || candidate === null) return [];
+    const row = candidate as Record<string, unknown>;
+    const validType = ['strong_buy', 'buy', 'hold', 'sell', 'strong_sell']
+      .includes(String(row.type));
+    if (
+      typeof row.id !== 'string'
+      || typeof row.symbol !== 'string'
+      || !validType
+      || !Number.isFinite(Number(row.score))
+    ) {
+      return [];
+    }
+    return [{
+      id: row.id,
+      symbol: row.symbol,
+      type: row.type as SignalType,
+      score: Number(row.score),
+      reasons: Array.isArray(row.reasons)
+        ? row.reasons.filter((reason): reason is string => typeof reason === 'string')
+        : [],
+      entryPrice: Number(row.entryPrice) || 0,
+      stopLoss: Number(row.stopLoss) || 0,
+      takeProfit: Number(row.takeProfit) || 0,
+      riskRewardRatio: Number(row.riskRewardRatio) || 0,
+    }];
+  });
+}
 
 export default function DashboardPage() {
   const { selectedMarket, selectedTimeframe, setSelectedTimeframe, analysisMode, setAnalysisMode } = useMarketStore();
   const [overview, setOverview] = useState<MarketOverview | null>(null);
-  const [signals, setSignals] = useState<any[]>([]);
+  const [signals, setSignals] = useState<SignalOpportunity[]>([]);
   const [loading, setLoading] = useState(true);
   const [signalsLoading, setSignalsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [signalsError, setSignalsError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const refreshTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const isInitialLoadRef = useRef(true);
+  const requestControllerRef = useRef<AbortController | null>(null);
 
   const fetchData = useCallback(async (silent = false) => {
+    requestControllerRef.current?.abort();
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
     if (!silent) {
       setLoading(true);
       setSignalsLoading(true);
+    } else {
+      setRefreshing(true);
     }
     setError(null);
+    setSignalsError(null);
     try {
-      const response = await fetch(`/api/market${selectedMarket ? `?type=${selectedMarket}` : ''}`);
-      const result = await response.json();
-      
       const signalQuery = new URLSearchParams();
       if (selectedMarket && selectedMarket !== 'all') signalQuery.append('market', selectedMarket);
       if (selectedTimeframe) signalQuery.append('timeframe', selectedTimeframe);
       if (analysisMode) signalQuery.append('mode', analysisMode);
-      
-      fetch(`/api/signals?${signalQuery.toString()}`)
-        .then(res => res.json())
-        .then(res => {
-          if (res.success && res.data) setSignals(res.data);
-          setSignalsLoading(false);
-        })
-        .catch(() => setSignalsLoading(false));
-      
-      if (result.success && result.data) {
-        const assets: AssetData[] = result.data;
+
+      const [marketResult, signalResult] = await Promise.allSettled([
+        fetchApiPayload(`/api/market?type=${selectedMarket}`, controller.signal),
+        fetchApiPayload(`/api/signals?${signalQuery.toString()}`, controller.signal),
+      ]);
+      if (controller.signal.aborted) return;
+
+      if (marketResult.status === 'fulfilled' && marketResult.value.success === true && Array.isArray(marketResult.value.data)) {
+        const assets = marketResult.value.data as AssetData[];
         const activeAssets = assets.filter(a => a.price > 0);
-        
+
         setOverview({
           marketType: (selectedMarket === 'all' || !selectedMarket) ? 'crypto' : selectedMarket,
           totalAssets: activeAssets.length > 0 ? activeAssets.length : assets.length,
@@ -63,28 +140,52 @@ export default function DashboardPage() {
           mostActive: [...activeAssets].sort((a, b) => b.volume - a.volume).slice(0, 3),
         });
       } else {
-        setError(result.error || 'Failed to load market data');
+        const reason = marketResult.status === 'rejected'
+          ? marketResult.reason
+          : new Error(typeof marketResult.value.error === 'string'
+            ? marketResult.value.error
+            : 'Respons data pasar tidak valid.');
+        setError(errorMessage(reason, 'Data pasar gagal dimuat.'));
+      }
+
+      if (signalResult.status === 'fulfilled' && signalResult.value.success === true) {
+        setSignals(parseSignalOpportunities(signalResult.value.data));
+      } else {
+        const reason = signalResult.status === 'rejected'
+          ? signalResult.reason
+          : new Error(typeof signalResult.value.error === 'string'
+            ? signalResult.value.error
+            : 'Respons sinyal tidak valid.');
+        setSignalsError(errorMessage(reason, 'Sinyal gagal dimuat.'));
       }
       setLastRefresh(new Date());
-    } catch (err) {
-      console.error('Failed to load market overview', err);
-      if (!silent) setError('Cannot connect to server. Please check your connection.');
+    } catch (caughtError) {
+      if (!(caughtError instanceof DOMException && caughtError.name === 'AbortError')) {
+        console.error('Failed to load market overview', caughtError);
+        setError('Tidak dapat terhubung ke server. Periksa koneksi lalu coba lagi.');
+      }
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) {
+        setLoading(false);
+        setSignalsLoading(false);
+        setRefreshing(false);
+      }
     }
   }, [selectedMarket, selectedTimeframe, analysisMode]);
 
   // Initial load and dependency-based reload
   useEffect(() => {
-    // eslint-disable-next-line
-    fetchData(false);
-    isInitialLoadRef.current = false;
+    const initialTimer = globalThis.setTimeout(() => void fetchData(false), 0);
+    return () => {
+      globalThis.clearTimeout(initialTimer);
+      requestControllerRef.current?.abort();
+    };
   }, [fetchData]);
 
   // Auto-refresh every 30 seconds (silent)
   useEffect(() => {
     refreshTimerRef.current = setInterval(() => {
-      fetchData(true);
+      void fetchData(true);
     }, 30000);
     return () => {
       if (refreshTimerRef.current) clearInterval(refreshTimerRef.current);
@@ -103,24 +204,21 @@ export default function DashboardPage() {
     );
   }
 
-  if (error || !overview) {
+  if (!overview) {
     return (
       <DashboardLayout>
         <div className="mb-6">
-          <h1 className="text-3xl font-bold mb-2">Market Dashboard</h1>
+          <h1 className="text-3xl font-bold mb-2">Dashboard Pasar</h1>
           <MarketSelector />
         </div>
         <Card className="border-yellow-500/30 bg-yellow-500/5">
           <CardContent className="p-6 text-center">
             <Activity className="h-10 w-10 text-yellow-500 mx-auto mb-3" />
-            <p className="font-semibold text-lg mb-1">Data Loading Issue</p>
-            <p className="text-sm text-muted-foreground mb-4">{error || 'No market data available. The API might be initializing.'}</p>
-            <button 
-              onClick={() => window.location.reload()} 
-              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:opacity-90 transition"
-            >
-              Retry
-            </button>
+            <p className="font-semibold text-lg mb-1">Data pasar belum tersedia</p>
+            <p className="text-sm text-muted-foreground mb-4">{error || 'Provider data mungkin sedang menyiapkan respons.'}</p>
+            <Button onClick={() => void fetchData(false)}>
+              <RefreshCw className="h-4 w-4" /> Coba lagi
+            </Button>
           </CardContent>
         </Card>
       </DashboardLayout>
@@ -139,20 +237,52 @@ export default function DashboardPage() {
 
   return (
     <DashboardLayout>
-      <div className="mb-6 md:mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl md:text-3xl font-bold">Market Dashboard</h1>
-          {lastRefresh && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="w-2 h-2 rounded-full bg-green-500 live-pulse-dot" />
-              <span className="hidden sm:inline">Refresh 30 dtk</span>
-              <span className="hidden sm:inline">·</span>
-              <span>{lastRefresh.toLocaleTimeString()}</span>
+      <div className="mb-6 overflow-hidden rounded-3xl border border-border/70 bg-card/80 p-5 shadow-sm backdrop-blur md:mb-8 md:p-7">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-primary">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 live-pulse-dot" />
+              Market intelligence
             </div>
+            <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Dashboard Pasar</h1>
+            <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+              Ringkasan tren lintas aset, pergerakan utama, dan kandidat sinyal dalam satu tampilan.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href="/screener" className={buttonVariants({ variant: 'outline', className: 'rounded-xl' })}>
+              Buka penyaring <ArrowRight className="h-4 w-4" />
+            </Link>
+            <Link href="/operations" className={buttonVariants({ variant: 'outline', className: 'rounded-xl' })}>
+              <ServerCog className="h-4 w-4" /> Robot
+            </Link>
+            <Button
+              type="button"
+              className="rounded-xl"
+              onClick={() => void fetchData(true)}
+              disabled={refreshing}
+            >
+              <RefreshCw className={cn('h-4 w-4', refreshing && 'animate-spin')} />
+              Perbarui
+            </Button>
+          </div>
+        </div>
+        <div className="mt-5 flex flex-col gap-3 border-t border-border/60 pt-5 sm:flex-row sm:items-center sm:justify-between">
+          <MarketSelector />
+          {lastRefresh && (
+            <p className="text-xs text-muted-foreground">
+              Diperbarui {lastRefresh.toLocaleTimeString('id-ID')} · otomatis setiap 30 detik
+            </p>
           )}
         </div>
-        <MarketSelector />
       </div>
+
+      {error && (
+        <Alert className="mb-6 border-amber-500/30 bg-amber-500/5 text-amber-700 dark:text-amber-300">
+          <Activity className="h-4 w-4" />
+          <AlertDescription>{error} Data terakhir tetap ditampilkan.</AlertDescription>
+        </Alert>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8">
@@ -282,7 +412,10 @@ export default function DashboardPage() {
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-2 bg-muted/30 p-1 rounded-lg border w-fit">
                 <Settings2 className="h-4 w-4 text-muted-foreground ml-2" />
-                <Select value={analysisMode} onValueChange={(v) => setAnalysisMode(v as any)}>
+                <Select
+                  value={analysisMode}
+                  onValueChange={(value) => setAnalysisMode(value as 'technical' | 'combined')}
+                >
                   <SelectTrigger className="h-8 border-0 bg-transparent shadow-none text-xs w-[130px]">
                     <SelectValue placeholder="Mode" />
                   </SelectTrigger>
@@ -294,7 +427,10 @@ export default function DashboardPage() {
               </div>
               <div className="flex items-center gap-2 bg-muted/30 p-1 rounded-lg border w-full sm:w-fit overflow-x-auto">
                 <Clock className="h-4 w-4 text-muted-foreground ml-2 shrink-0" />
-                <Tabs value={selectedTimeframe} onValueChange={(v) => setSelectedTimeframe(v as any)}>
+                <Tabs
+                  value={selectedTimeframe}
+                  onValueChange={(value) => setSelectedTimeframe(value as Timeframe)}
+                >
                   <TabsList className="h-8 bg-transparent">
                     {TIMEFRAMES.map(tf => (
                       <TabsTrigger key={tf.value} value={tf.value} className="text-xs px-1.5 md:px-2 h-6 data-[state=active]:bg-background data-[state=active]:shadow-sm whitespace-nowrap">
@@ -320,7 +456,7 @@ export default function DashboardPage() {
           </div>
         ) : signals.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {signals.map((signal: any) => (
+            {signals.map((signal) => (
               <Link href={`/asset/${encodeURIComponent(signal.symbol)}`} key={signal.id}>
                 <Card className="overflow-hidden border border-border/50 hover:border-primary/50 transition-colors h-full cursor-pointer">
                   <div className={`h-1 w-full ${signal.type.includes('buy') ? 'bg-green-500' : 'bg-red-500'}`} />
@@ -395,6 +531,14 @@ export default function DashboardPage() {
               </Card>
               </Link>
             ))}
+          </div>
+        ) : signalsError ? (
+          <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-8 text-center">
+            <p className="font-medium text-amber-700 dark:text-amber-300">Sinyal belum dapat dimuat</p>
+            <p className="mt-1 text-sm text-muted-foreground">{signalsError}</p>
+            <Button variant="outline" className="mt-4" onClick={() => void fetchData(true)}>
+              <RefreshCw className="h-4 w-4" /> Coba lagi
+            </Button>
           </div>
         ) : (
           <div className="bg-card rounded-lg p-8 border border-border text-center">

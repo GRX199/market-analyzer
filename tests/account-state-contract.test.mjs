@@ -59,3 +59,23 @@ test('Base UI triggers use render composition and menu labels stay grouped', asy
   }
   assert.match(navbar, /<DropdownMenuGroup>[\s\S]*<DropdownMenuLabel/);
 });
+
+test('workspace navigation is grouped and mobile-first without duplicating account state', async () => {
+  const [sidebar, dashboardLayout, mobileNav, login, commandPalette] = await Promise.all([
+    source('src/components/layout/sidebar.tsx'),
+    source('src/components/layout/dashboard-layout.tsx'),
+    source('src/components/layout/mobile-bottom-nav.tsx'),
+    source('src/app/login/page.tsx'),
+    source('src/components/common/command-palette.tsx'),
+  ]);
+
+  assert.match(sidebar, /navSections/);
+  assert.match(sidebar, /Pantau pasar/);
+  assert.match(sidebar, /Analisis & trading/);
+  assert.match(dashboardLayout, /<MobileBottomNav \/>/);
+  assert.match(mobileNav, /aria-label="Navigasi utama mobile"/);
+  assert.match(login, /showPassword/);
+  assert.match(login, /Row Level Security aktif/);
+  assert.match(commandPalette, /Aksi cepat/);
+  assert.match(commandPalette, /Periksa kesiapan robot/);
+});

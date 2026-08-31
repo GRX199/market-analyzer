@@ -13,12 +13,20 @@ import {
 } from '@/components/ui/command';
 import { ALL_SYMBOLS } from '@/lib/constants';
 import { navItems } from '@/components/layout/sidebar';
+import { BellRing, BookOpenText, Radar, ServerCog } from 'lucide-react';
 
 const marketIcons: Record<string, string> = {
   forex: '💱',
   stocks: '📈',
   crypto: '₿',
 };
+
+const quickActions = [
+  { label: 'Cari peluang pasar', detail: 'Buka screener multi-aset', href: '/screener', icon: Radar },
+  { label: 'Periksa kesiapan robot', detail: 'Cek koneksi dan status operasional', href: '/operations', icon: ServerCog },
+  { label: 'Tulis jurnal trading', detail: 'Catat keputusan dan hasil transaksi', href: '/journal', icon: BookOpenText },
+  { label: 'Kelola peringatan', detail: 'Atur alert harga dan sinyal', href: '/alerts', icon: BellRing },
+] as const;
 
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
@@ -54,12 +62,34 @@ export function CommandPalette() {
   return (
     <>
       <CommandDialog open={open} onOpenChange={setOpen}>
-        <CommandInput placeholder="Search assets, pages, or type a command..." />
+        <CommandInput placeholder="Cari aset, halaman, atau perintah..." />
         <CommandList>
-          <CommandEmpty>No results found.</CommandEmpty>
+          <CommandEmpty>Tidak ada hasil yang cocok.</CommandEmpty>
+
+          <CommandGroup heading="Aksi cepat">
+            {quickActions.map((action) => {
+              const Icon = action.icon;
+              return (
+                <CommandItem
+                  key={action.href}
+                  value={`action-${action.label}-${action.detail}`}
+                  onSelect={() => handleSelect(action.href)}
+                  className="cursor-pointer"
+                >
+                  <Icon className="mr-2 h-4 w-4 text-primary" />
+                  <div className="flex flex-col">
+                    <span className="font-medium">{action.label}</span>
+                    <span className="text-xs text-muted-foreground">{action.detail}</span>
+                  </div>
+                </CommandItem>
+              );
+            })}
+          </CommandGroup>
+
+          <CommandSeparator />
 
           {/* Navigation */}
-          <CommandGroup heading="Pages">
+          <CommandGroup heading="Halaman">
             {navItems.map((item) => {
               const Icon = item.icon;
               return (
@@ -79,7 +109,7 @@ export function CommandPalette() {
           <CommandSeparator />
 
           {/* Assets */}
-          <CommandGroup heading="Assets">
+          <CommandGroup heading="Aset">
             {ALL_SYMBOLS.map((asset) => (
               <CommandItem
                 key={asset.symbol}

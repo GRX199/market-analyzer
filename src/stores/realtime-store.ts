@@ -32,6 +32,11 @@ let stocksWs: WebSocket | null = null;
 let cryptoReconnectTimeout: NodeJS.Timeout;
 let stocksReconnectTimeout: NodeJS.Timeout;
 let forexPollingInterval: NodeJS.Timeout | null = null;
+let forexPollingAbortController: AbortController | null = null;
+let isForexPolling = false;
+
+const FOREX_REQUEST_BATCH_SIZE = 20;
+const FOREX_POLL_INTERVAL_MS = 10_000;
 
 let isCryptoConnecting = false;
 let isStocksConnecting = false;
@@ -220,28 +225,58 @@ export const useRealtimeStore = create<RealtimeState>((set, get) => ({
 
   startForexPolling: () => {
     if (forexPollingInterval || typeof window === 'undefined') return;
-    
-    // Poll every 10 seconds
-    forexPollingInterval = setInterval(async () => {
+
+    const pollForexPrices = async () => {
+      if (isForexPolling) return;
       const { activeSymbols } = get();
       if (activeSymbols.forex.size === 0) return;
-      
-      const symbolsList = Array.from(activeSymbols.forex).join(',');
-      
+
+      isForexPolling = true;
+      const controller = new AbortController();
+      forexPollingAbortController = controller;
       try {
-        const res = await fetch(`/api/proxy/forex?symbols=${encodeURIComponent(symbolsList)}&_t=${Date.now()}`);
-        if (res.ok) {
-          const pricesMap = await res.json();
-          
+        const symbols = Array.from(activeSymbols.forex);
+        const batches: string[][] = [];
+        for (let index = 0; index < symbols.length; index += FOREX_REQUEST_BATCH_SIZE) {
+          batches.push(symbols.slice(index, index + FOREX_REQUEST_BATCH_SIZE));
+        }
+
+        const batchResults = await Promise.allSettled(
+          batches.map(async (batch) => {
+            const response = await fetch(
+              `/api/proxy/forex?symbols=${encodeURIComponent(batch.join(','))}`,
+              { cache: 'no-store', signal: controller.signal },
+            );
+            if (!response.ok) return null;
+            return response.json() as Promise<unknown>;
+          }),
+        );
+        const successfulPayloads = batchResults.flatMap((result) => (
+          result.status === 'fulfilled' && result.value !== null ? [result.value] : []
+        ));
+
+        const pricesMap: Record<string, number> = {};
+        for (const payload of successfulPayloads) {
+          if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+            continue;
+          }
+          for (const [symbol, rawPrice] of Object.entries(payload)) {
+            const price = Number(rawPrice);
+            if (Number.isFinite(price) && price > 0) {
+              pricesMap[symbol] = price;
+            }
+          }
+        }
+
+        if (Object.keys(pricesMap).length > 0) {
           set((state) => {
             const newPrices = { ...state.prices };
             let hasChanges = false;
             const now = Date.now();
-            
-            Object.entries(pricesMap).forEach(([symbol, priceStr]) => {
-              const price = parseFloat(priceStr as string);
+
+            Object.entries(pricesMap).forEach(([symbol, price]) => {
               const existing = newPrices[symbol];
-              
+
               if (!existing || existing.current !== price) {
                 newPrices[symbol] = {
                   current: price,
@@ -255,10 +290,23 @@ export const useRealtimeStore = create<RealtimeState>((set, get) => ({
             return hasChanges ? { prices: newPrices } : state;
           });
         }
-      } catch (err) {
-        console.error('Forex polling failed', err);
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === 'AbortError')) {
+          console.error('Forex polling failed', error);
+        }
+      } finally {
+        if (forexPollingAbortController === controller) {
+          forexPollingAbortController = null;
+          isForexPolling = false;
+        }
       }
-    }, 10000);
+    };
+
+    void pollForexPrices();
+    forexPollingInterval = setInterval(
+      () => void pollForexPrices(),
+      FOREX_POLL_INTERVAL_MS,
+    );
   },
 
   disconnect: () => {
@@ -266,6 +314,9 @@ export const useRealtimeStore = create<RealtimeState>((set, get) => ({
     clearTimeout(stocksReconnectTimeout);
     if (forexPollingInterval) clearInterval(forexPollingInterval);
     forexPollingInterval = null;
+    forexPollingAbortController?.abort();
+    forexPollingAbortController = null;
+    isForexPolling = false;
     
     if (cryptoWs) {
       cryptoWs.onopen = null;

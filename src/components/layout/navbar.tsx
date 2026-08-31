@@ -1,6 +1,6 @@
 'use client';
 
-import { Search, Bell, LogOut, Menu, Settings, TrendingUp } from 'lucide-react';
+import { Search, Bell, LogOut, Menu, ServerCog, Settings, TrendingUp } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ThemeToggle } from '@/components/common/theme-toggle';
@@ -28,6 +28,9 @@ export function Navbar() {
   const router = useRouter();
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const activePage = navItems.find(
+    (item) => pathname === item.href || pathname.startsWith(`${item.href}/`),
+  );
 
   const activeAlertCount = alerts.filter((alert) => alert.isActive && !alert.isTriggered).length;
   const displayName = user?.displayName || user?.email?.split('@')[0] || 'Pengguna';
@@ -46,7 +49,7 @@ export function Navbar() {
   }, [logout, router]);
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-card/80 backdrop-blur-xl px-4 md:px-6">
+    <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border/70 bg-background/75 px-4 shadow-sm shadow-slate-950/5 backdrop-blur-xl md:px-6">
       <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
         <SheetTrigger
           render={(
@@ -98,19 +101,24 @@ export function Navbar() {
         </SheetContent>
       </Sheet>
 
+      <div className="hidden min-w-36 lg:block">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Workspace</p>
+        <p className="truncate text-sm font-semibold">{activePage?.label || 'Market Analyzer'}</p>
+      </div>
+
       {/* Search — opens Command Palette (Ctrl+K) */}
-      <div className="flex-1 max-w-md">
+      <div className="flex-1 max-w-xl">
         <button
           onClick={() => {
             // Dispatch Ctrl+K to open the command palette
             const event = new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true });
             document.dispatchEvent(event);
           }}
-          className="flex items-center gap-2 w-full px-3 py-2 rounded-lg border border-border/50 bg-muted/30 text-muted-foreground text-sm hover:bg-muted/50 transition-colors"
+          className="flex h-9 w-full items-center gap-2 rounded-xl border border-border/70 bg-card/70 px-3 text-sm text-muted-foreground shadow-sm transition-colors hover:bg-card hover:text-foreground"
           aria-label="Buka pencarian cepat"
         >
           <Search className="h-3.5 w-3.5 shrink-0" />
-          <span className="text-xs truncate">Search assets, pages...</span>
+          <span className="truncate text-xs">Cari aset, fitur, atau halaman...</span>
           <kbd className="ml-auto pointer-events-none hidden sm:inline-flex h-5 select-none items-center gap-0.5 rounded border border-border/50 bg-muted/50 px-1.5 text-[10px] font-medium text-muted-foreground shrink-0">
             Ctrl K
           </kbd>
@@ -118,6 +126,13 @@ export function Navbar() {
       </div>
 
       <div className="flex items-center gap-2">
+        <Link
+          href="/operations"
+          className={buttonVariants({ variant: 'outline', size: 'sm', className: 'hidden gap-1.5 rounded-xl sm:inline-flex' })}
+        >
+          <ServerCog className="h-3.5 w-3.5" />
+          Robot
+        </Link>
         <ThemeToggle />
         <Link
           href="/alerts"
