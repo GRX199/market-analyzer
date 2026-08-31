@@ -253,8 +253,8 @@ export default function DashboardPage() {
             <Link href="/screener" className={buttonVariants({ variant: 'outline', className: 'rounded-xl' })}>
               Buka penyaring <ArrowRight className="h-4 w-4" />
             </Link>
-            <Link href="/operations" className={buttonVariants({ variant: 'outline', className: 'rounded-xl' })}>
-              <ServerCog className="h-4 w-4" /> Robot
+            <Link href="/forex-robot" className={buttonVariants({ variant: 'outline', className: 'rounded-xl' })}>
+              <ServerCog className="h-4 w-4" /> Robot Forex
             </Link>
             <Button
               type="button"

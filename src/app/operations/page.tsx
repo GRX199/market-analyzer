@@ -331,10 +331,16 @@ export default function OperationsPage() {
                 </CardTitle>
                 <CardDescription className="mt-1">Audit intent website; ini bukan daftar seluruh posisi di broker.</CardDescription>
               </div>
-              <Link href="/scalping" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-                Buka monitor scalping
-                <ExternalLink className="ml-2 h-4 w-4" />
-              </Link>
+              <div className="flex flex-wrap gap-2">
+                <Link href="/forex-robot" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+                  Monitor Forex
+                  <ExternalLink className="ml-2 h-4 w-4" />
+                </Link>
+                <Link href="/scalping" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+                  Monitor crypto
+                  <ExternalLink className="ml-2 h-4 w-4" />
+                </Link>
+              </div>
             </div>
           </CardHeader>
           <CardContent>

@@ -21,6 +21,7 @@ import {
   BookOpen,
   Columns3,
   Flame,
+  Bot,
   ServerCog,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -43,12 +44,13 @@ export const navSections = [
       { href: '/signals', label: 'Riwayat Sinyal', icon: History },
       { href: '/backtest', label: 'Backtest', icon: FlaskConical },
       { href: '/compare', label: 'Multi-Chart', icon: Columns3 },
-      { href: '/scalping', label: 'Hyper Scalping', icon: Flame },
+      { href: '/scalping', label: 'Robot Crypto', icon: Flame },
     ],
   },
   {
     label: 'Operasional',
     items: [
+      { href: '/forex-robot', label: 'Robot Forex', icon: Bot },
       { href: '/operations', label: 'Robot & Sistem', icon: ServerCog },
       { href: '/journal', label: 'Jurnal Trading', icon: BookOpen },
       { href: '/alerts', label: 'Peringatan', icon: Bell },

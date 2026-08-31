@@ -14,15 +14,15 @@ export function AlertWatcher() {
   const alerts = useUserStore((state) => state.alerts);
   const observedUserIdRef = useRef<string | null | undefined>(undefined);
   const pathname = usePathname();
+  const shouldBootstrapAccount = pathname !== '/login';
 
   // The root-level watcher is the single alert monitor for the whole application.
   useAlertsMonitor();
 
   useEffect(() => {
-    // The login page does not need account-data hydration or an auth watcher.
-    // After a successful login the pathname changes and this effect starts the
-    // protected-workspace bootstrap.
-    if (pathname === '/login') return undefined;
+    // Depend on the login/protected boundary, not the full pathname. This keeps
+    // one auth subscription alive while users navigate between workspace pages.
+    if (!shouldBootstrapAccount) return undefined;
 
     let isActive = true;
     let unsubscribeAuth: (() => void) | undefined;
@@ -73,7 +73,7 @@ export function AlertWatcher() {
       isActive = false;
       unsubscribeAuth?.();
     };
-  }, [loadFromSupabase, pathname]);
+  }, [loadFromSupabase, shouldBootstrapAccount]);
 
   useEffect(() => {
     const subscriptions = new Map<

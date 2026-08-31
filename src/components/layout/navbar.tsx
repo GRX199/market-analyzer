@@ -127,11 +127,11 @@ export function Navbar() {
 
       <div className="flex items-center gap-2">
         <Link
-          href="/operations"
+          href="/forex-robot"
           className={buttonVariants({ variant: 'outline', size: 'sm', className: 'hidden gap-1.5 rounded-xl sm:inline-flex' })}
         >
           <ServerCog className="h-3.5 w-3.5" />
-          Robot
+          Robot Forex
         </Link>
         <ThemeToggle />
         <Link

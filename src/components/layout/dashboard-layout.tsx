@@ -9,8 +9,9 @@ import { useUserStore } from '@/stores/user-store';
 import { useMarketStore } from '@/stores/market-store';
 import { useEffect, useSyncExternalStore } from 'react';
 import { cn } from '@/lib/utils';
-import { AlertTriangle, LoaderCircle, LogIn, RefreshCw, TrendingUp } from 'lucide-react';
+import { AlertTriangle, LogIn, RefreshCw } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
 
 function subscribeToHydration(onStoreChange: () => void) {
@@ -25,6 +26,42 @@ function subscribeToHydration(onStoreChange: () => void) {
 
 function getHydrationSnapshot() {
   return useUserStore.persist.hasHydrated() && useMarketStore.persist.hasHydrated();
+}
+
+function WorkspaceBootSkeleton() {
+  return (
+    <div className="flex min-h-screen bg-background" role="status" aria-live="polite">
+      <span className="sr-only">Memverifikasi sesi akun</span>
+      <aside className="hidden w-64 border-r border-border/70 bg-card/60 p-4 md:block">
+        <div className="flex items-center gap-3 border-b border-border/60 pb-4">
+          <Skeleton className="h-9 w-9 rounded-xl" />
+          <div className="space-y-2">
+            <Skeleton className="h-3 w-28" />
+            <Skeleton className="h-2 w-20" />
+          </div>
+        </div>
+        <div className="mt-6 space-y-3">
+          {Array.from({ length: 7 }, (_, index) => (
+            <Skeleton key={index} className="h-9 w-full rounded-xl" />
+          ))}
+        </div>
+      </aside>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex h-16 items-center gap-3 border-b border-border/70 px-4 md:px-6">
+          <Skeleton className="h-9 flex-1 rounded-xl sm:max-w-md" />
+          <Skeleton className="h-9 w-9 rounded-xl" />
+          <Skeleton className="h-9 w-9 rounded-full" />
+        </header>
+        <main className="grid flex-1 gap-4 p-4 md:grid-cols-2 md:p-6 lg:grid-cols-4">
+          <Skeleton className="h-40 rounded-2xl md:col-span-2 lg:col-span-4" />
+          {Array.from({ length: 4 }, (_, index) => (
+            <Skeleton key={index} className="h-28 rounded-2xl" />
+          ))}
+          <Skeleton className="h-72 rounded-2xl md:col-span-2 lg:col-span-4" />
+        </main>
+      </div>
+    </div>
+  );
 }
 
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -48,26 +85,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   }, [theme, mounted]);
 
   if (!mounted || isAccountLoading) {
-    return (
-      <div
-        className="min-h-screen bg-background flex items-center justify-center p-6"
-        role="status"
-        aria-live="polite"
-      >
-        <div className="flex max-w-sm flex-col items-center text-center">
-          <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-            <TrendingUp className="h-7 w-7" aria-hidden="true" />
-          </div>
-          <div className="flex items-center gap-2 font-semibold">
-            <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />
-            Menyiapkan ruang kerja
-          </div>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Memverifikasi sesi dan menyinkronkan data akun Anda.
-          </p>
-        </div>
-      </div>
-    );
+    return <WorkspaceBootSkeleton />;
   }
 
   if (accountLoadError) {

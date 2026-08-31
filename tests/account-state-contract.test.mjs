@@ -61,12 +61,13 @@ test('Base UI triggers use render composition and menu labels stay grouped', asy
 });
 
 test('workspace navigation is grouped and mobile-first without duplicating account state', async () => {
-  const [sidebar, dashboardLayout, mobileNav, login, commandPalette] = await Promise.all([
+  const [sidebar, dashboardLayout, mobileNav, login, commandPalette, watcher] = await Promise.all([
     source('src/components/layout/sidebar.tsx'),
     source('src/components/layout/dashboard-layout.tsx'),
     source('src/components/layout/mobile-bottom-nav.tsx'),
     source('src/app/login/page.tsx'),
     source('src/components/common/command-palette.tsx'),
+    source('src/components/common/alert-watcher.tsx'),
   ]);
 
   assert.match(sidebar, /navSections/);
@@ -78,4 +79,10 @@ test('workspace navigation is grouped and mobile-first without duplicating accou
   assert.match(login, /Row Level Security aktif/);
   assert.match(commandPalette, /Aksi cepat/);
   assert.match(commandPalette, /Periksa kesiapan robot/);
+  assert.match(sidebar, /href: '\/forex-robot', label: 'Robot Forex'/);
+  assert.match(mobileNav, /href: '\/forex-robot', label: 'Forex'/);
+  assert.match(watcher, /const shouldBootstrapAccount = pathname !== '\/login'/);
+  assert.match(watcher, /\[loadFromSupabase, shouldBootstrapAccount\]/);
+  assert.doesNotMatch(watcher, /\[loadFromSupabase, pathname\]/);
+  assert.doesNotMatch(dashboardLayout, /Menyiapkan ruang kerja/);
 });

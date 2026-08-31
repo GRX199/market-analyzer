@@ -9,8 +9,8 @@ import { cn } from '@/lib/utils';
 const mobileItems = [
   { href: '/dashboard', label: 'Beranda', icon: LayoutDashboard },
   { href: '/market', label: 'Pasar', icon: Globe },
-  { href: '/scalping', label: 'Scalping', icon: Flame },
-  { href: '/operations', label: 'Robot', icon: ServerCog },
+  { href: '/scalping', label: 'Crypto', icon: Flame },
+  { href: '/forex-robot', label: 'Forex', icon: ServerCog },
 ];
 
 export function MobileBottomNav() {

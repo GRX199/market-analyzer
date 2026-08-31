@@ -23,6 +23,7 @@ const marketIcons: Record<string, string> = {
 
 const quickActions = [
   { label: 'Cari peluang pasar', detail: 'Buka screener multi-aset', href: '/screener', icon: Radar },
+  { label: 'Pantau robot forex', detail: 'Buka monitor strategi Forex M15', href: '/forex-robot', icon: Radar },
   { label: 'Periksa kesiapan robot', detail: 'Cek koneksi dan status operasional', href: '/operations', icon: ServerCog },
   { label: 'Tulis jurnal trading', detail: 'Catat keputusan dan hasil transaksi', href: '/journal', icon: BookOpenText },
   { label: 'Kelola peringatan', detail: 'Atur alert harga dan sinyal', href: '/alerts', icon: BellRing },
