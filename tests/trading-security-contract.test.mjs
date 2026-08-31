@@ -42,6 +42,18 @@ test('enqueue authenticates and authorizes before exposing its kill switch', asy
   assert.ok(killSwitchPosition >= 0 && killSwitchPosition < bodyPosition);
 });
 
+test('trade history remains owner-scoped without requiring execution permission', async () => {
+  const tradeRoute = await source('src/app/api/trades/route.ts');
+  const getHandler = tradeRoute.slice(
+    tradeRoute.indexOf('export async function GET'),
+    tradeRoute.indexOf('export async function POST'),
+  );
+
+  assert.match(getHandler, /supabase\.auth\.getUser\(\)/);
+  assert.match(getHandler, /\.eq\('user_id', userId\)/);
+  assert.doesNotMatch(getHandler, /isTradingUserAuthorized/);
+});
+
 test('queue migrations remove owner-agnostic claims and defend queue inputs', async () => {
   const [baseline, upgrade, sequential] = await Promise.all([
     source('supabase/migrations/20260729000100_secure_trade_queue.sql'),

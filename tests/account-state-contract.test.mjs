@@ -21,6 +21,9 @@ test('session bootstrap preserves cached account identity only until verificatio
   assert.match(userStore, /const isSameAccount = previousAccountId === userId/);
   assert.match(userStore, /user:\s*profile/);
   assert.match(userStore, /metadata\.display_name/);
+  assert.match(userStore, /isTransientAuthNetworkError/);
+  assert.match(userStore, /AUTH_NETWORK_RETRY_DELAY_MS/);
+  assert.match(userStore, /await getVerifiedAuthUser\(\)/);
 });
 
 test('settings never fabricates an account and profile updates stay owner-bound', async () => {
@@ -42,4 +45,17 @@ test('local backup import cannot replace authentication state or cross accounts'
   assert.match(importAction, /currentUserId/);
   assert.match(importAction, /portfolioHistory/);
   assert.doesNotMatch(importAction, /\.\.\.state|isAuthenticated|authenticatedUserId:\s*/);
+});
+
+test('Base UI triggers use render composition and menu labels stay grouped', async () => {
+  const [navbar, alerts, portfolio] = await Promise.all([
+    source('src/components/layout/navbar.tsx'),
+    source('src/app/alerts/page.tsx'),
+    source('src/app/portfolio/page.tsx'),
+  ]);
+
+  for (const component of [navbar, alerts, portfolio]) {
+    assert.doesNotMatch(component, /asChild/);
+  }
+  assert.match(navbar, /<DropdownMenuGroup>[\s\S]*<DropdownMenuLabel/);
 });

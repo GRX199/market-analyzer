@@ -152,11 +152,8 @@ export default function PortfolioPage() {
           </div>
 
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            {/* @ts-expect-error asChild */}
-            <DialogTrigger asChild>
-              <Button className="gap-2 shrink-0">
-                <Plus className="h-4 w-4" /> Add Position
-              </Button>
+            <DialogTrigger render={<Button className="gap-2 shrink-0" />}>
+              <Plus className="h-4 w-4" /> Add Position
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>

@@ -82,15 +82,6 @@ export async function GET(request: Request) {
     return json({ error: 'Authentication service is unavailable' }, 503);
   }
 
-  if (
-    !isTradingUserAuthorized(
-      userId,
-      process.env.TRADING_ALLOWED_USER_IDS
-    )
-  ) {
-    return json({ error: 'User is not authorized for this trading worker' }, 403);
-  }
-
   let admin;
   try {
     admin = getSupabaseAdminClient();

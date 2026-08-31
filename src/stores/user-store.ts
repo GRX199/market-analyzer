@@ -26,6 +26,7 @@ const EMOTIONS: JournalEntry['emotion'][] = [
 ];
 const TRADE_SYMBOL_PATTERN = /^[A-Z0-9][A-Z0-9._#-]{1,31}$/;
 const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]{7,127}$/;
+const AUTH_NETWORK_RETRY_DELAY_MS = 750;
 let accountLoadSequence = 0;
 
 export interface CreateAutoTradeInput {
@@ -104,6 +105,23 @@ function reportSyncFailure(label: string, error: unknown): void {
   if (typeof window !== 'undefined') {
     toast.error(label, { description: message });
   }
+}
+
+function isTransientAuthNetworkError(error: unknown): boolean {
+  return /failed to fetch|fetch failed|network|connection|timeout|temporarily unavailable/i
+    .test(getErrorMessage(error));
+}
+
+async function getVerifiedAuthUser() {
+  const firstAttempt = await supabase.auth.getUser();
+  if (!firstAttempt.error || !isTransientAuthNetworkError(firstAttempt.error)) {
+    return firstAttempt;
+  }
+
+  await new Promise<void>((resolve) => {
+    globalThis.setTimeout(resolve, AUTH_NETWORK_RETRY_DELAY_MS);
+  });
+  return supabase.auth.getUser();
 }
 
 interface UserState {
@@ -218,7 +236,7 @@ export const useUserStore = create<UserState>()(
         set({ telegramChatId: id });
 
         try {
-          const { data: { user }, error: authError } = await supabase.auth.getUser();
+          const { data: { user }, error: authError } = await getVerifiedAuthUser();
           throwIfError(authError, 'Autentikasi gagal');
           if (!user) return;
 
@@ -428,7 +446,7 @@ export const useUserStore = create<UserState>()(
             return;
           }
 
-          const { data: { user }, error: authError } = await supabase.auth.getUser();
+          const { data: { user }, error: authError } = await getVerifiedAuthUser();
           throwIfError(authError, 'Autentikasi gagal');
           if (loadSequence !== accountLoadSequence) return;
 
@@ -602,7 +620,7 @@ export const useUserStore = create<UserState>()(
           const {
             data: { user: verifiedUser },
             error: verificationError,
-          } = await supabase.auth.getUser();
+          } = await getVerifiedAuthUser();
           throwIfError(verificationError, 'Verifikasi sesi gagal');
           if (
             loadSequence !== accountLoadSequence

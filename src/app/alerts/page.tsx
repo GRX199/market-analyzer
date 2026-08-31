@@ -101,11 +101,8 @@ export default function AlertsPage() {
         </div>
         
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          {/* @ts-expect-error asChild is used by Shadcn but Base UI might use render */}
-          <DialogTrigger asChild>
-            <Button className="gap-2">
-              <Plus className="h-4 w-4" /> Create Alert
-            </Button>
+          <DialogTrigger render={<Button className="gap-2" />}>
+            <Plus className="h-4 w-4" /> Create Alert
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
@@ -115,17 +112,18 @@ export default function AlertsPage() {
               <div className="space-y-2">
                 <label className="text-sm font-medium">Asset Symbol</label>
                 <Popover open={openSymbol} onOpenChange={setOpenSymbol}>
-                  {/* @ts-expect-error asChild is used by Shadcn but Base UI might use render */}
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={openSymbol}
-                      className="w-full justify-between font-normal"
-                    >
-                      {newAlert.symbol || "Select a supported symbol..."}
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
+                  <PopoverTrigger
+                    render={(
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={openSymbol}
+                        className="w-full justify-between font-normal"
+                      />
+                    )}
+                  >
+                    {newAlert.symbol || "Select a supported symbol..."}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </PopoverTrigger>
                   <PopoverContent className="w-[300px] p-0" align="start">
                     <Command>
