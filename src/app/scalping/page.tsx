@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { useBinanceWebSocket } from '@/hooks/useBinanceWebSocket';
+import { useScalperRobot } from '@/components/scalping/scalper-robot-provider';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
@@ -81,23 +81,20 @@ function rememberBoundedKey(keys: Set<string>, key: string, maxSize = 240) {
   if (oldestKey) keys.delete(oldestKey);
 }
 
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : 'Terjadi kesalahan yang tidak diketahui.';
-}
-
 export default function ScalpingDashboard() {
-  const [symbol, setSymbol] = useState('BTC/USDT');
   const [isAudioEnabled, setIsAudioEnabled] = useState(false);
-  const [isAutoTradingEnabled, setIsAutoTradingEnabled] = useState(false);
-  const [isRobotInterrupted, setIsRobotInterrupted] = useState(false);
   const [isArmDialogOpen, setIsArmDialogOpen] = useState(false);
-  const [requestedVolume, setRequestedVolume] = useState('0.01');
-  const armedAfterCandleRef = useRef<number | null>(null);
   const announcedSignalKeysRef = useRef(new Set<string>());
-  const queuedCandleKeysRef = useRef(new Set<string>());
-  const queueRequestInFlightRef = useRef(false);
 
   const {
+    symbol,
+    requestedVolume,
+    isAutoTradingEnabled,
+    isRobotPaused,
+    setRequestedVolume,
+    changeSymbol,
+    armRobot,
+    stopRobot,
     currentPrice,
     recentTrades,
     currentKline,
@@ -109,8 +106,7 @@ export default function ScalpingDashboard() {
     connectionError,
     feedSymbol,
     reconnect,
-  } = useBinanceWebSocket(symbol);
-  const createAutoTrade = useUserStore((state) => state.createAutoTrade);
+  } = useScalperRobot();
   const authenticatedUserId = useUserStore((state) => state.authenticatedUserId);
   const {
     trades: queuedTrades,
@@ -139,29 +135,6 @@ export default function ScalpingDashboard() {
   const momentum = isCurrentFeed && isBackfillComplete ? closedSignal.momentum : 'wait';
 
   useEffect(() => {
-    if (!IS_TRADING_DEPLOYMENT_ENABLED || !isAutoTradingEnabled) return;
-
-    if (!isConnected || !isBackfillComplete || !authenticatedUserId) {
-      if (!isRobotInterrupted) {
-        queueMicrotask(() => setIsRobotInterrupted(true));
-        toast.warning('Robot dijeda', {
-          description: isConnected
-            ? isBackfillComplete
-              ? 'Sesi autentikasi tidak tersedia. Aktifkan ulang robot setelah login.'
-              : 'Riwayat candle belum tepercaya. Aktifkan ulang robot setelah sinkronisasi berhasil.'
-            : 'Koneksi market terputus. Aktifkan ulang robot setelah koneksi pulih.',
-        });
-      }
-    }
-  }, [
-    authenticatedUserId,
-    isAutoTradingEnabled,
-    isBackfillComplete,
-    isConnected,
-    isRobotInterrupted,
-  ]);
-
-  useEffect(() => {
     if (
       !activeSignal
       || closedSignal.sourceCandleStart === null
@@ -176,85 +149,11 @@ export default function ScalpingDashboard() {
       rememberBoundedKey(announcedSignalKeysRef.current, signalKey);
       if (isAudioEnabled) playAlertSound(activeSignal);
     }
-
-    if (
-      !IS_TRADING_DEPLOYMENT_ENABLED
-      || !isAutoTradingEnabled
-      || !isConnected
-      || !isBackfillComplete
-      || !authenticatedUserId
-      || !currentKline
-      || currentKline.isFinal
-    ) {
-      return;
-    }
-
-    if (isRobotInterrupted) return;
-    if (currentKline.startTime <= closedSignal.sourceCandleStart) return;
-
-    if (armedAfterCandleRef.current === null) {
-      armedAfterCandleRef.current = currentKline.startTime;
-      return;
-    }
-
-    // Arming tidak pernah mengeksekusi sinyal yang sudah aktif pada candle saat ini.
-    if (currentKline.startTime <= armedAfterCandleRef.current) return;
-
-    // Maksimum satu intent per symbol/candle, meskipun sinyal berfluktuasi.
-    const candleKey = `${symbol}:${currentKline.startTime}`;
-    if (queuedCandleKeysRef.current.has(candleKey)) return;
-    if (queueRequestInFlightRef.current) return;
-    rememberBoundedKey(queuedCandleKeysRef.current, candleKey);
-    queueRequestInFlightRef.current = true;
-
-    const executionCandleStart = currentKline.startTime;
-    const queuedAction = activeSignal;
-    const queueSymbol = symbol.replace('/', '').toUpperCase();
-    const idempotencyKey =
-      `scalper:${authenticatedUserId}:${queueSymbol}:${executionCandleStart}`;
-    const volume = Number(requestedVolume);
-
-    void createAutoTrade({
-      symbol: queueSymbol,
-      marketType: 'crypto',
-      action: queuedAction,
-      volume,
-      idempotencyKey,
-    }).then((receipt) => {
-      if (receipt.duplicate) {
-        toast.info('Sinyal sudah pernah diantrekan', {
-          description: `${symbol} candle ${new Date(executionCandleStart).toLocaleTimeString()}`,
-        });
-        return;
-      }
-
-      toast.success(`${queuedAction.toUpperCase()} masuk antrean robot`, {
-        description: `${symbol} • volume ${volume} • status ${receipt.status}`,
-      });
-    }).catch((error: unknown) => {
-      setIsRobotInterrupted(true);
-      setIsAutoTradingEnabled(false);
-      toast.error('Robot dihentikan — verifikasi antrean', {
-        description: getErrorMessage(error),
-      });
-    }).finally(() => {
-      queueRequestInFlightRef.current = false;
-      void refreshQueueHistory();
-    });
   }, [
     activeSignal,
-    authenticatedUserId,
     closedSignal.sourceCandleStart,
-    createAutoTrade,
-    currentKline,
     isAudioEnabled,
-    isAutoTradingEnabled,
-    isBackfillComplete,
-    isConnected,
     isCurrentFeed,
-    isRobotInterrupted,
-    refreshQueueHistory,
-    requestedVolume,
     symbol,
   ]);
 
@@ -270,23 +169,9 @@ export default function ScalpingDashboard() {
 
   const parsedVolume = Number(requestedVolume);
   const isVolumeValid = Number.isFinite(parsedVolume) && parsedVolume > 0 && parsedVolume <= 100;
-  const isRobotPaused =
-    isAutoTradingEnabled
-    && (!isConnected || !isBackfillComplete || !authenticatedUserId || isRobotInterrupted);
-
   const handleSymbolChange = (nextSymbol: string | null) => {
     if (!nextSymbol || nextSymbol === symbol) return;
-
-    if (isAutoTradingEnabled) {
-      setIsAutoTradingEnabled(false);
-      toast.info('Robot dimatikan', {
-        description: 'Perubahan simbol memerlukan konfirmasi dan arming ulang.',
-      });
-    }
-
-    setIsRobotInterrupted(false);
-    armedAfterCandleRef.current = null;
-    setSymbol(nextSymbol);
+    changeSymbol(nextSymbol);
   };
 
   const handleRobotButtonClick = () => {
@@ -298,10 +183,7 @@ export default function ScalpingDashboard() {
     }
 
     if (isAutoTradingEnabled) {
-      setIsAutoTradingEnabled(false);
-      armedAfterCandleRef.current = null;
-      setIsRobotInterrupted(false);
-      toast.info('Robot dimatikan');
+      stopRobot();
       return;
     }
 
@@ -335,13 +217,9 @@ export default function ScalpingDashboard() {
       return;
     }
 
-    armedAfterCandleRef.current = currentKline.startTime;
-    setIsRobotInterrupted(false);
-    setIsAutoTradingEnabled(true);
-    setIsArmDialogOpen(false);
-    toast.warning('Robot menunggu sinyal candle tertutup', {
-      description: 'Sinyal candle final hanya boleh dieksekusi pada candle berikutnya.',
-    });
+    if (armRobot(currentKline.startTime)) {
+      setIsArmDialogOpen(false);
+    }
   };
 
   return (
@@ -462,7 +340,7 @@ export default function ScalpingDashboard() {
               <p className="text-muted-foreground">
                 {isRobotPaused
                   ? 'Tidak ada order baru yang akan diantrekan selama status ini.'
-                  : `Menunggu sinyal dari candle tertutup ${symbol}; eksekusi hanya pada candle 1 menit berikutnya dengan volume maksimum ${parsedVolume}.`}
+                  : `Menunggu sinyal ${symbol} dengan volume tepat ${parsedVolume}. Robot tetap berjalan saat Anda berpindah halaman selama tab website terbuka.`}
               </p>
             </div>
           </div>
@@ -577,12 +455,14 @@ export default function ScalpingDashboard() {
             )}
 
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] text-sm">
+              <table className="w-full min-w-[900px] text-sm">
                 <thead>
                   <tr className="border-b text-left text-xs text-muted-foreground">
                     <th className="px-2 py-2 font-medium">Waktu</th>
                     <th className="px-2 py-2 font-medium">Symbol</th>
-                    <th className="px-2 py-2 font-medium">Intent</th>
+                    <th className="px-2 py-2 font-medium">Aksi</th>
+                    <th className="px-2 py-2 font-medium">Diminta</th>
+                    <th className="px-2 py-2 font-medium">Aktual MT5</th>
                     <th className="px-2 py-2 font-medium">Status</th>
                     <th className="px-2 py-2 font-medium">Attempts</th>
                     <th className="px-2 py-2 font-medium">Broker ticket / error</th>
@@ -599,7 +479,10 @@ export default function ScalpingDashboard() {
                         <span className={trade.action === 'buy' ? 'text-green-500' : 'text-red-500'}>
                           {trade.action.toUpperCase()}
                         </span>
-                          <span className="ml-2 text-muted-foreground">· {trade.volume}</span>
+                      </td>
+                      <td className="px-2 py-2 font-mono">{trade.volume}</td>
+                      <td className="px-2 py-2 font-mono">
+                        {trade.executedVolume ?? '—'}
                       </td>
                       <td className="px-2 py-2">
                         <Badge variant="outline" className={tradeStatusClass(trade.status, trade.errorMessage)}>
@@ -618,7 +501,7 @@ export default function ScalpingDashboard() {
                   ))}
                   {!queueHistoryLoading && queuedTrades.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-2 py-6 text-center text-muted-foreground">
+                      <td colSpan={8} className="px-2 py-6 text-center text-muted-foreground">
                         Belum ada intent trading untuk akun ini.
                       </td>
                     </tr>
@@ -654,7 +537,7 @@ export default function ScalpingDashboard() {
 
             <div className="space-y-2">
               <label htmlFor="robot-volume" className="text-sm font-medium">
-                Volume maksimum yang diminta
+                Volume order MT5 yang diminta
               </label>
               <Input
                 id="robot-volume"
@@ -672,7 +555,7 @@ export default function ScalpingDashboard() {
                 isVolumeValid ? 'text-muted-foreground' : 'text-destructive',
               )}>
                 {isVolumeValid
-                  ? 'Risk control backend dapat menolak atau menurunkan volume ini.'
+                  ? 'Order hanya dikirim jika volume ini aman dan sesuai langkah lot broker; robot tidak akan menurunkannya diam-diam.'
                   : 'Volume harus lebih dari 0 dan maksimal 100.'}
               </p>
             </div>

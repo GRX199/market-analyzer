@@ -39,8 +39,9 @@ menjalankan proses lokal atau mengaktifkan Algo Trading MT5 dari browser.
    dan `NEXT_PUBLIC_TRADING_ENABLED=false`.
 4. Bila memang memulai uji order demo, samakan kedua flag menjadi `true`,
    restart website, dan pastikan semua pemeriksaan wajib di **Robot & Sistem**
-   hijau. Robot tetap memakai `TRADING_MODE=paper` dan
-   `ALLOW_REAL_MONEY_ACCOUNT=false`.
+   hijau. Runtime gabungan pengirim order demo memakai `TRADING_MODE=live`,
+   tetapi wajib mempertahankan `ALLOW_REAL_MONEY_ACCOUNT=false` sehingga akun
+   real tetap ditolak.
 5. Dari folder saudara `../mt5-robot`, jalankan hanya
    `run_combined_demo.bat`. Runtime ini menserialkan siklus Forex dan Crypto
    pada satu login MT5; jangan jalankan worker terpisah untuk akun yang sama.
@@ -66,6 +67,14 @@ deploy; audit dependency tidak termasuk di dalam `npm run check`.
 
 - Browser tidak boleh menulis langsung ke antrean order.
 - Pembuatan sinyal harus melalui Route Handler yang memvalidasi sesi, simbol, action, volume, dan idempotency key.
+- Runtime scalper dipasang pada root layout, sehingga tombol Robot ON dan loop
+  candle tetap hidup saat navigasi antarhalaman selama tab browser tetap
+  terbuka. Menutup/refresh tab, logout, kehilangan koneksi, atau mematikan
+  komputer tetap menghentikan atau menjeda runtime browser.
+- `volume` adalah lot tepat yang diminta, bukan lagi batas yang boleh diturunkan
+  diam-diam. Worker menolak order sebelum dikirim bila lot itu tidak sesuai
+  langkah broker atau melewati batas risiko. `executed_volume` menyimpan volume
+  aktual dari MT5 secara terpisah untuk mengaudit partial fill broker.
 - `TRADING_ALLOWED_USER_IDS` harus berisi tepat satu UUID owner akun broker.
   Konfigurasi kosong, malformed, atau berisi lebih dari satu UUID ditolak.
 - Robot mengklaim row owner tersebut secara atomik sebelum mengirim order ke
@@ -138,12 +147,25 @@ watchlist tidak berjalan di background. Pilih cadence sesuai quota provider
 gagal berulang atau tidak adanya heartbeat scheduler.
 
 Terapkan migration sampai
-`20260801000400_enforce_single_inflight_trade.sql` sebelum mengaktifkan trading
-atau cron. Migration `003` menghapus overload claim tanpa owner, menambahkan
+`20260903000100_track_executed_trade_volume.sql`. Migration queue hingga
+`20260801000400_enforce_single_inflight_trade.sql` wajib sebelum mengaktifkan
+trading atau cron. Migration `003` menghapus overload claim tanpa owner, menambahkan
 version fence scanner, dan mengamankan tabel legacy `signal_history`.
 Migration `004` memaksa limit tepat satu, menahan advisory lock per owner,
 menolak claim saat row owner itu masih `processing`, dan memasang unique partial
 index sebagai pagar lintas proses/host.
+
+Migration Trade Intelligence menambah tabel riwayat posisi tertutup yang hanya
+dapat ditulis worker melalui endpoint server dan hanya dapat dibaca owner lewat
+RLS. Setelah migration terpasang, restart runtime gabungan agar riwayat MT5
+disinkronkan. Buka `/trade-intelligence` untuk melihat expectancy, profit
+factor, drawdown, biaya, loss streak, performa simbol/strategi, dan kegagalan
+antrean. Hasil analitik tidak mengubah strategi atau lot secara otomatis.
+
+Migration volume eksekusi menambah `auto_trades.executed_volume`. Pasang
+migration ini sebelum menjalankan worker versi baru agar finalisasi order dapat
+merekam lot aktual broker dan halaman antrean dapat membandingkannya dengan lot
+yang diminta.
 
 Sebelum migration: matikan enqueue, worker, dan cron; buat backup; audit seluruh
 row `processing`; lalu rekonsiliasi owner kosong, lebih dari satu row processing
@@ -156,7 +178,7 @@ deal, dan posisi broker.
 ## Struktur penting
 
 - `src/app` — halaman dan Route Handlers.
-- `src/lib` — analisis, Supabase, backtest, serta aturan trading.
+- `src/lib` — analisis, Supabase, backtest, Trade Intelligence, serta aturan trading.
 - `src/stores` — state client.
 - `supabase/migrations` — schema, RLS, constraints, dan atomic queue claim.
 - `../mt5-robot` — worker Python/MetaTrader 5.

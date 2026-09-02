@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/command';
 import { ALL_SYMBOLS } from '@/lib/constants';
 import { navItems } from '@/components/layout/sidebar';
-import { BellRing, BookOpenText, Radar, ServerCog } from 'lucide-react';
+import { BellRing, BookOpenText, BrainCircuit, Radar, ServerCog } from 'lucide-react';
 
 const marketIcons: Record<string, string> = {
   forex: '💱',
@@ -25,6 +25,7 @@ const quickActions = [
   { label: 'Cari peluang pasar', detail: 'Buka screener multi-aset', href: '/screener', icon: Radar },
   { label: 'Pantau robot forex', detail: 'Buka monitor strategi Forex M15', href: '/forex-robot', icon: Radar },
   { label: 'Periksa kesiapan robot', detail: 'Cek koneksi dan status operasional', href: '/operations', icon: ServerCog },
+  { label: 'Evaluasi hasil robot', detail: 'Analisis loss, biaya, dan performa aktual', href: '/trade-intelligence', icon: BrainCircuit },
   { label: 'Tulis jurnal trading', detail: 'Catat keputusan dan hasil transaksi', href: '/journal', icon: BookOpenText },
   { label: 'Kelola peringatan', detail: 'Atur alert harga dan sinyal', href: '/alerts', icon: BellRing },
 ] as const;

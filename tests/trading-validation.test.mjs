@@ -137,6 +137,7 @@ test('requires text broker tickets and claim identity on finalization', () => {
     attempts: 2,
     status: 'executed',
     execution_price: 1.2345,
+    executed_volume: 0.1,
     broker_order_ticket: '9223372036854775808',
   });
 
@@ -157,6 +158,7 @@ test('requires text broker tickets and claim identity on finalization', () => {
       attempts: 2,
       status: 'executed',
       execution_price: 1.2345,
+      executed_volume: 0.1,
       broker_order_ticket: 9223372036854775808,
     }).success,
     false
@@ -216,6 +218,7 @@ test('requires the exact claim generation for executed and failed finalization',
       attempts: 1.5,
       status: 'executed',
       execution_price: 1.2345,
+      executed_volume: 0.1,
       broker_order_ticket: '12345',
     }).success,
     false,
@@ -239,6 +242,7 @@ test('requires the exact claim generation for executed and failed finalization',
       attempts: baseClaim.attempts,
       status: 'executed',
       execution_price: 1.2345,
+      executed_volume: 0.1,
       broker_order_ticket: '12345',
     }).success,
     false,
@@ -253,11 +257,13 @@ test('recognizes only an identical terminal finalize replay', () => {
     attempts: 2,
     status: 'executed',
     execution_price: 1.2345,
+    executed_volume: 0.1,
     broker_order_ticket: '12345',
   };
   const executedRow = {
     status: 'executed',
     execution_price: '1.2345',
+    executed_volume: '0.1',
     broker_order_ticket: '12345',
     error_message: null,
     executed_at: '2026-07-29T01:02:04Z',
@@ -270,6 +276,13 @@ test('recognizes only an identical terminal finalize replay', () => {
   assert.equal(
     matchesCommittedTerminalResult(
       { ...executedRow, broker_order_ticket: '54321' },
+      executedRequest,
+    ),
+    false,
+  );
+  assert.equal(
+    matchesCommittedTerminalResult(
+      { ...executedRow, executed_volume: '0.2' },
       executedRequest,
     ),
     false,
@@ -288,6 +301,7 @@ test('recognizes only an identical terminal finalize replay', () => {
       {
         status: 'failed',
         execution_price: null,
+        executed_volume: null,
         broker_order_ticket: null,
         executed_at: null,
         error_message: 'broker rejected the order',

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { AlertWatcher } from '@/components/common/alert-watcher';
+import { ScalperRobotProvider } from '@/components/scalping/scalper-robot-provider';
 
 export const metadata: Metadata = {
   title: {
@@ -18,8 +19,10 @@ export default function RootLayout({
   return (
     <html lang="id" className="h-full antialiased">
       <body className="min-h-full flex flex-col">
-        <AlertWatcher />
-        {children}
+        <ScalperRobotProvider>
+          <AlertWatcher />
+          {children}
+        </ScalperRobotProvider>
       </body>
     </html>
   );

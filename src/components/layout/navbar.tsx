@@ -1,6 +1,6 @@
 'use client';
 
-import { Search, Bell, LogOut, Menu, ServerCog, Settings, TrendingUp } from 'lucide-react';
+import { Search, Bell, Bot, LogOut, Menu, ServerCog, Settings, TrendingUp } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ThemeToggle } from '@/components/common/theme-toggle';
@@ -20,11 +20,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useScalperRobotStatus } from '@/components/scalping/scalper-robot-provider';
 
 export function Navbar() {
   const user = useUserStore((state) => state.user);
   const alerts = useUserStore((state) => state.alerts);
   const logout = useUserStore((state) => state.logout);
+  const robotStatus = useScalperRobotStatus();
   const router = useRouter();
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -126,6 +128,29 @@ export function Navbar() {
       </div>
 
       <div className="flex items-center gap-2">
+        {robotStatus.isAutoTradingEnabled && (
+          <Link
+            href="/scalping"
+            className={buttonVariants({
+              variant: 'outline',
+              size: 'sm',
+              className: cn(
+                'hidden gap-1.5 rounded-xl sm:inline-flex',
+                robotStatus.isRobotPaused
+                  ? 'border-amber-500/40 text-amber-600'
+                  : 'border-emerald-500/40 text-emerald-600',
+              ),
+            })}
+            title={`${robotStatus.symbol} · ${robotStatus.isRobotPaused ? 'Robot dijeda' : 'Robot tetap aktif'}`}
+          >
+            <span className={cn(
+              'h-2 w-2 rounded-full',
+              robotStatus.isRobotPaused ? 'bg-amber-500' : 'bg-emerald-500',
+            )} />
+            <Bot className="h-3.5 w-3.5" />
+            {robotStatus.isRobotPaused ? 'Robot paused' : 'Robot ON'}
+          </Link>
+        )}
         <Link
           href="/forex-robot"
           className={buttonVariants({ variant: 'outline', size: 'sm', className: 'hidden gap-1.5 rounded-xl sm:inline-flex' })}

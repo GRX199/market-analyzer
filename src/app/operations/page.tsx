@@ -350,12 +350,14 @@ export default function OperationsPage() {
               </div>
             )}
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] text-sm">
+              <table className="w-full min-w-[880px] text-sm">
                 <thead>
                   <tr className="border-b text-left text-xs text-muted-foreground">
                     <th className="px-2 py-2 font-medium">Waktu</th>
                     <th className="px-2 py-2 font-medium">Simbol</th>
-                    <th className="px-2 py-2 font-medium">Intent</th>
+                    <th className="px-2 py-2 font-medium">Aksi</th>
+                    <th className="px-2 py-2 font-medium">Diminta</th>
+                    <th className="px-2 py-2 font-medium">Aktual MT5</th>
                     <th className="px-2 py-2 font-medium">Status</th>
                     <th className="px-2 py-2 font-medium">Percobaan</th>
                     <th className="px-2 py-2 font-medium">Broker / error</th>
@@ -366,14 +368,16 @@ export default function OperationsPage() {
                     <tr key={trade.id} className="border-b border-border/40">
                       <td className="whitespace-nowrap px-2 py-2 text-xs">{new Date(trade.createdAt).toLocaleString('id-ID')}</td>
                       <td className="px-2 py-2 font-mono">{trade.symbol}</td>
-                      <td className="px-2 py-2"><span className={trade.action === 'buy' ? 'text-emerald-500' : 'text-red-500'}>{trade.action.toUpperCase()}</span><span className="ml-2 text-muted-foreground">· {trade.volume}</span></td>
+                      <td className="px-2 py-2"><span className={trade.action === 'buy' ? 'text-emerald-500' : 'text-red-500'}>{trade.action.toUpperCase()}</span></td>
+                      <td className="px-2 py-2 font-mono">{trade.volume}</td>
+                      <td className="px-2 py-2 font-mono">{trade.executedVolume ?? '—'}</td>
                       <td className="px-2 py-2"><Badge variant="outline" className={tradeStatusClass(trade.status, trade.errorMessage)}>{tradeStatusLabel(trade.status, trade.errorMessage)}</Badge></td>
                       <td className="px-2 py-2 font-mono">{trade.attempts}</td>
                       <td className="max-w-[280px] truncate px-2 py-2 font-mono text-xs">{trade.brokerOrderTicket ?? trade.errorMessage ?? (trade.executionPrice === null ? '—' : `price ${trade.executionPrice}`)}</td>
                     </tr>
                   ))}
                   {!tradesLoading && trades.length === 0 && (
-                    <tr><td colSpan={6} className="px-2 py-8 text-center text-muted-foreground"><Activity className="mx-auto mb-2 h-6 w-6 opacity-40" />Belum ada intent trading untuk akun ini.</td></tr>
+                    <tr><td colSpan={8} className="px-2 py-8 text-center text-muted-foreground"><Activity className="mx-auto mb-2 h-6 w-6 opacity-40" />Belum ada intent trading untuk akun ini.</td></tr>
                   )}
                 </tbody>
               </table>

@@ -20,6 +20,7 @@ const TRADE_FIELDS = [
   'market_type',
   'action',
   'volume',
+  'executed_volume',
   'status',
   'worker_id',
   'idempotency_key',
@@ -84,6 +85,7 @@ export async function PATCH(
       ? {
           status: 'executed',
           execution_price: validated.data.execution_price,
+          executed_volume: validated.data.executed_volume,
           broker_order_ticket: validated.data.broker_order_ticket,
           executed_at: new Date().toISOString(),
           error_message: null,
@@ -91,6 +93,7 @@ export async function PATCH(
       : {
           status: 'failed',
           execution_price: null,
+          executed_volume: null,
           broker_order_ticket: null,
           executed_at: null,
           error_message: validated.data.error_message,

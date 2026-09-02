@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 
 import {
   BINANCE_HISTORY_LIMIT,
@@ -10,6 +11,10 @@ import {
   parseBinanceRestKlines,
 } from '../src/lib/scalping/binance-feed.ts';
 import { deriveClosedScalperSignal } from '../src/lib/scalping/signal.ts';
+
+async function source(relativePath) {
+  return readFile(new URL(`../${relativePath}`, import.meta.url), 'utf8');
+}
 
 function kline(startTime, open, close, isFinal = true) {
   return {
@@ -98,4 +103,19 @@ test('scalper signal ignores a forming candle and treats doji as neutral', () =>
   ]);
   assert.equal(withFinalDoji.momentum, 'wait');
   assert.equal(withFinalDoji.action, null);
+});
+
+test('scalper robot runtime survives page navigation through the root layout', async () => {
+  const [layout, provider, page] = await Promise.all([
+    source('src/app/layout.tsx'),
+    source('src/components/scalping/scalper-robot-provider.tsx'),
+    source('src/app/scalping/page.tsx'),
+  ]);
+
+  assert.match(layout, /<ScalperRobotProvider>/);
+  assert.match(provider, /useBinanceWebSocket\(symbol, shouldKeepFeedAlive\)/);
+  assert.match(provider, /void createAutoTrade\(/);
+  assert.match(provider, /Robot tetap aktif saat Anda berpindah halaman/);
+  assert.match(provider, /useScalperRobotStatus/);
+  assert.doesNotMatch(page, /void createAutoTrade\(/);
 });

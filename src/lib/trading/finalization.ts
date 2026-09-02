@@ -14,9 +14,12 @@ export function matchesCommittedTerminalResult(
 
   if (requestedResult.status === 'executed') {
     const executionPrice = Number(row.execution_price);
+    const executedVolume = Number(row.executed_volume);
     return (
       Number.isFinite(executionPrice)
       && executionPrice === requestedResult.execution_price
+      && Number.isFinite(executedVolume)
+      && executedVolume === requestedResult.executed_volume
       && row.broker_order_ticket === requestedResult.broker_order_ticket
       && row.error_message === null
       && typeof row.executed_at === 'string'
@@ -26,6 +29,7 @@ export function matchesCommittedTerminalResult(
   return (
     row.error_message === requestedResult.error_message
     && row.execution_price === null
+    && row.executed_volume === null
     && row.broker_order_ticket === null
     && row.executed_at === null
   );

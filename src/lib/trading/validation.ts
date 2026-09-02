@@ -41,6 +41,7 @@ export type FinalizeTradeInput = FinalizeClaimFence &
     | {
         status: 'executed';
         execution_price: number;
+        executed_volume: number;
         broker_order_ticket: string;
       }
     | {
@@ -279,6 +280,17 @@ export function parseFinalizeTradeInput(
       return failure('broker_order_ticket must be a 1-64 character string');
     }
 
+    if (
+      typeof value.executed_volume !== 'number'
+      || !Number.isFinite(value.executed_volume)
+      || value.executed_volume <= 0
+      || value.executed_volume > MAX_TRADE_VOLUME
+    ) {
+      return failure(
+        `executed_volume must be greater than 0 and at most ${MAX_TRADE_VOLUME}`
+      );
+    }
+
     return {
       success: true,
       data: {
@@ -288,6 +300,7 @@ export function parseFinalizeTradeInput(
         attempts: value.attempts,
         status: 'executed',
         execution_price: value.execution_price,
+        executed_volume: value.executed_volume,
         broker_order_ticket: value.broker_order_ticket,
       },
     };

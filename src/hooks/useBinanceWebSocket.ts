@@ -44,7 +44,7 @@ function parseOrderBookSide(value: unknown): [number, number][] {
   });
 }
 
-export function useBinanceWebSocket(symbol: string) {
+export function useBinanceWebSocket(symbol: string, enabled = true) {
   const [currentPrice, setCurrentPrice] = useState(0);
   const [recentTrades, setRecentTrades] = useState<TradeStreamData[]>([]);
   const [orderBook, setOrderBook] = useState<OrderBookData>(EMPTY_ORDER_BOOK);
@@ -298,7 +298,9 @@ export function useBinanceWebSocket(symbol: string) {
       };
     };
 
-    connectCurrentGenerationRef.current = connectCurrentGeneration;
+    connectCurrentGenerationRef.current = enabled
+      ? connectCurrentGeneration
+      : () => {};
     // Start on the next task so the symbol-reset state updates are not made
     // synchronously from the effect body. It also gives cleanup a chance to
     // cancel a stale start during a rapid symbol change.
@@ -316,7 +318,7 @@ export function useBinanceWebSocket(symbol: string) {
       setReconnectAttempt(0);
       setReconnectExhausted(false);
       setConnectionError(null);
-      connectCurrentGeneration();
+      if (enabled) connectCurrentGeneration();
     }, 0);
 
     return () => {
@@ -338,7 +340,7 @@ export function useBinanceWebSocket(symbol: string) {
         wsRef.current = null;
       }
     };
-  }, [clearSocketTimers, symbol]);
+  }, [clearSocketTimers, enabled, symbol]);
 
   return {
     currentPrice,

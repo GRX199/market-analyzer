@@ -8,6 +8,7 @@ export interface QueuedTradeHistoryItem {
   marketType: string;
   action: 'buy' | 'sell';
   volume: number;
+  executedVolume: number | null;
   status: string;
   idempotencyKey: string;
   attempts: number;
@@ -28,6 +29,10 @@ function parseHistoryItem(value: unknown): QueuedTradeHistoryItem | null {
   const row = value as Record<string, unknown>;
   const volume = Number(row.volume);
   const attempts = Number(row.attempts);
+  const executedVolume = row.executed_volume === null
+    || row.executed_volume === undefined
+    ? null
+    : Number(row.executed_volume);
   const executionPrice = row.execution_price === null
     ? null
     : Number(row.execution_price);
@@ -41,6 +46,7 @@ function parseHistoryItem(value: unknown): QueuedTradeHistoryItem | null {
     || typeof row.idempotency_key !== 'string'
     || typeof row.created_at !== 'string'
     || !Number.isFinite(volume)
+    || (executedVolume !== null && !Number.isFinite(executedVolume))
     || !Number.isInteger(attempts)
     || (executionPrice !== null && !Number.isFinite(executionPrice))
   ) {
@@ -53,6 +59,7 @@ function parseHistoryItem(value: unknown): QueuedTradeHistoryItem | null {
     marketType: row.market_type,
     action: row.action,
     volume,
+    executedVolume,
     status: row.status,
     idempotencyKey: row.idempotency_key,
     attempts,
@@ -144,9 +151,12 @@ export function useTradeHistory(enabled: boolean) {
     const intervalId = globalThis.setInterval(() => {
       void refresh();
     }, 15_000);
+    const handleRuntimeRefresh = () => void refresh();
+    window.addEventListener('auto-trade-history-refresh', handleRuntimeRefresh);
     return () => {
       globalThis.clearTimeout(initialRefreshTimer);
       globalThis.clearInterval(intervalId);
+      window.removeEventListener('auto-trade-history-refresh', handleRuntimeRefresh);
       requestSequenceRef.current += 1;
       abortRef.current?.abort();
       abortRef.current = null;

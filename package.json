@@ -12,7 +12,7 @@
     "start": "next start",
     "lint": "eslint",
     "type-check": "tsc --noEmit",
-    "test": "node --test tests/account-state-contract.test.mjs tests/alert-draft.test.mjs tests/backtest.test.mjs tests/forex-robot-contract.test.mjs tests/market-input.test.mjs tests/operations-status.test.mjs tests/scalper-signal.test.mjs tests/trading-validation.test.mjs tests/trading-security-contract.test.mjs",
+    "test": "node --test tests/account-state-contract.test.mjs tests/alert-draft.test.mjs tests/backtest.test.mjs tests/forex-robot-contract.test.mjs tests/market-input.test.mjs tests/operations-status.test.mjs tests/scalper-signal.test.mjs tests/trade-intelligence.test.mjs tests/trading-validation.test.mjs tests/trading-security-contract.test.mjs",
     "check": "npm run lint && npm run type-check && npm test && npm run build"
   },
   "dependencies": {

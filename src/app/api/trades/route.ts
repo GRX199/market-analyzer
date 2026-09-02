@@ -18,6 +18,7 @@ const TRADE_FIELDS = [
   'market_type',
   'action',
   'volume',
+  'executed_volume',
   'status',
   'idempotency_key',
   'attempts',

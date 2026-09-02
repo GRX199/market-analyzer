@@ -161,3 +161,16 @@ test('terminal finalize supports identical response-loss replay', async () => {
   assert.match(finalizeRoute, /replayed: true/);
   assert.match(finalizeRoute, /replayed: false/);
 });
+
+test('requested and broker-filled volumes remain separate and validated', async () => {
+  const [migration, finalizeRoute, validation] = await Promise.all([
+    source('supabase/migrations/20260903000100_track_executed_trade_volume.sql'),
+    source('src/app/api/trades/[id]/route.ts'),
+    source('src/lib/trading/validation.ts'),
+  ]);
+
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS executed_volume NUMERIC/);
+  assert.match(migration, /executed_volume > 0 AND executed_volume <= 100/);
+  assert.match(finalizeRoute, /executed_volume: validated\.data\.executed_volume/);
+  assert.match(validation, /executed_volume must be greater than 0/);
+});

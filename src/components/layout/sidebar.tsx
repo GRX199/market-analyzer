@@ -23,6 +23,7 @@ import {
   Flame,
   Bot,
   ServerCog,
+  BrainCircuit,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useUserStore } from '@/stores/user-store';
@@ -52,6 +53,7 @@ export const navSections = [
     items: [
       { href: '/forex-robot', label: 'Robot Forex', icon: Bot },
       { href: '/operations', label: 'Robot & Sistem', icon: ServerCog },
+      { href: '/trade-intelligence', label: 'Trade Intelligence', icon: BrainCircuit },
       { href: '/journal', label: 'Jurnal Trading', icon: BookOpen },
       { href: '/alerts', label: 'Peringatan', icon: Bell },
       { href: '/news', label: 'Berita & Sentimen', icon: Newspaper },
