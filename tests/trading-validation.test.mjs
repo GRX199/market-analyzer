@@ -85,7 +85,18 @@ test('rejects unsafe trade actions and volume', () => {
       symbol: 'EURUSD',
       marketType: 'crypto',
       action: 'buy',
-      volume: 1000,
+      volume: 1,
+      idempotencyKey: 'request:12345678',
+    }).success,
+    false
+  );
+
+  assert.equal(
+    parseCreateTradeInput({
+      symbol: 'BTCUSDT',
+      marketType: 'crypto',
+      action: 'buy',
+      volume: 0.005,
       idempotencyKey: 'request:12345678',
     }).success,
     false

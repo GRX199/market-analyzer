@@ -30,6 +30,7 @@ import { ALL_SYMBOLS } from '@/lib/constants';
 import { useUserStore } from '@/stores/user-store';
 import { toast } from 'sonner';
 import { deriveClosedScalperSignal } from '@/lib/scalping/signal';
+import { DEMO_CRYPTO_REQUESTED_VOLUME } from '@/lib/trading/validation';
 import { useTradeHistory } from '@/hooks/use-trade-history';
 
 const IS_TRADING_DEPLOYMENT_ENABLED =
@@ -168,7 +169,7 @@ export default function ScalpingDashboard() {
   }, [klineHistory, currentKline]);
 
   const parsedVolume = Number(requestedVolume);
-  const isVolumeValid = Number.isFinite(parsedVolume) && parsedVolume > 0 && parsedVolume <= 100;
+  const isVolumeValid = parsedVolume === DEMO_CRYPTO_REQUESTED_VOLUME;
   const handleSymbolChange = (nextSymbol: string | null) => {
     if (!nextSymbol || nextSymbol === symbol) return;
     changeSymbol(nextSymbol);
@@ -542,9 +543,9 @@ export default function ScalpingDashboard() {
               <Input
                 id="robot-volume"
                 type="number"
-                min="0.01"
-                max="100"
-                step="0.01"
+                min={DEMO_CRYPTO_REQUESTED_VOLUME}
+                max={DEMO_CRYPTO_REQUESTED_VOLUME}
+                step={DEMO_CRYPTO_REQUESTED_VOLUME}
                 inputMode="decimal"
                 value={requestedVolume}
                 onChange={(event) => setRequestedVolume(event.target.value)}
@@ -555,8 +556,8 @@ export default function ScalpingDashboard() {
                 isVolumeValid ? 'text-muted-foreground' : 'text-destructive',
               )}>
                 {isVolumeValid
-                  ? 'Order hanya dikirim jika volume ini aman dan sesuai langkah lot broker; robot tidak akan menurunkannya diam-diam.'
-                  : 'Volume harus lebih dari 0 dan maksimal 100.'}
+                  ? 'Batas konservatif akun demo saat ini adalah 0.01 lot. MT5 tetap menolak order jika kondisi pasar membuatnya tidak aman.'
+                  : `Volume robot crypto demo harus tepat ${DEMO_CRYPTO_REQUESTED_VOLUME} lot.`}
               </p>
             </div>
           </div>

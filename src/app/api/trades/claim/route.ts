@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { getSupabaseAdminClient } from '@/lib/supabase/server';
 import {
@@ -13,6 +14,20 @@ import {
 
 export const runtime = 'nodejs';
 
+const CLAIM_FIELDS = [
+  'id',
+  'symbol',
+  'market_type',
+  'action',
+  'volume',
+  'status',
+  'worker_id',
+  'claimed_at',
+  'created_at',
+  'idempotency_key',
+  'attempts',
+].join(',');
+
 function json(
   body: Record<string, unknown>,
   status: number
@@ -21,6 +36,22 @@ function json(
     status,
     headers: { 'Cache-Control': 'no-store' },
   });
+}
+
+async function findExistingWorkerClaim(
+  admin: SupabaseClient,
+  ownerUserId: string,
+  workerId: string,
+) {
+  return admin
+    .from('auto_trades')
+    .select(CLAIM_FIELDS)
+    .eq('user_id', ownerUserId)
+    .eq('status', 'processing')
+    .eq('worker_id', workerId)
+    .order('claimed_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
 }
 
 export async function POST(request: Request) {
@@ -64,6 +95,25 @@ export async function POST(request: Request) {
     return json({ error: 'Trade service is not configured' }, 503);
   }
 
+  // A stable worker id turns claim into a recoverable operation. If the
+  // previous HTTP response was lost after commit, return that same processing
+  // row instead of taking another trade.
+  const { data: existingClaim, error: existingClaimError } =
+    await findExistingWorkerClaim(
+      admin,
+      ownerUserId,
+      validated.data.worker_id,
+    );
+  if (existingClaimError) {
+    console.error('Failed to recover an existing worker claim', {
+      code: existingClaimError.code,
+    });
+    return json({ error: 'Failed to inspect worker claim state' }, 500);
+  }
+  if (existingClaim) {
+    return json({ trades: [existingClaim], recovered: true }, 200);
+  }
+
   // The argument names intentionally match the Data API contract exactly.
   const { data, error } = await admin.rpc('claim_auto_trades', {
     worker_id: validated.data.worker_id,
@@ -76,5 +126,26 @@ export async function POST(request: Request) {
     return json({ error: 'Failed to claim queued trades' }, 500);
   }
 
-  return json({ trades: data ?? [] }, 200);
+  if (!data?.length) {
+    // A concurrent retry can enter before the first request commits. The RPC
+    // serializes both claim decisions; this second read recovers the row the
+    // first request claimed for the same worker.
+    const { data: racedClaim, error: racedClaimError } =
+      await findExistingWorkerClaim(
+        admin,
+        ownerUserId,
+        validated.data.worker_id,
+      );
+    if (racedClaimError) {
+      console.error('Failed to recover a concurrent worker claim', {
+        code: racedClaimError.code,
+      });
+      return json({ error: 'Failed to inspect worker claim state' }, 500);
+    }
+    if (racedClaim) {
+      return json({ trades: [racedClaim], recovered: true }, 200);
+    }
+  }
+
+  return json({ trades: data ?? [], recovered: false }, 200);
 }

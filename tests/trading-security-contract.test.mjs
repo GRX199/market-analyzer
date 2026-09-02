@@ -15,6 +15,10 @@ test('worker claim is kill-switched and bound to the configured owner', async ()
   assert.match(claimRoute, /process\.env\.TRADING_ENABLED !== 'true'/);
   assert.match(claimRoute, /getSingleConfiguredUserId/);
   assert.match(claimRoute, /owner_user_id: ownerUserId/);
+  assert.match(claimRoute, /findExistingWorkerClaim/);
+  assert.match(claimRoute, /\.eq\('status', 'processing'\)/);
+  assert.match(claimRoute, /\.eq\('worker_id', workerId\)/);
+  assert.match(claimRoute, /recovered: true/);
   assert.match(validation, /WORKER_CLAIM_LIMIT = 1/);
   assert.match(validation, /value\.limit !== WORKER_CLAIM_LIMIT/);
 });

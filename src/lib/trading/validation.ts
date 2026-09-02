@@ -1,4 +1,5 @@
 export const MAX_TRADE_VOLUME = 100;
+export const DEMO_CRYPTO_REQUESTED_VOLUME = 0.01;
 export const WORKER_CLAIM_LIMIT = 1;
 
 const SYMBOL_PATTERN = /^[A-Z0-9][A-Z0-9./_#-]{1,31}$/;
@@ -175,10 +176,11 @@ export function parseCreateTradeInput(
   if (
     typeof value.volume !== 'number' ||
     !Number.isFinite(value.volume) ||
-    value.volume <= 0 ||
-    value.volume > MAX_TRADE_VOLUME
+    value.volume !== DEMO_CRYPTO_REQUESTED_VOLUME
   ) {
-    return failure(`volume must be greater than 0 and at most ${MAX_TRADE_VOLUME}`);
+    return failure(
+      `demo crypto volume must be exactly ${DEMO_CRYPTO_REQUESTED_VOLUME}`
+    );
   }
 
   const idempotencyKey = parseIdempotencyKey(value.idempotencyKey);

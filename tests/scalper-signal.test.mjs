@@ -116,6 +116,8 @@ test('scalper robot runtime survives page navigation through the root layout', a
   assert.match(provider, /useBinanceWebSocket\(symbol, shouldKeepFeedAlive\)/);
   assert.match(provider, /void createAutoTrade\(/);
   assert.match(provider, /Robot tetap aktif saat Anda berpindah halaman/);
+  assert.match(provider, /DEMO_CRYPTO_REQUESTED_VOLUME/);
+  assert.match(page, /max=\{DEMO_CRYPTO_REQUESTED_VOLUME\}/);
   assert.match(provider, /useScalperRobotStatus/);
   assert.doesNotMatch(page, /void createAutoTrade\(/);
 });

@@ -14,6 +14,7 @@ import { usePathname } from 'next/navigation';
 
 import { useBinanceWebSocket } from '@/hooks/useBinanceWebSocket';
 import { deriveClosedScalperSignal } from '@/lib/scalping/signal';
+import { DEMO_CRYPTO_REQUESTED_VOLUME } from '@/lib/trading/validation';
 import { useUserStore } from '@/stores/user-store';
 
 const IS_TRADING_DEPLOYMENT_ENABLED =
@@ -56,7 +57,9 @@ function errorMessage(error: unknown) {
 
 export function ScalperRobotProvider({ children }: { children: React.ReactNode }) {
   const [symbol, setSymbol] = useState('BTC/USDT');
-  const [requestedVolume, setRequestedVolume] = useState('0.01');
+  const [requestedVolume, setRequestedVolume] = useState(
+    String(DEMO_CRYPTO_REQUESTED_VOLUME),
+  );
   const [isAutoTradingEnabled, setIsAutoTradingEnabled] = useState(false);
   const [isRobotInterrupted, setIsRobotInterrupted] = useState(false);
   const armedAfterCandleRef = useRef<number | null>(null);
@@ -139,7 +142,7 @@ export function ScalperRobotProvider({ children }: { children: React.ReactNode }
     if (queueRequestInFlightRef.current) return;
 
     const volume = Number(requestedVolume);
-    if (!Number.isFinite(volume) || volume <= 0 || volume > 100) {
+    if (volume !== DEMO_CRYPTO_REQUESTED_VOLUME) {
       queueMicrotask(() => {
         setIsRobotInterrupted(true);
         setIsAutoTradingEnabled(false);
@@ -222,9 +225,7 @@ export function ScalperRobotProvider({ children }: { children: React.ReactNode }
     const volume = Number(requestedVolume);
     if (
       !IS_TRADING_DEPLOYMENT_ENABLED
-      || !Number.isFinite(volume)
-      || volume <= 0
-      || volume > 100
+      || volume !== DEMO_CRYPTO_REQUESTED_VOLUME
       || !Number.isFinite(armedAfterCandleStart)
       || !feed.isConnected
       || !feed.isBackfillComplete
