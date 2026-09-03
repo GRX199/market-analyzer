@@ -178,3 +178,16 @@ test('requested and broker-filled volumes remain separate and validated', async 
   assert.match(finalizeRoute, /executed_volume: validated\.data\.executed_volume/);
   assert.match(validation, /executed_volume must be greater than 0/);
 });
+
+test('robot Telegram notifications are worker-authenticated and owner-bound', async () => {
+  const route = await source('src/app/api/trading/notifications/route.ts');
+
+  assert.match(route, /authorizeWorkerRequest\(request\)/);
+  assert.match(route, /TRADING_ALLOWED_USER_IDS/);
+  assert.match(route, /TELEGRAM_ALLOWED_USER_IDS/);
+  assert.match(route, /TELEGRAM_ALLOWED_CHAT_IDS/);
+  assert.match(route, /parseRobotNotificationInput/);
+  assert.match(route, /\.eq\('id', ownerUserId\)/);
+  assert.match(route, /disable_web_page_preview: true/);
+  assert.doesNotMatch(route, /parse_mode/);
+});

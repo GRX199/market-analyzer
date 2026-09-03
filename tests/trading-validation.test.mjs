@@ -9,6 +9,7 @@ import {
   parseClaimTradesInput,
   parseCreateTradeInput,
   parseFinalizeTradeInput,
+  parseRobotNotificationInput,
   parseTelegramNotificationInput,
 } from '../src/lib/trading/validation.ts';
 import { matchesCommittedTerminalResult } from '../src/lib/trading/finalization.ts';
@@ -348,6 +349,44 @@ test('bounds Telegram destinations and messages', () => {
       message: 'x'.repeat(4097),
     }).success,
     false
+  );
+});
+
+test('bounds authenticated robot notification events', () => {
+  assert.deepEqual(
+    parseRobotNotificationInput({
+      worker_id: 'mt5-worker:demo-1',
+      event_type: 'trade_opened',
+      event_id: 'opened:forex:123456',
+      message: 'EURUSDm BUY 0.01 lot',
+    }),
+    {
+      success: true,
+      data: {
+        worker_id: 'mt5-worker:demo-1',
+        event_type: 'trade_opened',
+        event_id: 'opened:forex:123456',
+        message: 'EURUSDm BUY 0.01 lot',
+      },
+    },
+  );
+  assert.equal(
+    parseRobotNotificationInput({
+      worker_id: 'mt5-worker:demo-1',
+      event_type: 'arbitrary_message',
+      event_id: 'opened:forex:123456',
+      message: 'unsafe event',
+    }).success,
+    false,
+  );
+  assert.equal(
+    parseRobotNotificationInput({
+      worker_id: 'mt5-worker:demo-1',
+      event_type: 'attention',
+      event_id: 'bad id with spaces',
+      message: 'invalid event id',
+    }).success,
+    false,
   );
 });
 

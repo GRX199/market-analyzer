@@ -13,6 +13,18 @@ const CLAIMED_AT_PATTERN =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/;
 const MAX_QUEUE_ATTEMPTS = 5;
 
+export const ROBOT_NOTIFICATION_EVENT_TYPES = [
+  'startup',
+  'trade_opened',
+  'trade_closed',
+  'break_even',
+  'attention',
+  'shutdown',
+] as const;
+
+export type RobotNotificationEventType =
+  (typeof ROBOT_NOTIFICATION_EVENT_TYPES)[number];
+
 export type ValidationResult<T> =
   | { success: true; data: T }
   | { success: false; error: string };
@@ -53,6 +65,13 @@ export type FinalizeTradeInput = FinalizeClaimFence &
 
 export type TelegramNotificationInput = {
   chatId?: string;
+  message: string;
+};
+
+export type RobotNotificationInput = {
+  worker_id: string;
+  event_type: RobotNotificationEventType;
+  event_id: string;
   message: string;
 };
 
@@ -373,6 +392,55 @@ export function parseTelegramNotificationInput(
     success: true,
     data: {
       chatId: value.chatId.trim(),
+      message,
+    },
+  };
+}
+
+export function parseRobotNotificationInput(
+  value: unknown
+): ValidationResult<RobotNotificationInput> {
+  if (!isRecord(value)) {
+    return failure('request body must be a JSON object');
+  }
+
+  const workerId = parseWorkerId(value.worker_id);
+  if (!workerId.success) {
+    return workerId;
+  }
+
+  if (
+    typeof value.event_type !== 'string'
+    || !ROBOT_NOTIFICATION_EVENT_TYPES.includes(
+      value.event_type as RobotNotificationEventType
+    )
+  ) {
+    return failure('event_type is not supported');
+  }
+
+  const eventId = parseIdempotencyKey(value.event_id);
+  if (!eventId.success) {
+    return failure('event_id must contain 8-128 safe characters');
+  }
+
+  if (typeof value.message !== 'string') {
+    return failure('message must be a string');
+  }
+  const message = value.message.trim();
+  if (
+    message.length < 1
+    || message.length > 2000
+    || message.includes('\u0000')
+  ) {
+    return failure('message must contain 1-2000 safe characters');
+  }
+
+  return {
+    success: true,
+    data: {
+      worker_id: workerId.data,
+      event_type: value.event_type as RobotNotificationEventType,
+      event_id: eventId.data,
       message,
     },
   };
