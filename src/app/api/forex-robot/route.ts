@@ -1,17 +1,19 @@
 import { NextResponse } from 'next/server';
 
 import { FOREX_SYMBOLS } from '@/lib/constants';
-import { calculateATR, calculateEMA, calculateRSI } from '@/lib/analysis/technical';
+import { calculateATR, calculateEMA } from '@/lib/analysis/technical';
 import { getOHLCV } from '@/services/market-data';
 import type { OHLCV } from '@/types/market';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const ROBOT_PAIRS = ['XAU/USD', 'EUR/USD', 'USD/JPY', 'USD/CHF', 'GBP/USD'] as const;
-const M15_SECONDS = 15 * 60;
-const ATR_STOP_MULTIPLIER = 1.5;
-const REWARD_RISK_RATIO = 1.5;
+const ROBOT_PAIRS = ['XAU/USD'] as const;
+const H1_SECONDS = 60 * 60;
+const ATR_STOP_MULTIPLIER = 3;
+const REWARD_RISK_RATIO = 10;
+const BREAKOUT_LOOKBACK = 20;
+const EMA_SLOPE_LOOKBACK = 4;
 
 type PreviewSignal = 'buy' | 'sell' | 'wait' | 'unavailable';
 
@@ -25,8 +27,8 @@ function candleTimeSeconds(candle: OHLCV): number | null {
   return Number.isFinite(timestamp) ? Math.floor(timestamp / 1000) : null;
 }
 
-function completedM15Candles(candles: OHLCV[], now = Date.now()): OHLCV[] {
-  const activeCandleStart = Math.floor(now / (M15_SECONDS * 1000)) * M15_SECONDS;
+function completedH1Candles(candles: OHLCV[], now = Date.now()): OHLCV[] {
+  const activeCandleStart = Math.floor(now / (H1_SECONDS * 1000)) * H1_SECONDS;
   return candles.filter((candle) => {
     const time = candleTimeSeconds(candle);
     return time !== null && time < activeCandleStart;
@@ -36,33 +38,38 @@ function completedM15Candles(candles: OHLCV[], now = Date.now()): OHLCV[] {
 async function analyzePair(symbol: typeof ROBOT_PAIRS[number]) {
   const name = FOREX_SYMBOLS.find((item) => item.symbol === symbol)?.name ?? symbol;
   try {
-    const completedCandles = completedM15Candles(await getOHLCV(symbol, '15m'));
-    if (completedCandles.length < 200) {
+    const completedCandles = completedH1Candles(await getOHLCV(symbol, '1H'));
+    if (completedCandles.length < 225) {
       return {
         symbol,
         name,
         signal: 'unavailable' as PreviewSignal,
-        reason: `Riwayat candle final belum cukup (${completedCandles.length}/200).`,
+        reason: `Riwayat candle final belum cukup (${completedCandles.length}/225).`,
       };
     }
 
     const closes = completedCandles.map((candle) => candle.close);
-    const ema50 = calculateEMA(closes, 50).at(-1);
+    const ema50Series = calculateEMA(closes, 50);
+    const ema50 = ema50Series.at(-1);
+    const ema50Before = ema50Series.at(-1 - EMA_SLOPE_LOOKBACK);
     const ema200 = calculateEMA(closes, 200).at(-1);
-    const rsi = calculateRSI(closes, 14).at(-1);
     const atr = calculateATR(completedCandles, 14).at(-1);
     const lastCandle = completedCandles.at(-1);
+    const priorChannel = completedCandles.slice(-BREAKOUT_LOOKBACK - 1, -1);
+    const breakoutHigh = Math.max(...priorChannel.map((candle) => candle.high));
+    const breakoutLow = Math.min(...priorChannel.map((candle) => candle.low));
     const lastClosedTime = lastCandle ? candleTimeSeconds(lastCandle) : null;
 
     if (
       !lastCandle
       || ema50 === undefined
+      || ema50Before === undefined
       || ema200 === undefined
-      || rsi === undefined
       || atr === undefined
       || !Number.isFinite(ema50)
       || !Number.isFinite(ema200)
-      || !Number.isFinite(rsi)
+      || !Number.isFinite(breakoutHigh)
+      || !Number.isFinite(breakoutLow)
       || !Number.isFinite(atr)
       || atr <= 0
       || lastClosedTime === null
@@ -71,14 +78,18 @@ async function analyzePair(symbol: typeof ROBOT_PAIRS[number]) {
         symbol,
         name,
         signal: 'unavailable' as PreviewSignal,
-        reason: 'Indikator M15 belum dapat dihitung dari provider website.',
+        reason: 'Indikator H1 belum dapat dihitung dari provider website.',
       };
     }
 
     const trend = ema50 > ema200 ? 'bullish' : ema50 < ema200 ? 'bearish' : 'neutral';
-    const signal: PreviewSignal = trend === 'bullish' && rsi < 45
+    const signal: PreviewSignal = trend === 'bullish'
+      && ema50 > ema50Before
+      && lastCandle.close > breakoutHigh
       ? 'buy'
-      : trend === 'bearish' && rsi > 55
+      : trend === 'bearish'
+        && ema50 < ema50Before
+        && lastCandle.close < breakoutLow
         ? 'sell'
         : 'wait';
     const stopDistance = atr * ATR_STOP_MULTIPLIER;
@@ -92,7 +103,8 @@ async function analyzePair(symbol: typeof ROBOT_PAIRS[number]) {
       price: lastCandle.close,
       ema50,
       ema200,
-      rsi,
+      breakoutHigh,
+      breakoutLow,
       atr,
       stopLoss: signal === 'buy'
         ? lastCandle.close - stopDistance
@@ -102,13 +114,13 @@ async function analyzePair(symbol: typeof ROBOT_PAIRS[number]) {
         : signal === 'sell' ? lastCandle.close - targetDistance : null,
       lastClosedAt: new Date(lastClosedTime * 1000).toISOString(),
       reason: signal === 'buy'
-        ? 'EMA 50 di atas EMA 200 dan RSI di bawah 45.'
+        ? 'Close H1 menembus high 20 candle dalam tren EMA bullish yang menguat.'
         : signal === 'sell'
-          ? 'EMA 50 di bawah EMA 200 dan RSI di atas 55.'
+          ? 'Close H1 menembus low 20 candle dalam tren EMA bearish yang melemah.'
           : trend === 'bullish'
-            ? 'Tren bullish, tetapi pullback RSI belum di bawah 45.'
+            ? 'Tren bullish, tetapi belum ada breakout high 20 candle yang valid.'
             : trend === 'bearish'
-              ? 'Tren bearish, tetapi pullback RSI belum di atas 55.'
+              ? 'Tren bearish, tetapi belum ada breakout low 20 candle yang valid.'
               : 'EMA 50 dan EMA 200 belum memberi arah yang jelas.',
     };
   } catch (error) {
@@ -117,7 +129,7 @@ async function analyzePair(symbol: typeof ROBOT_PAIRS[number]) {
       symbol,
       name,
       signal: 'unavailable' as PreviewSignal,
-      reason: 'Data M15 gagal dimuat dari provider website.',
+      reason: 'Data H1 gagal dimuat dari provider website.',
     };
   }
 }
@@ -129,7 +141,7 @@ export async function GET() {
       success: true,
       data: {
         scannedAt: new Date().toISOString(),
-        timeframe: 'M15',
+        timeframe: 'H1',
         source: 'Yahoo Finance preview',
         rows,
       },

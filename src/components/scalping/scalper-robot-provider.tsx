@@ -18,7 +18,8 @@ import { DEMO_CRYPTO_REQUESTED_VOLUME } from '@/lib/trading/validation';
 import { useUserStore } from '@/stores/user-store';
 
 const IS_TRADING_DEPLOYMENT_ENABLED =
-  process.env.NEXT_PUBLIC_TRADING_ENABLED === 'true';
+  process.env.NEXT_PUBLIC_TRADING_ENABLED === 'true'
+  && process.env.NEXT_PUBLIC_CRYPTO_ENTRIES_ENABLED === 'true';
 
 type ScalperFeed = ReturnType<typeof useBinanceWebSocket>;
 

@@ -6,18 +6,18 @@ async function source(relativePath) {
   return readFile(new URL(`../${relativePath}`, import.meta.url), 'utf8');
 }
 
-test('forex robot preview mirrors the closed-candle M15 entry gates', async () => {
+test('forex robot preview mirrors the closed-candle H1 breakout gates', async () => {
   const route = await source('src/app/api/forex-robot/route.ts');
 
-  assert.match(route, /getOHLCV\(symbol, '15m'\)/);
+  assert.match(route, /getOHLCV\(symbol, '1H'\)/);
   assert.match(route, /time < activeCandleStart/);
   assert.match(route, /calculateEMA\(closes, 50\)/);
   assert.match(route, /calculateEMA\(closes, 200\)/);
-  assert.match(route, /calculateRSI\(closes, 14\)/);
-  assert.match(route, /trend === 'bullish' && rsi < 45/);
-  assert.match(route, /trend === 'bearish' && rsi > 55/);
-  assert.match(route, /ATR_STOP_MULTIPLIER = 1\.5/);
-  assert.match(route, /REWARD_RISK_RATIO = 1\.5/);
+  assert.match(route, /BREAKOUT_LOOKBACK = 20/);
+  assert.match(route, /lastCandle\.close > breakoutHigh/);
+  assert.match(route, /lastCandle\.close < breakoutLow/);
+  assert.match(route, /ATR_STOP_MULTIPLIER = 3/);
+  assert.match(route, /REWARD_RISK_RATIO = 10/);
   assert.match(route, /private, no-store/);
 });
 

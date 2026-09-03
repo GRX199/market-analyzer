@@ -34,7 +34,8 @@ import { DEMO_CRYPTO_REQUESTED_VOLUME } from '@/lib/trading/validation';
 import { useTradeHistory } from '@/hooks/use-trade-history';
 
 const IS_TRADING_DEPLOYMENT_ENABLED =
-  process.env.NEXT_PUBLIC_TRADING_ENABLED === 'true';
+  process.env.NEXT_PUBLIC_TRADING_ENABLED === 'true'
+  && process.env.NEXT_PUBLIC_CRYPTO_ENTRIES_ENABLED === 'true';
 
 const playAlertSound = (type: 'buy' | 'sell') => {
   try {
@@ -177,8 +178,8 @@ export default function ScalpingDashboard() {
 
   const handleRobotButtonClick = () => {
     if (!IS_TRADING_DEPLOYMENT_ENABLED) {
-      toast.warning('Trading dinonaktifkan oleh deployment', {
-        description: 'Aktifkan NEXT_PUBLIC_TRADING_ENABLED hanya setelah semua pemeriksaan paper trading lulus.',
+      toast.warning('Entry crypto otomatis sedang dikunci', {
+        description: 'Strategi M1 lama gagal validasi. Chart dan sinyal tetap tersedia untuk analisis.',
       });
       return;
     }
@@ -283,7 +284,7 @@ export default function ScalpingDashboard() {
             >
               <Bot className="h-4 w-4 mr-2" />
               {!IS_TRADING_DEPLOYMENT_ENABLED
-                ? 'TRADING DISABLED'
+                ? 'STRATEGY LOCKED'
                 : isRobotPaused
                   ? 'ROBOT PAUSED'
                   : isAutoTradingEnabled
@@ -312,10 +313,11 @@ export default function ScalpingDashboard() {
           >
             <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-blue-500" />
             <div>
-              <p className="font-semibold">Mode analisis saja — pengiriman order dinonaktifkan</p>
+              <p className="font-semibold">Entry crypto otomatis ditahan setelah validasi</p>
               <p className="text-muted-foreground">
-                Sinyal, chart, dan audio tetap berjalan, tetapi deployment ini tidak dapat
-                mengirim intent ke antrean robot.
+                Strategi M1 lama memiliki expectancy negatif dan kandidat pengganti belum
+                lolos data masa depan. Chart, sinyal, dan audio tetap berjalan; antrean order
+                baru dikunci agar kerugian terukur tidak diteruskan.
               </p>
             </div>
           </div>

@@ -35,7 +35,8 @@ interface ForexPreviewRow {
   price?: number;
   ema50?: number;
   ema200?: number;
-  rsi?: number;
+  breakoutHigh?: number;
+  breakoutLow?: number;
   atr?: number;
   stopLoss?: number | null;
   takeProfit?: number | null;
@@ -45,7 +46,7 @@ interface ForexPreviewRow {
 
 interface ForexPreview {
   scannedAt: string;
-  timeframe: 'M15';
+  timeframe: 'H1';
   source: string;
   rows: ForexPreviewRow[];
 }
@@ -86,7 +87,8 @@ function parsePreview(value: unknown): ForexPreview | null {
       price: finiteOptional(row.price),
       ema50: finiteOptional(row.ema50),
       ema200: finiteOptional(row.ema200),
-      rsi: finiteOptional(row.rsi),
+      breakoutHigh: finiteOptional(row.breakoutHigh),
+      breakoutLow: finiteOptional(row.breakoutLow),
       atr: finiteOptional(row.atr),
       stopLoss: row.stopLoss === null ? null : finiteOptional(row.stopLoss),
       takeProfit: row.takeProfit === null ? null : finiteOptional(row.takeProfit),
@@ -97,7 +99,7 @@ function parsePreview(value: unknown): ForexPreview | null {
 
   return {
     scannedAt: data.scannedAt,
-    timeframe: 'M15',
+    timeframe: 'H1',
     source: typeof data.source === 'string' ? data.source : 'Provider website',
     rows,
   };
@@ -191,8 +193,8 @@ export default function ForexRobotPage() {
           <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
             <div className="max-w-3xl">
               <div className="mb-4 flex flex-wrap items-center gap-2">
-                <Badge className="border-blue-300/20 bg-blue-400/15 text-blue-100">MT5 · M15</Badge>
-                <Badge className="border-white/10 bg-white/5 text-slate-200">EMA 50/200 · RSI 14</Badge>
+                <Badge className="border-blue-300/20 bg-blue-400/15 text-blue-100">MT5 · H1</Badge>
+                <Badge className="border-white/10 bg-white/5 text-slate-200">EMA 50/200 · Donchian 20</Badge>
               </div>
               <div className="flex items-center gap-3">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/15">
@@ -200,7 +202,7 @@ export default function ForexRobotPage() {
                 </div>
                 <div>
                   <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Robot Forex</h1>
-                  <p className="mt-1 text-sm text-slate-300">Monitor strategi pullback M15 untuk runtime MT5 gabungan.</p>
+                  <p className="mt-1 text-sm text-slate-300">Monitor strategi breakout H1 untuk runtime MT5 gabungan.</p>
                 </div>
               </div>
               <p className="mt-5 max-w-2xl text-sm leading-6 text-slate-300">
@@ -231,7 +233,8 @@ export default function ForexRobotPage() {
             <p className="font-semibold">Monitor website tidak menyalakan atau mematikan proses MT5</p>
             <p className="mt-1 text-muted-foreground">
               Untuk akun demo yang sama, jalankan satu <code className="font-mono text-xs">run_combined_demo.bat</code>.
-              Jangan menjalankan robot forex dan crypto standalone bersamaan pada login MT5 yang sama.
+              Konfigurasi saat ini hanya membuka entry XAUUSD H1; entry Crypto baru ditahan setelah gagal validasi,
+              tetapi posisi Crypto lama tetap dikelola. Jangan menjalankan robot standalone bersamaan pada login MT5 yang sama.
             </p>
           </div>
         </div>
@@ -280,7 +283,7 @@ export default function ForexRobotPage() {
           <CardHeader>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <CardTitle className="flex items-center gap-2"><Gauge className="h-5 w-5 text-primary" /> Preview strategi M15</CardTitle>
+                <CardTitle className="flex items-center gap-2"><Gauge className="h-5 w-5 text-primary" /> Preview strategi H1</CardTitle>
                 <CardDescription className="mt-1">Sinyal indikatif; quote dan guard broker tetap menjadi sumber keputusan robot.</CardDescription>
               </div>
               <p className="text-xs text-muted-foreground">
@@ -312,8 +315,8 @@ export default function ForexRobotPage() {
                           <p className="mt-1 font-mono font-semibold">{formatPrice(row.price)}</p>
                         </div>
                         <div className="rounded-xl bg-muted/50 p-3">
-                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">RSI 14</p>
-                          <p className="mt-1 font-mono font-semibold">{row.rsi?.toFixed(1) ?? '—'}</p>
+                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Batas breakout</p>
+                          <p className="mt-1 font-mono font-semibold">{formatPrice(row.trend === 'bearish' ? row.breakoutLow : row.breakoutHigh)}</p>
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground">EMA 50</p>
@@ -351,13 +354,13 @@ export default function ForexRobotPage() {
           <Card>
             <CardHeader>
               <CardTitle>Aturan strategi Forex</CardTitle>
-              <CardDescription>Kondisi entry yang sama dengan robot Forex M15 lokal.</CardDescription>
+              <CardDescription>Kondisi entry yang sama dengan robot Forex H1 lokal.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {[
-                ['1', 'Candle final M15', 'Candle yang masih berjalan tidak digunakan untuk membuat sinyal.'],
-                ['2', 'Filter tren EMA', 'BUY memerlukan EMA 50 > EMA 200; SELL memerlukan EMA 50 < EMA 200.'],
-                ['3', 'Filter pullback RSI', 'BUY menunggu RSI < 45; SELL menunggu RSI > 55.'],
+                ['1', 'Candle final H1', 'Candle yang masih berjalan tidak digunakan untuk membuat sinyal.'],
+                ['2', 'Filter tren dan slope EMA', 'BUY memerlukan EMA 50 > EMA 200 dan EMA 50 naik; SELL adalah kebalikannya.'],
+                ['3', 'Breakout Donchian 20', 'Entry hanya muncul saat close menembus high/low 20 candle sebelumnya.'],
                 ['4', 'Validasi broker & risiko', 'Spread, quote, posisi, cooldown, daily loss, dan open risk diperiksa di MT5.'],
               ].map(([number, title, detail]) => (
                 <div key={number} className="flex gap-3 rounded-xl border border-border/60 p-3">
@@ -371,7 +374,7 @@ export default function ForexRobotPage() {
           <Card>
             <CardHeader>
               <CardTitle>Menyalakan pada akun demo</CardTitle>
-              <CardDescription>Satu runtime untuk Forex dan crypto pada login MT5 yang sama.</CardDescription>
+              <CardDescription>Satu runtime; entry XAUUSD aktif dan entry Crypto baru terkunci.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {[
