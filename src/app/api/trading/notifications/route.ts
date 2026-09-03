@@ -98,7 +98,7 @@ export async function POST(request: Request) {
   }
 
   const text = [
-    `[MARKET ANALYZER DEMO] ${EVENT_LABELS[validated.data.event_type]}`,
+    `[MARKET ANALYZER ROBOT] ${EVENT_LABELS[validated.data.event_type]}`,
     validated.data.message,
   ].join('\n');
 
