@@ -180,7 +180,10 @@ test('requested and broker-filled volumes remain separate and validated', async 
 });
 
 test('robot Telegram notifications are worker-authenticated and owner-bound', async () => {
-  const route = await source('src/app/api/trading/notifications/route.ts');
+  const [route, proxy] = await Promise.all([
+    source('src/app/api/trading/notifications/route.ts'),
+    source('src/proxy.ts'),
+  ]);
 
   assert.match(route, /authorizeWorkerRequest\(request\)/);
   assert.match(route, /TRADING_ALLOWED_USER_IDS/);
@@ -190,4 +193,6 @@ test('robot Telegram notifications are worker-authenticated and owner-bound', as
   assert.match(route, /\.eq\('id', ownerUserId\)/);
   assert.match(route, /disable_web_page_preview: true/);
   assert.doesNotMatch(route, /parse_mode/);
+  assert.match(proxy, /pathname === '\/api\/trading\/notifications'/);
+  assert.match(proxy, /request\.method === 'POST'/);
 });

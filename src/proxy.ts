@@ -5,6 +5,7 @@ export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const isWorkerRoute = pathname === '/api/trades/claim'
     || (request.method === 'POST' && pathname === '/api/trade-intelligence/ingest')
+    || (request.method === 'POST' && pathname === '/api/trading/notifications')
     || (request.method === 'PATCH' && /^\/api\/trades\/[^/]+$/.test(pathname));
 
   // Machine-to-machine routes authenticate their bearer secret in the route
