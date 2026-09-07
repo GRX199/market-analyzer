@@ -9,11 +9,13 @@ import {
   type QueueIncidentRecord,
   type RobotTradeRecord,
 } from '@/lib/trade-intelligence/analytics';
+import { evaluateStrategyEvidence } from '@/lib/trade-intelligence/strategy-evidence';
 
 export const runtime = 'nodejs';
 
 const TRADE_FIELDS = [
   'id',
+  'account_ref',
   'strategy',
   'market_type',
   'symbol',
@@ -56,12 +58,12 @@ function json(
 }
 
 function numberOrNull(value: unknown): number | null {
-  if (value === null || value === undefined) return null;
+  if (value === null || value === undefined || value === '' || typeof value === 'boolean') return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function mapTrade(value: unknown): RobotTradeRecord | null {
+function mapTrade(value: unknown, asOf: number): RobotTradeRecord | null {
   if (typeof value !== 'object' || value === null) return null;
   const row = value as Record<string, unknown>;
   const requiredNumbers = {
@@ -77,6 +79,7 @@ function mapTrade(value: unknown): RobotTradeRecord | null {
   };
   if (
     typeof row.id !== 'string'
+    || typeof row.account_ref !== 'string' || !/^[0-9a-f]{24}$/.test(row.account_ref)
     || typeof row.strategy !== 'string'
     || (row.market_type !== 'crypto' && row.market_type !== 'forex')
     || typeof row.symbol !== 'string'
@@ -86,10 +89,19 @@ function mapTrade(value: unknown): RobotTradeRecord | null {
     || typeof row.exit_reason !== 'string'
     || typeof row.synced_at !== 'string'
     || Object.values(requiredNumbers).some((number) => number === null)
+    || !Number.isFinite(Date.parse(String(row.entry_time)))
+    || !Number.isFinite(Date.parse(String(row.exit_time)))
+    || Date.parse(String(row.exit_time)) < Date.parse(String(row.entry_time))
+    || Date.parse(String(row.exit_time)) > asOf
+    || (requiredNumbers.volume ?? 0) <= 0
   ) return null;
+
+  const computedNet = requiredNumbers.grossProfit! + requiredNumbers.commission! + requiredNumbers.swap! + requiredNumbers.fee!;
+  if (Math.abs(computedNet - requiredNumbers.netProfit!) > 0.000001) return null;
 
   return {
     id: row.id,
+    accountRef: row.account_ref,
     strategy: row.strategy,
     marketType: row.market_type,
     symbol: row.symbol,
@@ -133,13 +145,22 @@ function mapIncident(value: unknown): QueueIncidentRecord | null {
   };
 }
 
-function rangeStart(range: string | null): string | null {
+function rangeStart(range: string | null, asOf: number): string | null {
   const days = range === '30' ? 30 : range === '365' ? 365 : range === 'all' ? null : 90;
   if (days === null) return null;
-  return new Date(Date.now() - days * 86_400_000).toISOString();
+  return new Date(asOf - days * 86_400_000).toISOString();
 }
 
 export async function GET(request: Request) {
+  // Capture once: query range, validity cutoff and evidence share one clock,
+  // even when authentication/database calls take time or cross a candle close.
+  const asOf = Date.now();
+  const generatedAt = new Date(asOf).toISOString();
+  const params = new URL(request.url).searchParams;
+  const requestedAccount = params.get('account');
+  const range = params.get('range') ?? '90';
+  if ((requestedAccount && !/^[0-9a-f]{24}$/.test(requestedAccount))
+    || !['30', '90', '365', 'all'].includes(range)) return json({ error: 'Invalid account or range filter' }, 400);
   let userId: string;
   try {
     const supabase = await createServerSupabaseClient();
@@ -157,12 +178,26 @@ export async function GET(request: Request) {
     return json({ error: 'Trade service is not configured' }, 503);
   }
 
-  const start = rangeStart(new URL(request.url).searchParams.get('range'));
+  const accountResult = await admin.from('robot_trade_history')
+    .select('account_ref', { count: 'exact' }).eq('user_id', userId)
+    .order('exit_time', { ascending: false }).limit(1_000);
+  if (accountResult.error) {
+    const missing = ['42P01', 'PGRST205'].includes(accountResult.error.code);
+    return json({ error: missing ? 'Trade intelligence migration is not installed' : 'Failed to load trading accounts',
+      ...(missing ? { migrationRequired: '20260902000100_add_trade_intelligence.sql' } : {}) }, missing ? 503 : 500);
+  }
+  const accounts: string[] = [...new Set<string>((accountResult.data ?? [])
+    .map((row: { account_ref: unknown }) => row.account_ref)
+    .filter((ref: unknown): ref is string => typeof ref === 'string' && /^[0-9a-f]{24}$/.test(ref)))];
+  const accountRef = requestedAccount || accounts[0] || null;
+  const start = rangeStart(range, asOf);
   let tradeQuery = admin
     .from('robot_trade_history')
-    .select(TRADE_FIELDS)
+    .select(TRADE_FIELDS, { count: 'exact' })
     .eq('user_id', userId)
-    .order('exit_time', { ascending: true })
+    .eq('account_ref', accountRef ?? '')
+    .order('exit_time', { ascending: false })
+    .order('id', { ascending: false })
     .limit(1_000);
   let incidentQuery = admin
     .from('auto_trades')
@@ -192,22 +227,25 @@ export async function GET(request: Request) {
     }
     return json({ error: 'Failed to load robot trade history' }, 500);
   }
-  if (incidentResult.error) {
-    console.error('Failed to load queue diagnostics', { code: incidentResult.error.code });
-    return json({ error: 'Failed to load queue diagnostics' }, 500);
-  }
 
   const trades = (tradeResult.data ?? [])
-    .map(mapTrade)
+    .map((row) => mapTrade(row, asOf))
     .filter((trade): trade is RobotTradeRecord => trade !== null);
   const incidents = (incidentResult.data ?? [])
     .map(mapIncident)
     .filter((incident): incident is QueueIncidentRecord => incident !== null);
-  const generatedAt = new Date().toISOString();
+  const invalidRows = (tradeResult.data ?? []).length - trades.length;
+  const truncated = tradeResult.count === null || tradeResult.count === undefined
+    ? (tradeResult.data ?? []).length >= 1_000 : tradeResult.count > 1_000;
 
   return json({
     report: analyzeTradeHistory(trades, incidents, generatedAt),
-    trades: [...trades].reverse().slice(0, 100),
+    trades: trades.slice(0, 100),
+    evidence: evaluateStrategyEvidence(trades, accountRef, truncated || invalidRows > 0, asOf),
+    scope: { accountRef, accounts, range, tradeLimit: 1_000, totalMatched: tradeResult.count ?? null,
+      truncated, invalidRows, accountDiscoveryTruncated: (accountResult.count ?? 1_000) > 1_000
+        || (accountResult.count == null && (accountResult.data ?? []).length >= 1_000),
+      unit: 'account_currency_unknown', queueDiagnosticsAvailable: !incidentResult.error },
     lastSyncedAt: trades.reduce<string | null>(
       (latest, trade) => !latest || trade.syncedAt > latest ? trade.syncedAt : latest,
       null,

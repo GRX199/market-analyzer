@@ -53,19 +53,46 @@ export async function proxy(request: NextRequest) {
     }
   );
 
-  // Refresh session if expired - required for Server Components
-  const { data: { user } } = await supabase.auth.getUser();
+  // Keep refreshed/cleared session cookies even when returning an auth error
+  // or redirect instead of the original pass-through response.
+  const withSessionCookies = (result: NextResponse) => {
+    response.cookies.getAll().forEach(cookie => result.cookies.set(cookie));
+    result.headers.set('Cache-Control', 'no-store');
+    return result;
+  };
+  let user: { id: string } | null = null;
+  let verificationUnavailable = false;
+  try {
+    const result = await supabase.auth.getUser();
+    user = result.data.user;
+    verificationUnavailable = !!result.error && (
+      result.error.name === 'AuthRetryableFetchError' || (result.error.status ?? 0) >= 500
+    );
+  } catch {
+    verificationUnavailable = true;
+  }
+
+  // Fetch callers must receive JSON, not a 307 followed by a successful HTML
+  // login page. This remains fail-closed; route-level authorization still runs.
+  if (pathname.startsWith('/api/') && (verificationUnavailable || !user)) {
+    return withSessionCookies(NextResponse.json({
+      error: verificationUnavailable
+        ? 'Layanan autentikasi sementara tidak tersedia. Coba lagi setelah koneksi pulih.'
+        : 'Sesi login tidak tersedia atau kedaluwarsa. Silakan masuk kembali.',
+      code: verificationUnavailable ? 'AUTH_UNAVAILABLE' : 'AUTH_REQUIRED',
+    }, { status: verificationUnavailable ? 503 : 401 }));
+  }
 
   // Auth Guard
   if (pathname.startsWith('/login')) {
     // If logged in and trying to access login, redirect to dashboard
     if (user) {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
+      return withSessionCookies(NextResponse.redirect(new URL('/dashboard', request.url)));
     }
   } else {
     // If not logged in and trying to access anything else, redirect to login
     if (!user) {
-      return NextResponse.redirect(new URL('/login', request.url));
+      return withSessionCookies(NextResponse.redirect(new URL('/login', request.url)));
     }
   }
 

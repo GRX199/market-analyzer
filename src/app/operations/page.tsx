@@ -150,6 +150,7 @@ export default function OperationsPage() {
       setStatus(payload);
       setStatusError(null);
     } catch (error) {
+      setStatus(null);
       setStatusError(error instanceof Error ? error.message : 'Status sistem gagal dimuat.');
     } finally {
       setStatusLoading(false);
@@ -222,16 +223,16 @@ export default function OperationsPage() {
         <div className="grid gap-4 md:grid-cols-3">
           <Card className={cn('border-2', tradingReady ? 'border-emerald-500/30' : 'border-blue-500/30')}>
             <CardHeader className="pb-3">
-              <CardDescription>Mode deployment</CardDescription>
+              <CardDescription>Antrean M1 website</CardDescription>
               <CardTitle className="flex items-center gap-2">
                 {tradingReady ? <ShieldCheck className="h-5 w-5 text-emerald-500" /> : <ShieldCheck className="h-5 w-5 text-blue-500" />}
-                {tradingReady ? 'Antrean order aktif' : 'Analisis saja'}
+                {tradingReady ? 'Antrean M1 diizinkan' : 'Antrean M1 nonaktif'}
               </CardTitle>
             </CardHeader>
             <CardContent className="text-sm text-muted-foreground">
               {tradingReady
-                ? 'Website diizinkan membuat intent crypto setelah konfirmasi pengguna.'
-                : 'Chart, analisis, backtest, dan monitoring tetap dapat dipakai tanpa mengirim order.'}
+                ? 'Website diizinkan membuat intent M1 setelah konfirmasi. Ini bukan status proses MT5.'
+                : 'Analisis tetap tersedia. Robot BTC H1 lokal tidak memakai antrean ini dan statusnya harus diperiksa di log.'}
             </CardContent>
           </Card>
 
@@ -273,7 +274,7 @@ export default function OperationsPage() {
             <CardContent>
               <StatusRow label="Sesi Supabase" detail="Identitas browser diverifikasi server." ok={status?.authentication.verified === true} />
               <StatusRow label="Owner akun MT5" detail="UUID login cocok dengan satu owner yang dikonfigurasi." ok={status?.authentication.ownerAuthorized === true} />
-              <StatusRow label="Kill switch server" detail="TRADING_ENABLED mengizinkan enqueue dan claim baru." ok={status?.trading.serverEnabled === true} />
+              <StatusRow label="Izin antrean server" detail="TRADING_ENABLED hanya mengizinkan antrean website, bukan kill switch order lokal MT5." ok={status?.trading.serverEnabled === true} />
               <StatusRow label="Kill switch antarmuka" detail="NEXT_PUBLIC_TRADING_ENABLED selaras dengan server." ok={status?.trading.browserEnabled === true && status?.trading.switchesAligned === true} />
               <StatusRow label="Token worker" detail="Bearer token khusus robot terpasang dan bukan placeholder." ok={status?.trading.workerTokenConfigured === true} />
               <StatusRow label="Akses antrean server" detail="Service-role hanya tersedia pada backend website." ok={status?.trading.adminCredentialConfigured === true} />
@@ -308,7 +309,7 @@ export default function OperationsPage() {
             {[
               ['1', 'Siapkan terminal MT5', 'Login ke akun demo yang benar, pastikan market terbuka, lalu aktifkan Algo Trading.'],
               ['2', 'Jalankan website', 'Dari folder market-analyzer jalankan npm run dev, lalu login dan buka halaman ini.'],
-              ['3', 'Periksa kill switch', 'Untuk observasi saja biarkan kedua flag trading false. Aktifkan keduanya hanya saat pengujian order demo memang dimulai.'],
+              ['3', 'Pisahkan antrean dan eksekusi lokal', 'Biarkan antrean M1 lama nonaktif. BTC broker_h1 dan Forex memakai konfigurasi Python; flag website bukan tombol ON/OFF robot lokal.'],
               ['4', 'Jalankan satu robot gabungan', 'Dari folder mt5-robot jalankan run_combined_demo.bat. Jangan jalankan robot crypto/forex terpisah pada login yang sama.'],
             ].map(([number, title, detail]) => (
               <div key={number} className="flex gap-3 rounded-xl border bg-muted/20 p-4">

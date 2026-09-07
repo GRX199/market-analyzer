@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   BarChart3,
@@ -21,6 +21,9 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import type { StrategyEvidence } from '@/lib/trade-intelligence/strategy-evidence';
+import { EVIDENCE_POLICY } from '@/lib/trade-intelligence/strategy-evidence';
 import {
   Table,
   TableBody,
@@ -43,6 +46,9 @@ interface ApiPayload {
   report: TradeIntelligenceReport;
   trades: RobotTradeRecord[];
   lastSyncedAt: string | null;
+  evidence: StrategyEvidence[];
+  scope: { accountRef: string | null; accounts: string[]; range: Range; truncated: boolean;
+    invalidRows: number; accountDiscoveryTruncated: boolean; queueDiagnosticsAvailable: boolean };
 }
 
 const RANGE_OPTIONS: Array<{ value: Range; label: string }> = [
@@ -78,7 +84,11 @@ function duration(seconds: number | null): string {
 function isApiPayload(value: unknown): value is ApiPayload {
   if (typeof value !== 'object' || value === null) return false;
   const row = value as Record<string, unknown>;
-  return typeof row.report === 'object' && row.report !== null && Array.isArray(row.trades);
+  const scope = row.scope as ApiPayload['scope'] | undefined;
+  return typeof row.report === 'object' && row.report !== null && Array.isArray(row.trades)
+    && Array.isArray(row.evidence) && !!scope && Array.isArray(scope.accounts)
+    && (scope.accountRef === null || typeof scope.accountRef === 'string')
+    && RANGE_OPTIONS.some(option => option.value === scope.range);
 }
 
 function SummaryTable({ rows, emptyLabel }: { rows: PerformanceSummary[]; emptyLabel: string }) {
@@ -129,36 +139,53 @@ const INSIGHT_STYLE: Record<TradeInsight['severity'], string> = {
 
 export default function TradeIntelligencePage() {
   const [range, setRange] = useState<Range>('90');
-  const [data, setData] = useState<ApiPayload | null>(null);
+  const [accountRef, setAccountRef] = useState('latest');
+  const [loadedData, setData] = useState<ApiPayload | null>(null);
+  const accountOptions = [...new Set([...(loadedData?.scope.accounts ?? []), ...(accountRef === 'latest' ? [] : [accountRef])])];
+  const data = loadedData?.scope.range === range
+    && (accountRef === 'latest' || loadedData.scope.accountRef === accountRef) ? loadedData : null;
   const [error, setError] = useState<string | null>(null);
   const [migrationRequired, setMigrationRequired] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const requestRef = useRef<AbortController | null>(null);
 
   const refresh = useCallback(async (silent = false) => {
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
     if (!silent) setLoading(true);
     try {
-      const response = await fetch(`/api/trade-intelligence?range=${range}`, {
+      const query = new URLSearchParams({ range });
+      if (accountRef !== 'latest') query.set('account', accountRef);
+      const response = await fetch(`/api/trade-intelligence?${query}`, {
         cache: 'no-store',
         credentials: 'same-origin',
+        signal: controller.signal,
       });
       const payload: unknown = await response.json().catch(() => null);
       const row = typeof payload === 'object' && payload !== null
         ? payload as Record<string, unknown>
         : {};
+      if (controller.signal.aborted || requestRef.current !== controller) return;
       if (!response.ok) {
         setMigrationRequired(typeof row.migrationRequired === 'string' ? row.migrationRequired : null);
         throw new Error(typeof row.error === 'string' ? row.error : `HTTP ${response.status}`);
       }
       if (!isApiPayload(payload)) throw new Error('Respons analitik tidak valid.');
+      if (payload.scope.range !== range || (accountRef !== 'latest' && payload.scope.accountRef !== accountRef)) {
+        throw new Error('Respons analitik tidak cocok dengan akun/rentang yang dipilih.');
+      }
       setData(payload);
       setError(null);
       setMigrationRequired(null);
     } catch (caught) {
+      if (controller.signal.aborted || requestRef.current !== controller) return;
+      setData(null);
       setError(caught instanceof Error ? caught.message : 'Analitik trade gagal dimuat.');
     } finally {
-      if (!silent) setLoading(false);
+      if (!controller.signal.aborted && requestRef.current === controller) setLoading(false);
     }
-  }, [range]);
+  }, [range, accountRef]);
 
   useEffect(() => {
     const initial = globalThis.setTimeout(() => void refresh(), 0);
@@ -166,6 +193,7 @@ export default function TradeIntelligencePage() {
     return () => {
       globalThis.clearTimeout(initial);
       globalThis.clearInterval(interval);
+      requestRef.current?.abort();
     };
   }, [refresh]);
 
@@ -175,8 +203,8 @@ export default function TradeIntelligencePage() {
       { label: 'Net P/L', value: money(metrics?.netProfit ?? null), detail: `${data?.report.sample.closedTrades ?? 0} posisi tertutup`, tone: (metrics?.netProfit ?? 0) >= 0 ? 'good' : 'bad' },
       { label: 'Win rate', value: percent(metrics?.winRate ?? null), detail: `${metrics?.wins ?? 0} win · ${metrics?.losses ?? 0} loss`, tone: 'neutral' },
       { label: 'Expectancy / trade', value: money(metrics?.expectancy ?? null), detail: 'Sudah termasuk biaya', tone: (metrics?.expectancy ?? 0) >= 0 ? 'good' : 'bad' },
-      { label: 'Profit factor', value: ratio(metrics?.profitFactor ?? null), detail: 'Gross win ÷ gross loss', tone: (metrics?.profitFactor ?? 0) >= 1 ? 'good' : 'bad' },
-      { label: 'Max drawdown', value: money(metrics?.maxDrawdown ?? null), detail: `Loss streak maks. ${metrics?.maxConsecutiveLosses ?? 0}`, tone: 'bad' },
+      { label: 'Profit factor', value: ratio(metrics?.profitFactor ?? null), detail: 'Jumlah net win ÷ net loss', tone: (metrics?.profitFactor ?? 0) >= 1 ? 'good' : 'bad' },
+      { label: 'Drawdown realized', value: money(metrics?.maxDrawdown ?? null), detail: `Tidak termasuk floating · streak ${metrics?.maxConsecutiveLosses ?? 0}`, tone: 'bad' },
       { label: 'Biaya trading', value: money(metrics?.totalCosts ?? null), detail: `Durasi rata-rata ${duration(metrics?.averageDurationSeconds ?? null)}`, tone: 'neutral' },
     ];
   }, [data]);
@@ -184,18 +212,16 @@ export default function TradeIntelligencePage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <section className="relative overflow-hidden rounded-2xl border bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 p-6 text-white shadow-xl md:p-8">
-          <div className="absolute -right-24 -top-24 h-64 w-64 rounded-full bg-violet-500/20 blur-3xl" />
+        <section className="relative rounded-2xl border bg-slate-950 p-5 text-white md:p-6">
           <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-3xl">
               <div className="mb-3 flex items-center gap-2 text-sm text-indigo-200">
                 <BrainCircuit className="h-5 w-5" />
                 Evaluasi otomatis hasil aktual MT5
               </div>
-              <h1 className="text-3xl font-bold tracking-tight md:text-4xl">Trade Intelligence</h1>
-              <p className="mt-3 text-sm leading-6 text-slate-300 md:text-base">
-                Menghubungkan entry–exit robot, biaya, drawdown, dan kegagalan antrean agar setiap loss
-                menjadi bahan review yang terukur. Analisis ini tidak mengubah risiko atau strategi secara otomatis.
+              <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Evaluasi strategi robot</h1>
+              <p className="mt-2 text-base leading-6 text-slate-300">
+                Pisahkan bukti Forex dan Crypto. Review hasil bersih sebelum mengubah parameter atau lot.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -206,7 +232,7 @@ export default function TradeIntelligencePage() {
                     type="button"
                     onClick={() => setRange(option.value)}
                     className={cn(
-                      'rounded-lg px-3 py-1.5 text-xs font-medium transition-colors',
+                      'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
                       range === option.value ? 'bg-white text-slate-950' : 'text-slate-300 hover:bg-white/10',
                     )}
                   >
@@ -216,19 +242,41 @@ export default function TradeIntelligencePage() {
               </div>
               <Button variant="secondary" onClick={() => void refresh()} disabled={loading}>
                 <RefreshCw className={cn('mr-2 h-4 w-4', loading && 'animate-spin')} />
-                Sinkronkan
+                Muat ulang
               </Button>
             </div>
           </div>
         </section>
+
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border p-4">
+          <label htmlFor="evidence-account" className="text-sm font-medium">Akun MT5</label>
+          <Select value={accountRef} onValueChange={value => { if (typeof value === 'string') setAccountRef(value); }}
+            items={[{ value: 'latest', label: 'Akun dengan trade terbaru' },
+              ...accountOptions.map(value => ({ value, label: `Akun …${value.slice(-8)}` }))]}>
+            <SelectTrigger id="evidence-account" className="min-w-60"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="latest">Akun dengan trade terbaru</SelectItem>
+              {accountOptions.map(value => <SelectItem key={value} value={value}>Akun …{value.slice(-8)}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <p className="text-sm text-muted-foreground">{data?.scope.accountRef ? `…${data.scope.accountRef.slice(-8)} · ` : ''}Nominal dalam mata uang akun; kode USD/USC belum tersimpan. Akun tidak digabung.</p>
+        </div>
+
+        {(data?.scope.truncated || (data?.scope.invalidRows ?? 0) > 0 || data?.scope.accountDiscoveryTruncated) && (
+          <div role="status" className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
+            {data?.scope.truncated && 'Evaluasi memakai maksimal 1.000 transaksi terbaru, bukan seluruh riwayat. Persempit rentang. '}
+            {(data?.scope.invalidRows ?? 0) > 0 && `${data?.scope.invalidRows} baris tidak valid dikeluarkan. `}
+            {data?.scope.accountDiscoveryTruncated && 'Daftar akun ditemukan dari 1.000 transaksi terbaru seluruh periode; akun yang lebih lama mungkin tidak tercantum.'}
+          </div>
+        )}
 
         <div className="flex flex-col gap-3 rounded-xl border border-amber-500/25 bg-amber-500/8 p-4 text-sm sm:flex-row sm:items-start">
           <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
           <div>
             <p className="font-semibold">Gunakan sebagai alat evaluasi, bukan mesin jaminan profit</p>
             <p className="mt-1 text-muted-foreground">
-              Jangan menaikkan lot berdasarkan beberapa hasil awal. Idealnya kumpulkan 20–50 trade demo,
-              lalu validasi perubahan lewat backtest dan forward-test terpisah.
+              Penyaringan review membutuhkan sedikitnya {EVIDENCE_POLICY.minimumTrades} trade dan {EVIDENCE_POLICY.minimumDays} hari observasi per profil.
+              Ini bukan jaminan profit atau izin akun real. Batas risiko tidak diubah oleh website.
             </p>
           </div>
         </div>
@@ -248,6 +296,34 @@ export default function TradeIntelligencePage() {
           </div>
         )}
 
+        <section aria-labelledby="strategy-evidence-heading" className="space-y-3">
+          <div>
+            <h2 id="strategy-evidence-heading" className="text-lg font-semibold">Bukti forward-test per profil</h2>
+            <p className="text-sm text-muted-foreground">Hanya akun, simbol, marker entry dan periode profil yang cocok. Status di sini bukan status ON/OFF proses MT5.</p>
+          </div>
+          {!data ? <p className="rounded-xl border border-dashed p-5 text-sm text-muted-foreground">{loading ? 'Memuat bukti transaksi…' : 'Bukti belum tersedia. Masuk ke akun dan muat ulang.'}</p> : (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {data.evidence.map(profile => <Card key={profile.id} className={cn('border-t-2',
+                profile.status === 'review' ? 'border-t-amber-500' : profile.status === 'review_candidate' ? 'border-t-blue-500' : 'border-t-slate-400')}>
+                <CardHeader className="space-y-2 pb-3">
+                  <CardTitle className="text-base">{profile.label}</CardTitle>
+                  <Badge variant="outline" className="w-fit">{{ empty: 'Belum ada bukti', collecting: 'Kumpulkan data', review: 'Perlu review', review_candidate: 'Kandidat review demo' }[profile.status]}</Badge>
+                </CardHeader>
+                <CardContent className="space-y-4 text-sm">
+                  <div className="grid grid-cols-2 gap-3 tabular-nums">
+                    <div><p className="text-muted-foreground">Trade</p><p className="text-lg font-semibold">{profile.trades} / 60</p></div>
+                    <div><p className="text-muted-foreground">Observasi</p><p className="text-lg font-semibold">{profile.observedDays} / 84 hari</p></div>
+                    <div><p className="text-muted-foreground">PF bersih</p><p>{ratio(profile.profitFactor)}</p></div>
+                    <div><p className="text-muted-foreground">Net / trade</p><p>{money(profile.expectancy)}</p></div>
+                  </div>
+                  <p className="rounded-lg bg-muted/60 p-3">20 trade terakhir: {money(profile.recentExpectancy)} / trade<br />Tanpa trade terbaik: {money(profile.netWithoutBestTrade)}</p>
+                  <ul className="space-y-2 text-muted-foreground">{profile.reasons.map(reason => <li key={reason}>{reason}</li>)}</ul>
+                </CardContent>
+              </Card>)}
+            </div>
+          )}
+        </section>
+
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
           {metricCards.map((metric) => (
             <Card key={metric.label} className="xl:col-span-1">
@@ -261,7 +337,7 @@ export default function TradeIntelligencePage() {
                   {metric.value}
                 </CardTitle>
               </CardHeader>
-              <CardContent className="text-xs text-muted-foreground">{metric.detail}</CardContent>
+              <CardContent className="text-sm text-muted-foreground">{metric.detail}</CardContent>
             </Card>
           ))}
         </div>
@@ -270,7 +346,7 @@ export default function TradeIntelligencePage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><BarChart3 className="h-5 w-5 text-primary" />Kurva hasil & drawdown</CardTitle>
-              <CardDescription>P/L kumulatif dalam mata uang akun, diurutkan berdasarkan waktu exit.</CardDescription>
+              <CardDescription>P/L posisi tertutup dalam mata uang akun terpilih; floating equity dan deposit tidak termasuk.</CardDescription>
             </CardHeader>
             <CardContent><PerformanceChart data={data?.report.equityCurve ?? []} /></CardContent>
           </Card>
@@ -319,7 +395,7 @@ export default function TradeIntelligencePage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><Database className="h-5 w-5 text-amber-500" />Kegagalan antrean crypto</CardTitle>
-              <CardDescription>{data?.report.sample.queueIncidents ?? 0} intent diperiksa pada rentang ini.</CardDescription>
+              <CardDescription>{data?.scope.queueDiagnosticsAvailable === false ? 'Diagnostik antrean sedang tidak tersedia.' : `${data?.report.sample.queueIncidents ?? 0} intent M1 website; tidak terikat akun MT5 terpilih dan bukan sinyal BTC H1 lokal.`}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {(data?.report.failures ?? []).length === 0 ? (
@@ -340,7 +416,7 @@ export default function TradeIntelligencePage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><Clock3 className="h-5 w-5 text-primary" />Trade tertutup terbaru</CardTitle>
               <CardDescription>
-                Sinkronisasi terakhir: {data?.lastSyncedAt ? new Date(data.lastSyncedAt).toLocaleString('id-ID') : 'belum pernah'}
+                Unggahan histori terakhir: {data?.lastSyncedAt ? new Date(data.lastSyncedAt).toLocaleString('id-ID') : 'belum pernah'}. Ini bukan heartbeat robot.
               </CardDescription>
             </CardHeader>
             <CardContent>

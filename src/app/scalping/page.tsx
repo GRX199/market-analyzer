@@ -32,6 +32,7 @@ import { toast } from 'sonner';
 import { deriveClosedScalperSignal } from '@/lib/scalping/signal';
 import { DEMO_CRYPTO_REQUESTED_VOLUME } from '@/lib/trading/validation';
 import { useTradeHistory } from '@/hooks/use-trade-history';
+import { BrokerRuntimeNotice } from '@/components/trading/broker-runtime-notice';
 
 const IS_TRADING_DEPLOYMENT_ENABLED =
   process.env.NEXT_PUBLIC_TRADING_ENABLED === 'true'
@@ -178,7 +179,7 @@ export default function ScalpingDashboard() {
 
   const handleRobotButtonClick = () => {
     if (!IS_TRADING_DEPLOYMENT_ENABLED) {
-      toast.warning('Entry crypto otomatis sedang dikunci', {
+      toast.warning('Antrean M1 lama sedang dikunci', {
         description: 'Strategi M1 lama gagal validasi. Chart dan sinyal tetap tersedia untuk analisis.',
       });
       return;
@@ -226,22 +227,14 @@ export default function ScalpingDashboard() {
 
   return (
     <DashboardLayout>
-      <div className={cn(
-        'fixed inset-0 pointer-events-none transition-colors duration-500 z-0',
-        activeSignal === 'buy'
-          ? 'bg-green-500/10'
-          : activeSignal === 'sell'
-            ? 'bg-red-500/10'
-            : 'bg-transparent',
-      )} />
-
       <div className="relative z-10 space-y-6">
+        <BrokerRuntimeNotice market="crypto" />
         <div className="flex flex-col md:flex-row items-center justify-between gap-4 p-4 rounded-xl border bg-card shadow-sm">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <ShieldCheck className="h-6 w-6 text-emerald-500" />
-              <h1 className="text-2xl font-black uppercase tracking-tighter">Scalper Monitor</h1>
-              <Badge variant="outline">1m guarded</Badge>
+              <h1 className="text-2xl font-semibold tracking-tight">Analisis M1 Binance</h1>
+              <Badge variant="outline">Bukan sinyal BTC H1</Badge>
             </div>
             <Badge variant={isConnected ? 'default' : 'destructive'}>
               {isConnected
@@ -284,12 +277,12 @@ export default function ScalpingDashboard() {
             >
               <Bot className="h-4 w-4 mr-2" />
               {!IS_TRADING_DEPLOYMENT_ENABLED
-                ? 'STRATEGY LOCKED'
+                ? 'M1 LEGACY LOCKED'
                 : isRobotPaused
-                  ? 'ROBOT PAUSED'
+                  ? 'ANTREAN M1 PAUSED'
                   : isAutoTradingEnabled
-                    ? 'ROBOT ON'
-                    : 'Aktifkan Robot'}
+                    ? 'ANTREAN M1 ON'
+                    : 'Aktifkan antrean M1'}
             </Button>
           </div>
         </div>
@@ -313,11 +306,11 @@ export default function ScalpingDashboard() {
           >
             <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-blue-500" />
             <div>
-              <p className="font-semibold">Entry crypto otomatis ditahan setelah validasi</p>
+              <p className="font-semibold">Antrean strategi M1 lama tetap dikunci</p>
               <p className="text-muted-foreground">
-                Strategi M1 lama memiliki expectancy negatif dan kandidat pengganti belum
-                lolos data masa depan. Chart, sinyal, dan audio tetap berjalan; antrean order
-                baru dikunci agar kerugian terukur tidak diteruskan.
+                Strategi M1 lama memiliki expectancy negatif. Chart, sinyal, dan audio tetap
+                tersedia untuk analisis. Kunci ini tidak mematikan robot BTC H1 lokal;
+                profil H1 masih membutuhkan bukti forward-test dan tidak menjamin profit.
               </p>
             </div>
           </div>
@@ -338,7 +331,7 @@ export default function ScalpingDashboard() {
               : <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500" />}
             <div>
               <p className="font-semibold">
-                {isRobotPaused ? 'Robot dijeda — matikan lalu aktifkan ulang' : 'Robot ter-arming'}
+                {isRobotPaused ? 'Antrean M1 dijeda — perlu arming ulang' : 'Antrean M1 ter-arming'}
               </p>
               <p className="text-muted-foreground">
                 {isRobotPaused

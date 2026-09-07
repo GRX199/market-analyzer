@@ -219,7 +219,7 @@ export function ScalperRobotProvider({ children }: { children: React.ReactNode }
     setIsAutoTradingEnabled(false);
     setIsRobotInterrupted(false);
     armedAfterCandleRef.current = null;
-    toast.info('Robot dimatikan');
+    toast.info('Antrean M1 dimatikan; proses MT5 tidak berubah');
   }, []);
 
   const armRobot = useCallback((armedAfterCandleStart: number) => {
@@ -239,8 +239,8 @@ export function ScalperRobotProvider({ children }: { children: React.ReactNode }
     armedAfterCandleRef.current = armedAfterCandleStart;
     setIsRobotInterrupted(false);
     setIsAutoTradingEnabled(true);
-    toast.warning('Robot menunggu sinyal candle tertutup', {
-      description: 'Robot tetap aktif saat Anda berpindah halaman selama tab website terbuka.',
+    toast.warning('Antrean M1 menunggu sinyal candle tertutup', {
+      description: 'Antrean browser tetap aktif selama tab terbuka. Ini bukan kontrol robot BTC H1 lokal.',
     });
     return true;
   }, [

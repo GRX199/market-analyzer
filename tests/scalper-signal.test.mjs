@@ -115,10 +115,11 @@ test('scalper robot runtime survives page navigation through the root layout', a
   assert.match(layout, /<ScalperRobotProvider>/);
   assert.match(provider, /useBinanceWebSocket\(symbol, shouldKeepFeedAlive\)/);
   assert.match(provider, /void createAutoTrade\(/);
-  assert.match(provider, /Robot tetap aktif saat Anda berpindah halaman/);
+  assert.match(provider, /Antrean browser tetap aktif selama tab terbuka/);
+  assert.match(provider, /bukan kontrol robot BTC H1 lokal/);
   assert.match(provider, /DEMO_CRYPTO_REQUESTED_VOLUME/);
   assert.match(provider, /NEXT_PUBLIC_CRYPTO_ENTRIES_ENABLED/);
-  assert.match(page, /Entry crypto otomatis ditahan setelah validasi/);
+  assert.match(page, /Antrean strategi M1 lama tetap dikunci/);
   assert.match(page, /max=\{DEMO_CRYPTO_REQUESTED_VOLUME\}/);
   assert.match(provider, /useScalperRobotStatus/);
   assert.doesNotMatch(page, /void createAutoTrade\(/);

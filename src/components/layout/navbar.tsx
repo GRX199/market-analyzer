@@ -141,14 +141,14 @@ export function Navbar() {
                   : 'border-emerald-500/40 text-emerald-600',
               ),
             })}
-            title={`${robotStatus.symbol} · ${robotStatus.isRobotPaused ? 'Robot dijeda' : 'Robot tetap aktif'}`}
+            title={`${robotStatus.symbol} · ${robotStatus.isRobotPaused ? 'Antrean M1 dijeda' : 'Antrean M1 aktif'} · bukan status MT5`}
           >
             <span className={cn(
               'h-2 w-2 rounded-full',
               robotStatus.isRobotPaused ? 'bg-amber-500' : 'bg-emerald-500',
             )} />
             <Bot className="h-3.5 w-3.5" />
-            {robotStatus.isRobotPaused ? 'Robot paused' : 'Robot ON'}
+            {robotStatus.isRobotPaused ? 'M1 paused' : 'Antrean M1 ON'}
           </Link>
         )}
         <Link

@@ -1,5 +1,6 @@
 export interface RobotTradeRecord {
   id: string;
+  accountRef?: string;
   strategy: string;
   marketType: 'crypto' | 'forex';
   symbol: string;
@@ -101,6 +102,13 @@ export interface TradeIntelligenceReport {
 }
 
 const MONEY_EPSILON = 1e-9;
+
+export function strategyLabel(key: string): string {
+  return ({ crypto_scalper: 'Crypto M1 lama', crypto_broker_h1: 'Crypto BTC H1',
+    forex_stable_h1: 'Forex H1', forex_aggressive_m15: 'Forex M15 agresif',
+    forex_legacy_unknown: 'Forex lama / profil belum terverifikasi',
+    forex_pullback_m15: 'Forex pullback lama' } as Record<string, string>)[key] ?? key;
+}
 
 function rounded(value: number, precision = 8): number {
   const factor = 10 ** precision;
@@ -347,8 +355,8 @@ function buildInsights(
     insights.push({
       id: 'cost-drag',
       severity: 'watch',
-      title: 'Biaya menyerap banyak gross profit',
-      detail: `Komisi, swap, dan fee setara ${rounded((metrics.totalCosts / metrics.grossWins) * 100, 2)}% dari gross profit trade menang.`,
+      title: 'Biaya perlu diperhatikan',
+      detail: `Komisi, swap, dan fee bersih setara ${rounded((metrics.totalCosts / metrics.grossWins) * 100, 2)}% dari hasil bersih trade menang. Spread sudah tercermin pada harga fill, bukan biaya terpisah di sini.`,
       action: 'Review frekuensi entry, spread, dan durasi posisi; jangan mengabaikan biaya dalam backtest.',
     });
   }
@@ -407,7 +415,7 @@ export function analyzeTradeHistory(
   const byStrategy = groupSummaries(
     sorted,
     (trade) => trade.strategy,
-    (key) => key === 'crypto_scalper' ? 'Crypto Scalper' : key === 'forex_pullback_m15' ? 'Forex Pullback M15' : key,
+    strategyLabel,
   );
   const byExitHourUtc = groupSummaries(
     sorted,
