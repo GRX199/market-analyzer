@@ -4,6 +4,8 @@ import { StockFundamentals, NewsItem } from '@/types/analysis';
 
 // Initialize the v3 instance and suppress the survey notice
 const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey', 'ripHistorical'] });
+// Isolate bounded scanner requests from legacy quote/news queue stalls.
+const signalYahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey', 'ripHistorical'] });
 
 function finiteNumber(value: unknown, fallback = 0): number {
   const parsed = typeof value === 'number' ? value : Number(value);
@@ -186,6 +188,25 @@ export async function fetchYahooQuote(
 // ==========================================
 // HISTORICAL CHART (OHLCV)
 // ==========================================
+
+/** Strict feed for the advanced scanner: never fabricate missing O/H/L. */
+export async function fetchYahooSignalCandles(
+  symbol: string, marketType: 'forex' | 'crypto', timeframe: '15m' | '1H' | '1D',
+): Promise<OHLCV[]> {
+  const days = timeframe === '15m' ? 7 : timeframe === '1H' ? 90 : 730;
+  const result = await signalYahooFinance.chart(mapSymbolToYahoo(symbol, marketType), {
+    period1: new Date(Date.now() - days * 86_400_000),
+    interval: timeframe === '15m' ? '15m' : timeframe === '1H' ? '60m' : '1d',
+  }, { fetchOptions: { signal: AbortSignal.timeout(12_000) } });
+  return (result.quotes ?? []).flatMap((row): OHLCV[] => {
+    // Empty session placeholders are not candles; partially invalid rows are
+    // retained as invalid so the quality gate, not an invented price, decides.
+    if ([row.open, row.high, row.low, row.close].every(value => value === null || value === undefined)) return [];
+    return [{ time: Math.floor(new Date(row.date).getTime() / 1000),
+      open: row.open ?? NaN, high: row.high ?? NaN, low: row.low ?? NaN, close: row.close ?? NaN,
+      volume: row.volume ?? 0 }];
+  });
+}
 
 export async function fetchYahooOHLCV(
   symbol: string, 

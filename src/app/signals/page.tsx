@@ -1,263 +1,164 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { DashboardSkeleton } from '@/components/common/loading-skeleton';
-import { Activity, Radio, TrendingUp, TrendingDown, Target, Zap, AlertTriangle } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useMarketStore } from '@/stores/market-store';
-import { TIMEFRAMES } from '@/lib/constants';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { Activity, ArrowDown, ArrowUp, ChevronLeft, ChevronRight, RefreshCw, ScanLine, ShieldAlert } from 'lucide-react';
+import { DashboardLayout } from '@/components/layout/dashboard-layout';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { cn } from '@/lib/utils';
+import type { AdvancedSignal, SetupStatus, SignalHorizon } from '@/lib/analysis/advanced-signals';
+import LegacySignalScanner from './legacy-scanner';
+
+type Market = 'all' | 'forex' | 'crypto';
+type Asset = { symbol: string; displaySymbol: string; name: string; marketType: 'forex' | 'crypto' };
+interface ScanPayload {
+  data: AdvancedSignal[]; generatedAt: string; universe: Asset[];
+  scope: { market: Market; horizon: SignalHorizon; page: number; pages: number; symbol: string | null; total: number };
+}
+const LABELS: Record<SetupStatus, string> = { candidate: 'Kandidat setup', wait: 'Tunggu', conflict: 'Konflik timeframe', stale: 'Data basi', unavailable: 'Data belum cukup' };
+const number = (value: number | null, digits = 2) => value === null || !Number.isFinite(value) ? '—' : value.toLocaleString('id-ID', { maximumFractionDigits: digits });
+const price = (value: number | null) => number(value, value !== null && value < .01 ? 8 : value !== null && value < 10 ? 5 : 2);
+const date = (value: string | null) => value ? new Date(value).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
+const biasLabel = (bias: AdvancedSignal['bias']) => bias === 'bullish' ? 'Bullish' : bias === 'bearish' ? 'Bearish' : 'Netral';
+const effectiveStatus = (row: AdvancedSignal, now: number): SetupStatus => row.expiresAt && Date.parse(row.expiresAt) < now && row.status !== 'unavailable' ? 'stale' : row.status;
+
+function isPayload(value: unknown): value is ScanPayload {
+  if (!value || typeof value !== 'object') return false;
+  const data = value as Partial<ScanPayload>;
+  return Array.isArray(data.data) && Array.isArray(data.universe) && !!data.scope && Number.isFinite(Date.parse(data.generatedAt ?? ''))
+    && data.data.every(row => !!row && typeof row.symbol === 'string' && row.status in LABELS && Array.isArray(row.frames) && Array.isArray(row.reasons) && Array.isArray(row.groups));
+}
+
+function SignalDetail({ row, now }: { row: AdvancedSignal; now: number }) {
+  const status = effectiveStatus(row, now), expired = status === 'stale';
+  const plan = status === 'candidate' ? row.plan : null;
+  return <Card className="overflow-hidden border-primary/20">
+    <CardHeader className="border-b bg-muted/30">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div><p className="text-sm text-muted-foreground">Analisis terpilih</p><CardTitle className="mt-1 text-2xl">{row.displaySymbol}</CardTitle></div>
+        <Badge variant="outline" className={cn('text-sm', status === 'candidate' ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400')}>{LABELS[status]}</Badge>
+      </div>
+      <p className="text-sm leading-6 text-muted-foreground">{row.source.provider} · <strong>{row.source.instrument}</strong> · {row.setup}</p>
+      <p className="text-sm leading-6 text-amber-700 dark:text-amber-300">{row.source.note}</p>
+    </CardHeader>
+    <CardContent className="space-y-6 p-4 md:p-5">
+      <div className="grid grid-cols-2 gap-4">
+        <div><p className="text-sm text-muted-foreground">Bias harga</p><p className="text-lg font-semibold">{biasLabel(row.bias)}</p></div>
+        <div><p className="text-sm text-muted-foreground">Kesepakatan aturan</p><p className="text-lg font-semibold">{expired ? '—' : number(row.conviction, 0)} / 100</p></div>
+      </div>
+      <p className="text-sm leading-6 text-muted-foreground">Skor bukan probabilitas menang. ADX mengukur kekuatan tren; ATR mengukur volatilitas, bukan arah.</p>
+      <div className="overflow-x-auto rounded-lg border">
+        <table className="w-full text-left text-sm tabular-nums">
+          <caption className="sr-only">Konfirmasi tiga timeframe dari candle selesai</caption>
+          <thead className="bg-muted/50"><tr><th className="p-3">TF / kondisi</th><th className="p-3">Bias</th><th className="p-3">RSI</th><th className="p-3">ADX</th></tr></thead>
+          <tbody>{row.frames.map(frame => <tr key={frame.timeframe} className="border-t">
+            <td className="p-3 font-medium">{frame.timeframe}<p className="mt-1 text-xs font-normal text-muted-foreground">{frame.expiresAt && Date.parse(frame.expiresAt) < now ? 'basi' : frame.quality} · {frame.regime}</p></td>
+            <td className="p-3">{biasLabel(frame.bias)}</td><td className="p-3">{number(frame.rsi, 1)}</td><td className="p-3">{number(frame.adx, 1)}</td>
+          </tr>)}</tbody>
+        </table>
+      </div>
+      <div className="space-y-3">{row.groups.map(group => <div key={group.label}>
+        <div className="flex justify-between gap-3 text-sm"><span>{group.label}</span><span className="tabular-nums">{expired ? '—' : group.points} / {group.maximum}</span></div>
+        <div className="mt-1 h-1.5 rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${expired ? 0 : group.points / group.maximum * 100}%` }} /></div>
+        <p className="mt-1 text-xs text-muted-foreground">{group.detail}</p>
+      </div>)}</div>
+      <section className="rounded-xl border p-4">
+        <h3 className="font-semibold">Skenario level referensi</h3>
+        {plan ? <>
+          <p className="mt-1 text-sm text-muted-foreground">{plan.side.toUpperCase()} · R:R kotor 1:{number(plan.grossRiskReward)} · sebelum spread/biaya</p>
+          <dl className="mt-4 grid grid-cols-2 gap-4 text-sm tabular-nums">
+            {[['Entry referensi', plan.entry], ['Invalidasi / SL', plan.stopLoss], ['Target pertama', plan.takeProfit], ['Target lanjutan', plan.secondTarget]].map(([label, value]) => <div key={String(label)}><dt className="text-muted-foreground">{label}</dt><dd className="mt-1 text-base font-semibold">{price(value as number | null)}</dd></div>)}
+          </dl><p className="mt-3 text-sm leading-6 text-muted-foreground">{plan.basis} Level ini tidak dikirim ke robot.</p>
+        </> : <p className="mt-2 text-sm leading-6 text-muted-foreground">{expired ? 'Skenario disembunyikan karena data melewati masa berlaku. Muat ulang sebelum menilai entry.' : 'Belum ada skenario entry yang memenuhi seluruh filter. Level TP tidak dipaksakan melewati penghalang harga.'}</p>}
+      </section>
+      <section><h3 className="font-semibold">Alasan keputusan</h3><ul className="mt-3 space-y-2 text-sm leading-6">{row.reasons.map(reason => <li key={reason} className="border-l-2 border-primary/30 pl-3">{reason}</li>)}</ul></section>
+      <details className="rounded-xl border p-4 text-sm">
+        <summary className="cursor-pointer font-medium">Struktur, volatilitas & kualitas data</summary>
+        <div className="mt-4 space-y-4">{row.frames.map(frame => <div key={frame.timeframe} className="border-t pt-3">
+          <p className="font-semibold">{frame.timeframe} · {frame.bars} candle final</p>
+          <p className="mt-1 leading-6 text-muted-foreground">Close {price(frame.close)} · ATR {price(frame.atr)} ({number(frame.atrPercent)}%)<br />Support {price(frame.support)} · Resistance {price(frame.resistance)}<br />EMA50 {price(frame.ema50)} · EMA200 {price(frame.ema200)}<br />+DI {number(frame.plusDI, 1)} · −DI {number(frame.minusDI, 1)}<br />Volume relatif {number(frame.relativeVolume)} · bukan konfirmasi spot Forex<br />Candle selesai {date(frame.lastClosedAt)}<br />Valid sampai {date(frame.expiresAt)}</p>
+          {frame.notes.map(note => <p key={note} className="mt-2 text-amber-600 dark:text-amber-400">{note}</p>)}
+        </div>)}</div>
+      </details>
+      <div className="space-y-2 text-sm leading-6 text-muted-foreground">{row.cautions.slice(1).map(caution => <p key={caution}>{caution}</p>)}</div>
+      <Link href={`/asset/${encodeURIComponent(row.symbol)}`} className={buttonVariants({ variant: 'outline', className: 'w-full' })}>Buka chart & analisis aset</Link>
+      <p className="text-xs text-muted-foreground">{row.modelVersion} · analisis {date(row.generatedAt)} · berakhir {date(row.expiresAt)}</p>
+    </CardContent>
+  </Card>;
+}
+
+function FilterSelect({ label, value, options, onChange }: { label: string; value: string; options: { value: string; label: string }[]; onChange: (value: string) => void }) {
+  return <div><p className="mb-2 text-sm font-medium">{label}</p><Select value={value} items={options} onValueChange={value => { if (typeof value === 'string') onChange(value); }}><SelectTrigger className="w-full" aria-label={label}><SelectValue /></SelectTrigger><SelectContent>{options.map(option => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select></div>;
+}
 
 export default function SignalScannerPage() {
-  const { selectedMarket, selectedTimeframe, setSelectedTimeframe, analysisMode, setAnalysisMode } = useMarketStore();
-  const [signals, setSignals] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
+  const [legacy, setLegacy] = useState(false);
+  const [market, setMarket] = useState<Market>('all'), [horizon, setHorizon] = useState<SignalHorizon>('swing');
+  const [symbol, setSymbol] = useState<string | null>(null), [page, setPage] = useState(0), [focused, setFocused] = useState('XAU/USD');
+  const [payload, setPayload] = useState<(ScanPayload & { receivedAt: number }) | null>(null);
+  const [catalog, setCatalog] = useState<Asset[]>([
+    { symbol: 'XAU/USD', displaySymbol: 'XAU/USD', name: 'Gold', marketType: 'forex' },
+    { symbol: 'BTC/USDT', displaySymbol: 'BTC/USD', name: 'Bitcoin', marketType: 'crypto' },
+  ]);
+  const [loading, setLoading] = useState(true), [error, setError] = useState<string | null>(null), [now, setNow] = useState(Date.now);
+  const requestRef = useRef<AbortController | null>(null);
+  const refresh = useCallback(async () => {
+    requestRef.current?.abort();
+    const controller = new AbortController(); requestRef.current = controller; setLoading(true);
+    try {
+      const query = new URLSearchParams({ market, horizon, page: String(page) }); if (symbol) query.set('symbol', symbol);
+      const response = await fetch(`/api/signals/advanced?${query}`, { cache: 'no-store', credentials: 'same-origin', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(45_000)]) });
+      const body: unknown = await response.json().catch(() => null);
+      if (controller.signal.aborted || requestRef.current !== controller) return;
+      if (!response.ok) throw new Error(body && typeof body === 'object' && 'error' in body ? String(body.error) : `HTTP ${response.status}`);
+      if (!isPayload(body) || body.scope.market !== market || body.scope.horizon !== horizon || body.scope.page !== page || body.scope.symbol !== symbol) throw new Error('Respons tidak sesuai filter pemindaian.');
+      setPayload({ ...body, receivedAt: Date.now() }); setCatalog(body.universe); setError(null);
+    } catch (caught) {
+      if (!controller.signal.aborted && requestRef.current === controller) { setPayload(null); setError(caught instanceof Error ? caught.message : 'Pemindaian belum berhasil.'); }
+    } finally { if (!controller.signal.aborted && requestRef.current === controller) setLoading(false); }
+  }, [market, horizon, page, symbol]);
   useEffect(() => {
-    async function scanMarkets() {
-      setLoading(true);
-      setError(null);
-      try {
-        const query = new URLSearchParams();
-        if (selectedMarket && selectedMarket !== 'all') query.append('market', selectedMarket);
-        if (selectedTimeframe) query.append('timeframe', selectedTimeframe);
-        if (analysisMode) query.append('mode', analysisMode);
-
-        const res = await fetch(`/api/signals?${query.toString()}`);
-        const result = await res.json();
-        
-        if (result.success && result.data) {
-          setSignals(result.data);
-        } else {
-          setError(result.error || 'Failed to scan markets');
-        }
-      } catch (err) {
-        console.error('Scanner error:', err);
-        setError('Connection error. Please try again.');
-      } finally {
-        setLoading(false);
-      }
-    }
-    
-    scanMarkets();
-    
-    // Auto-refresh every 60 seconds
-    const interval = setInterval(scanMarkets, 60000);
-    return () => clearInterval(interval);
-  }, [selectedMarket, selectedTimeframe, analysisMode]);
-
-  return (
-    <DashboardLayout>
-      <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold mb-2 flex items-center gap-3">
-            <Radio className="w-6 h-6 md:w-8 md:h-8 text-primary animate-pulse" /> 
-            Live Market Scanner
-          </h1>
-          <p className="text-muted-foreground mt-2">
-            Mesin scoring memindai pasar {selectedMarket || 'all'} pada timeframe <strong>{selectedTimeframe}</strong> untuk menampilkan kandidat yang memenuhi ambang indikator. Hasilnya perlu diverifikasi dan bukan prediksi kepastian profit.
-          </p>
-          
-          <div className="mt-4 md:mt-6 flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-3 md:gap-4">
-            <div className="flex items-center gap-2 bg-muted/30 p-1 rounded-lg border w-fit">
-              <span className="text-sm text-muted-foreground ml-2 font-medium">Mode:</span>
-              <Select value={analysisMode} onValueChange={(v) => setAnalysisMode(v as any)}>
-                <SelectTrigger className="h-8 border-0 bg-transparent shadow-none text-xs w-[140px]">
-                  <SelectValue placeholder="Analysis Mode" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="combined">Combined (Overall)</SelectItem>
-                  <SelectItem value="technical">Technical Only</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="flex items-center gap-2 bg-muted/30 p-1 rounded-lg border w-full sm:w-fit overflow-x-auto">
-              <span className="text-sm text-muted-foreground ml-2 font-medium">Timeframe:</span>
-              <Tabs value={selectedTimeframe} onValueChange={(v) => setSelectedTimeframe(v as any)}>
-                <TabsList className="h-8 bg-transparent">
-                  {TIMEFRAMES.map(tf => (
-                    <TabsTrigger key={tf.value} value={tf.value} className="text-xs px-1.5 md:px-3 h-6 data-[state=active]:bg-background data-[state=active]:shadow-sm whitespace-nowrap">
-                      {tf.label}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </Tabs>
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground bg-card px-4 py-2 rounded-full border shadow-sm self-start sm:self-auto mt-4 sm:mt-0" role="status">
-          <div className={`w-2 h-2 rounded-full ${error ? 'bg-red-500' : loading ? 'bg-amber-500 animate-pulse' : 'bg-green-500'}`} />
-          {error ? 'Scanner bermasalah' : loading ? 'Memindai…' : 'Pemindaian selesai'}
-        </div>
-      </div>
-
-      {error && (
-        <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-4 rounded-xl mb-6 flex items-center gap-2">
-          <AlertTriangle className="w-5 h-5" />
-          {error}
-        </div>
-      )}
-
-      {loading ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <DashboardSkeleton />
-          <DashboardSkeleton />
-        </div>
-      ) : signals.length > 0 ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-          {signals.map((signal) => (
-            <Link href={`/asset/${encodeURIComponent(signal.symbol)}`} key={signal.id} className="block group h-full">
-              <Card className="overflow-hidden border border-border/50 group-hover:border-primary/50 transition-all duration-300 group-hover:shadow-lg group-hover:shadow-primary/5 h-full bg-card/50 backdrop-blur-sm relative">
-                {/* Strength Indicator Bar */}
-                <div className="absolute top-0 left-0 w-full h-1 bg-muted">
-                  <div 
-                    className={`h-full transition-all duration-1000 ${
-                      signal.type.includes('buy') ? 'bg-gradient-to-r from-green-500/50 to-green-500' : 'bg-gradient-to-r from-red-500/50 to-red-500'
-                    }`} 
-                    style={{ width: `${signal.score}%` }} 
-                  />
-                </div>
-                
-                <CardContent className="p-4 md:p-6">
-                  {/* Header */}
-                  <div className="flex justify-between items-start mb-6">
-                    <div>
-                      <h3 className="text-xl md:text-2xl font-black tracking-tight">{signal.symbol}</h3>
-                      <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
-                        <Target className="w-3 h-3" /> Entry Price: <span className="font-mono text-foreground">${signal.priceAtSignal.toLocaleString()}</span>
-                      </p>
-                    </div>
-                    <Badge className={`px-3 py-1 text-sm font-bold shadow-sm ${
-                      signal.type === 'strong_buy' ? 'bg-green-500 hover:bg-green-600 text-white border-none' :
-                      signal.type === 'buy' ? 'bg-green-500/20 text-green-500 hover:bg-green-500/30 border-green-500/30' :
-                      signal.type === 'strong_sell' ? 'bg-red-500 hover:bg-red-600 text-white border-none' :
-                      'bg-red-500/20 text-red-500 hover:bg-red-500/30 border-red-500/30'
-                    }`}>
-                      {signal.type.toUpperCase().replace('_', ' ')}
-                    </Badge>
-                  </div>
-                  
-                  {/* Score Dial */}
-                  <div className="flex flex-col sm:flex-row items-center gap-4 mb-4 p-4 rounded-xl bg-background/50 border border-border/50">
-                    <div className="relative flex items-center justify-center w-16 h-16 rounded-full bg-card shadow-inner shrink-0 border border-border/50">
-                      <span className={`text-xl font-black ${
-                        signal.type.includes('buy') ? 'text-green-500' : 'text-red-500'
-                      }`}>
-                        {signal.score}
-                      </span>
-                      <svg className="absolute inset-0 w-full h-full transform -rotate-90">
-                        <circle cx="32" cy="32" r="28" fill="none" stroke="currentColor" strokeWidth="4" className="text-muted/20" />
-                        <circle cx="32" cy="32" r="28" fill="none" stroke="currentColor" strokeWidth="4" 
-                          strokeDasharray="175.93" strokeDashoffset={175.93 - (175.93 * signal.score) / 100}
-                          className={`transition-all duration-1000 ${signal.type.includes('buy') ? 'text-green-500' : 'text-red-500'}`} 
-                        />
-                      </svg>
-                    </div>
-                    <div className="flex-1 text-center sm:text-left">
-                      <p className="font-semibold mb-0.5">Signal Strength</p>
-                      <p className="text-xs text-muted-foreground leading-snug">
-                        Based on algorithmic confluence of moving averages, oscillators, and trend alignment.
-                      </p>
-                    </div>
-                    {signal.riskRewardRatio > 0 && (
-                      <div className="text-center shrink-0">
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">R:R</p>
-                        <span className={`text-lg font-black font-mono ${
-                          signal.riskRewardRatio >= 2 ? 'text-green-500' : 
-                          signal.riskRewardRatio >= 1 ? 'text-yellow-500' : 'text-red-500'
-                        }`}>
-                          1:{signal.riskRewardRatio}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Trading Levels - Entry / TP / SL */}
-                  {(signal.entryPrice || signal.takeProfit || signal.stopLoss) && (
-                    <div className="mb-5 rounded-xl border border-border/50 overflow-hidden">
-                      <div className="bg-muted/30 px-4 py-2 border-b border-border/50">
-                        <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                          <Target className="w-3.5 h-3.5" /> Trading Levels (Educational)
-                        </p>
-                      </div>
-                      <div className="grid grid-cols-3 divide-x divide-border/50">
-                        <div className="p-2 sm:p-3 text-center flex flex-col justify-center">
-                          <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-blue-400 mb-1 font-semibold truncate">Entry Price</p>
-                          <p className="font-mono text-sm sm:text-base font-bold text-blue-400 truncate">
-                            {signal.entryPrice ? signal.entryPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : '-'}
-                          </p>
-                        </div>
-                        <div className="p-2 sm:p-3 text-center flex flex-col justify-center">
-                          <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-green-400 mb-1 font-semibold truncate">Take Profit</p>
-                          <p className="font-mono text-sm sm:text-base font-bold text-green-400 truncate">
-                            {signal.takeProfit ? signal.takeProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : '-'}
-                          </p>
-                          {signal.entryPrice && signal.takeProfit ? (
-                            <p className={`text-[9px] sm:text-[10px] font-mono mt-0.5 truncate ${signal.type.includes('buy') ? 'text-green-500/70' : 'text-red-500/70'}`}>
-                              {signal.type.includes('buy') ? '+' : ''}{(((signal.takeProfit - signal.entryPrice) / signal.entryPrice) * 100).toFixed(2)}%
-                            </p>
-                          ) : null}
-                        </div>
-                        <div className="p-2 sm:p-3 text-center flex flex-col justify-center">
-                          <p className="text-[9px] sm:text-[10px] uppercase tracking-wider text-red-400 mb-1 font-semibold truncate">Stop Loss</p>
-                          <p className="font-mono text-sm sm:text-base font-bold text-red-400 truncate">
-                            {signal.stopLoss ? signal.stopLoss.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : '-'}
-                          </p>
-                          {signal.entryPrice && signal.stopLoss ? (
-                            <p className="text-[9px] sm:text-[10px] font-mono mt-0.5 text-red-500/70 truncate">
-                              {(((signal.stopLoss - signal.entryPrice) / signal.entryPrice) * 100).toFixed(2)}%
-                            </p>
-                          ) : null}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* Reasons List */}
-                  {signal.reasons && signal.reasons.length > 0 && (
-                    <div>
-                      <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
-                        <Zap className="w-3.5 h-3.5 text-yellow-500" /> Catalyst Factors
-                      </p>
-                      <ul className="space-y-2.5">
-                        {signal.reasons.map((reason: string, idx: number) => (
-                          <li key={idx} className="flex items-start gap-2.5">
-                            <span className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5 shadow-sm ${
-                              signal.type.includes('buy') ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'
-                            }`}>
-                              {signal.type.includes('buy') ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                            </span>
-                            <span className="text-sm leading-relaxed text-foreground/90">{reason}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
-      ) : (
-        <div className="bg-card rounded-2xl p-12 border border-border text-center flex flex-col items-center max-w-2xl mx-auto shadow-sm">
-          <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
-            <Radio className="w-8 h-8 text-muted-foreground" />
-          </div>
-          <h3 className="text-2xl font-bold mb-2">No Active Signals</h3>
-          <p className="text-muted-foreground text-lg mb-6">
-            Belum ada kandidat yang memenuhi ambang confluence pada pemindaian saat ini.
-          </p>
-          <div className="px-6 py-3 rounded-xl bg-background border text-sm font-medium">
-            Waiting for next market movement...
-          </div>
-        </div>
-      )}
-    </DashboardLayout>
-  );
+    if (legacy) { requestRef.current?.abort(); return; }
+    const start = setTimeout(() => void refresh(), 0), interval = setInterval(() => void refresh(), 90_000), ticker = setInterval(() => setNow(Date.now()), 10_000);
+    return () => { clearTimeout(start); clearInterval(interval); clearInterval(ticker); requestRef.current?.abort(); };
+  }, [refresh, legacy]);
+  if (legacy) return <LegacySignalScanner onAdvanced={() => setLegacy(false)} />;
+  const data = payload?.scope.market === market && payload.scope.horizon === horizon && payload.scope.page === page && payload.scope.symbol === symbol ? payload : null;
+  const currentTime = data ? Date.parse(data.generatedAt) + Math.max(0, now - data.receivedAt) : now;
+  const rows = data?.data ?? [], selected = rows.find(row => row.symbol === focused) ?? rows[0];
+  const candidates = rows.filter(row => effectiveStatus(row, currentTime) === 'candidate').length;
+  const filteredCatalog = catalog.filter(asset => market === 'all' || asset.marketType === market);
+  const focusSymbol = (value: string) => { setMarket('all'); setPage(0); setSymbol(value); setFocused(value); };
+  return <DashboardLayout><div className="space-y-5">
+    <header className="flex flex-wrap items-start justify-between gap-4">
+      <div><h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight"><ScanLine className="h-6 w-6 text-primary" />Signals Advanced</h1><p className="mt-2 max-w-2xl text-base text-muted-foreground">Tren, momentum dan struktur dari tiga timeframe. XAU & BTC diprioritaskan; kondisi tunggu tetap terlihat.</p></div>
+      <div className="flex gap-2"><Button variant="outline" onClick={() => setLegacy(true)}>Scanner klasik</Button><Button onClick={() => void refresh()} disabled={loading}><RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />Muat ulang</Button></div>
+    </header>
+    <div className="flex flex-wrap items-center gap-2"><Button variant="outline" onClick={() => focusSymbol('XAU/USD')}>Fokus XAUUSD</Button><Button variant="outline" onClick={() => focusSymbol('BTC/USDT')}>Fokus BTCUSD</Button><Button variant="ghost" onClick={() => { setMarket('all'); setSymbol(null); setPage(0); }}>Semua Forex & Crypto</Button></div>
+    <section aria-label="Filter Signals" className="grid gap-4 rounded-xl border bg-card p-4 sm:grid-cols-3">
+      <FilterSelect label="Market" value={market} options={[{ value: 'all', label: 'Forex & Crypto' }, { value: 'forex', label: 'Forex & Metals' }, { value: 'crypto', label: 'Crypto' }]} onChange={value => { if (value === 'all' || value === 'forex' || value === 'crypto') { setMarket(value); setPage(0); setSymbol(null); } }} />
+      <FilterSelect label="Horizon analisis" value={horizon} options={[{ value: 'intraday', label: 'Intraday · M15 / H1 / H4' }, { value: 'swing', label: 'Swing · H1 / H4 / D1' }]} onChange={value => { if (value === 'intraday' || value === 'swing') setHorizon(value); }} />
+      <FilterSelect label="Instrumen" value={symbol ?? 'page'} options={[{ value: 'page', label: 'Pindai per halaman' }, ...filteredCatalog.map(asset => ({ value: asset.symbol, label: `${asset.displaySymbol} · ${asset.name}` }))]} onChange={value => { setSymbol(value === 'page' ? null : value); setPage(0); }} />
+    </section>
+    <div className="flex items-start gap-3 rounded-xl border border-amber-500/25 bg-amber-500/5 p-4 text-sm leading-6"><ShieldAlert className="mt-1 h-5 w-5 shrink-0 text-amber-500" /><p>Analisis ini tidak mengirim order atau mengganti strategi robot. Emas memakai proxy futures GC=F; Crypto memakai kuotasi USD Yahoo. Harga, spread dan spesifikasi MT5 harus diperiksa terpisah.</p></div>
+    <div className="flex flex-wrap items-center justify-between gap-3 text-sm" role="status"><p className="flex items-center gap-2"><Activity className="h-4 w-4 text-primary" />{loading ? 'Memindai candle final…' : error ? 'Pemindaian gagal' : `${rows.length} instrumen · ${candidates} kandidat setup`}<span className="text-muted-foreground">· refresh 90 detik</span></p><p className="text-muted-foreground">{data ? `Pemindaian ${date(data.generatedAt)}` : 'Menunggu data provider'}</p></div>
+    {error && <div role="alert" className="rounded-xl border border-red-500/30 bg-red-500/5 p-4 text-sm">{error} Data lama tidak dianggap sebagai sinyal baru.</div>}
+    <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(380px,1fr)]">
+      <section aria-label="Hasil scanner" className="space-y-3">
+        {!rows.length && <div className="rounded-xl border border-dashed p-8 text-base text-muted-foreground">{loading ? 'Mengambil data instrumen terpilih. Kegagalan provider akan ditampilkan.' : 'Belum ada hasil. Pilih instrumen lalu muat ulang.'}</div>}
+        {rows.map(row => { const status = effectiveStatus(row, currentTime), base = row.frames[0]; return <button key={row.id} type="button" onClick={() => setFocused(row.symbol)} aria-pressed={selected?.symbol === row.symbol} className={cn('w-full rounded-xl border bg-card p-4 text-left transition-colors hover:border-primary/50', selected?.symbol === row.symbol && 'border-primary ring-1 ring-primary/20')}>
+          <div className="flex flex-wrap justify-between gap-2"><div><h2 className="text-lg font-semibold">{row.displaySymbol}</h2><p className="text-xs text-muted-foreground">{row.source.instrument} · {row.marketType}</p></div><Badge variant="outline" className={cn('self-start text-sm', status === 'candidate' ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground')}>{LABELS[status]}</Badge></div>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2"><p className="flex items-center gap-1 text-sm font-medium">{row.bias === 'bullish' ? <ArrowUp className="h-4 w-4 text-emerald-500" /> : row.bias === 'bearish' ? <ArrowDown className="h-4 w-4 text-red-500" /> : null}{biasLabel(row.bias)} · {price(base.close)}</p><p className="text-sm tabular-nums">Aturan {status === 'stale' ? '—' : number(row.conviction, 0)}/100</p></div>
+          <div className="mt-3 flex flex-wrap gap-2">{row.frames.map(frame => <span key={frame.timeframe} className="rounded-md bg-muted px-2 py-1 text-xs">{frame.timeframe} · {frame.quality === 'fresh' && !(frame.expiresAt && Date.parse(frame.expiresAt) < currentTime) ? biasLabel(frame.bias) : frame.quality === 'unavailable' ? 'no data' : 'basi'}</span>)}</div>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">{status === 'stale' ? 'Data melewati batas waktu; jangan memakai level lama.' : row.reasons[0]}</p><p className="mt-2 text-xs text-muted-foreground">Candle final {date(base.lastClosedAt)} · pilih untuk detail</p>
+        </button>; })}
+        {!symbol && <div className="flex items-center justify-between gap-2 pt-2"><Button variant="outline" disabled={loading || page === 0} onClick={() => setPage(value => value - 1)}><ChevronLeft className="h-4 w-4" />Sebelumnya</Button><span className="text-sm">{page + 1} / {data?.scope.pages ?? '—'}</span><Button variant="outline" disabled={loading || !data || page + 1 >= data.scope.pages} onClick={() => setPage(value => value + 1)}>Berikutnya<ChevronRight className="h-4 w-4" /></Button></div>}
+        <p className="text-sm leading-6 text-muted-foreground">{data?.scope.total ?? '—'} instrumen dalam cakupan market. Maksimal enam dipindai per halaman; bukan seluruh market sekaligus. Saham dan mode gabungan tersedia di Scanner klasik.</p>
+      </section>
+      {selected ? <SignalDetail row={selected} now={currentTime} /> : <div className="rounded-xl border border-dashed p-8 text-muted-foreground">Detail tampil setelah data tersedia.</div>}
+    </div>
+  </div></DashboardLayout>;
 }
