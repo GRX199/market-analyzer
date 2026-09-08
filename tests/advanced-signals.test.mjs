@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import {
   analyzeAdvancedSignal, analyzeSignalFrame, aggregateCompleteFourHours, referenceSignalPlan,
   signalEMA, signalRSI, signalWilder, signalCandleTime, HORIZON_FRAMES, FRAME_SECONDS,
+  manualSignalScenarios,
 } from '../src/lib/analysis/advanced-signals.ts';
 
 const now = Date.UTC(2026, 8, 8, 0);
@@ -107,6 +108,7 @@ test('invalid/duplicate/out-of-order/future OHLC and invalid clocks fail closed'
 test('missing recent bars and a mislabeled interval are rejected even when the last bar is fresh', () => {
   const rows = breakout('15m'); rows.splice(-10, 1);
   assert.equal(analyzeSignalFrame({ timeframe: '15m', candles: rows }, now).quality, 'unavailable');
+  assert.match(analyzeSignalFrame({ timeframe: '15m', candles: rows }, now).notes[0], /antara .*Z dan .*Z/);
   const slow = breakout('15m').map((r, i) => ({ ...r, time: now / 1000 - (400 - i) * 1800 }));
   assert.equal(analyzeSignalFrame({ timeframe: '15m', candles: slow }, now).quality, 'unavailable');
 });
@@ -214,4 +216,55 @@ test('UI fences old filter responses, expires reference levels, and does not arm
   assert.match(page, /Skor bukan probabilitas menang/);
   assert.match(page, /Scanner klasik/);
   assert.doesNotMatch(page, /api\/trades|order_send|setTradingEnabled/);
+});
+
+test('fresh WAIT and conflicting trends expose conditional levels without promoting an entry', () => {
+  const feed = inputs(); feed[1].candles = mirror(feed[1].candles);
+  const row = analyzeAdvancedSignal(meta, 'intraday', feed, now);
+  assert.equal(row.status, 'conflict'); assert.equal(row.plan, null);
+  assert.ok(row.manualScenarios.length > 0);
+  for (const plan of row.manualScenarios) {
+    assert.equal(plan.kind, 'conditional-breakout');
+    assert.match(plan.confirmation, /pindai ulang/);
+    assert.match(plan.basis, /proyeksi/);
+    assert.ok(plan.distanceAtr <= 3);
+    if (plan.side === 'buy') assert.ok(plan.stopLoss < plan.entry && plan.entry < plan.takeProfit && plan.takeProfit < plan.secondTarget);
+    else assert.ok(plan.stopLoss > plan.entry && plan.entry > plan.takeProfit && plan.takeProfit > plan.secondTarget);
+    closeTo(Math.abs(plan.takeProfit - plan.entry) / Math.abs(plan.entry - plan.stopLoss), 2);
+  }
+});
+
+test('manual scenarios fail closed on stale/missing/invalid feeds and are absent on candidates', () => {
+  assert.deepEqual(analyzeAdvancedSignal(meta, 'intraday', inputs(), now).manualScenarios, []);
+  assert.deepEqual(analyzeAdvancedSignal(meta, 'intraday', inputs(), now + 20 * 60_000).manualScenarios, []);
+  const feed = inputs(); feed[1].error = 'timeout';
+  assert.deepEqual(analyzeAdvancedSignal(meta, 'intraday', feed, now).manualScenarios, []);
+  feed[1].error = undefined; feed[0].candles[5].close = NaN;
+  assert.deepEqual(analyzeAdvancedSignal(meta, 'intraday', feed, now).manualScenarios, []);
+});
+
+test('conditional breakout crosses known obstacles, does not imply current confirmation', () => {
+  const frames = inputs().map(frame => analyzeSignalFrame(frame, now));
+  Object.assign(frames[0], { close: 100, atr: 2, channelHigh: 101, channelLow: 99, resistance: 102, support: 98 });
+  const [buy, sell] = manualSignalScenarios(frames);
+  closeTo(buy.entry, 102.2); closeTo(sell.entry, 97.8);
+  closeTo(buy.stopLoss, 99.2); closeTo(sell.stopLoss, 100.8);
+  assert.match(buy.basis, /belum dipetakan/);
+  assert.match(sell.invalidation, /Batal/);
+  frames[0].resistance = 110;
+  assert.deepEqual(manualSignalScenarios(frames).map(p => p.side), ['sell']);
+});
+
+test('manual plans never emit invalid prices and cannot use partial frame sets', () => {
+  const frames = inputs().map(frame => analyzeSignalFrame(frame, now));
+  assert.deepEqual(manualSignalScenarios(frames.slice(0, 2)), []);
+  frames[0].atr = 0;
+  assert.deepEqual(manualSignalScenarios(frames), []);
+});
+
+test('manual UI shows entry SL TP1 TP2 and blocks expired scenario display', async () => {
+  const page = await readFile(new URL('../src/app/signals/page.tsx', import.meta.url), 'utf8');
+  for (const label of ['Entry referensi', 'Stop Loss', 'Take Profit 1', 'Take Profit 2', 'Bersyarat · belum aktif']) assert.ok(page.includes(label));
+  assert.match(page, /status === 'stale' \|\| status === 'unavailable' \? \[\] : row.manualScenarios/);
+  assert.match(page, /useState<SignalHorizon>\('intraday'\)/);
 });

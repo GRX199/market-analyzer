@@ -10,22 +10,31 @@ const json = (body: unknown, status = 200) => NextResponse.json(body, { status, 
 
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
-  const market = params.get('market') ?? 'all', horizon = params.get('horizon') ?? 'swing';
+  const market = params.get('market') ?? 'all', horizon = params.get('horizon') ?? 'intraday';
+  const source = params.get('source') ?? 'market';
   const rawPage = params.get('page') ?? '0', rawSymbol = params.get('symbol');
   const symbol = rawSymbol === null ? null : resolveSignalSymbol(rawSymbol);
-  if (!['all', 'forex', 'crypto'].includes(market) || !['intraday', 'swing'].includes(horizon)
+  if (!['all', 'forex', 'crypto'].includes(market) || !['market', 'reference'].includes(source) || !['intraday', 'swing'].includes(horizon)
     || !/^\d{1,2}$/.test(rawPage) || (rawSymbol !== null && symbol === null)) return json({ success: false, error: 'Filter Signals tidak valid.' }, 400);
   const page = Number(rawPage);
   const scope = selectSignalUniverse(market as SignalMarket, page, symbol);
   if (page >= scope.pages || (symbol && !scope.selected.length)) return json({ success: false, error: 'Simbol/halaman tidak sesuai market.' }, 400);
+  let client;
+  let userId: string;
   try {
-    const client = await createServerSupabaseClient();
+    client = await createServerSupabaseClient();
     const { data: { user }, error } = await client.auth.getUser();
     if (error || !user) return json({ success: false, error: 'Silakan masuk kembali.' }, 401);
+    userId = user.id;
   } catch { return json({ success: false, error: 'Layanan autentikasi belum tersedia.' }, 503); }
   try {
-    const rows = await scanAdvancedSignals(scope.selected, horizon as SignalHorizon);
-    return json({ success: true, data: rows, scope: { market, horizon, page, symbol, total: scope.total, pages: scope.pages },
+    const snapshots: Record<string, any> = {};
+    if (source === 'market' && scope.selected.some(asset => asset.marketType === 'forex') && typeof (client as any).from === 'function') {
+      const result = await client.from('signal_broker_snapshots').select('symbol,payload').eq('user_id', userId).in('symbol', scope.selected.map(asset => asset.symbol));
+      if (!result.error) for (const row of result.data ?? []) { try { const { parseBrokerSnapshot } = await import('@/lib/analysis/broker-snapshot'); const parsed = parseBrokerSnapshot(row.payload, Date.now(), true); snapshots[parsed.symbol] = parsed; } catch { /* stale snapshots remain unavailable */ } }
+    }
+    const rows = await scanAdvancedSignals(scope.selected, horizon as SignalHorizon, { source: source as 'market' | 'reference', brokerSnapshots: snapshots });
+    return json({ success: true, data: rows, scope: { market, source, horizon, page, symbol, total: scope.total, pages: scope.pages },
       universe: ADVANCED_UNIVERSE, generatedAt: new Date().toISOString(),
       summary: { scanned: rows.length, candidates: rows.filter(row => row.status === 'candidate').length,
         unavailable: rows.filter(row => row.status === 'unavailable').length, stale: rows.filter(row => row.status === 'stale').length } });

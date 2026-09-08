@@ -1,13 +1,13 @@
 # Signals Advanced
 
-Fitur analisis referensi Forex, logam dan Crypto di `/signals`. Model `confluence-v1` ini terpisah dari strategi serta eksekusi robot MT5. Tidak mengirim order, mengubah lot, membuka akses akun real, atau mengubah batas risiko.
+Fitur analisis referensi Forex, logam dan Crypto di `/signals`. Model `confluence-v2-manual` ini terpisah dari strategi serta eksekusi robot MT5. Tidak mengirim order, mengubah lot, membuka akses akun real, atau mengubah batas risiko.
 
 ## Cara menggunakan
 
 1. Masuk ke website, lalu buka **Signals**.
 2. Pilih **Fokus XAUUSD**, **Fokus BTCUSD**, atau instrumen dari daftar.
 3. Pilih **Intraday (M15/H1/H4)** atau **Swing (H1/H4/D1)**. Ini horizon analisis website, bukan tombol pengganti mode robot.
-4. Pilih hasil untuk melihat matriks timeframe, alasan keputusan, struktur, ATR dan level referensi.
+4. Entry, SL, TP1 dan TP2 terlihat langsung di kartu scanner. Pilih hasil untuk melihat rencana manual, syarat konfirmasi, matriks timeframe, alasan keputusan, struktur dan ATR.
 5. Periksa sumber harga, waktu candle, spread broker dan berita sebelum mempertimbangkan transaksi. Jangan menyalin level futures emas ke spot MT5.
 
 Pemindaian mencakup katalog Forex/Crypto yang sudah ada, maksimal enam instrumen per halaman. XAU, BTC, EUR, ETH, GBP dan SOL diprioritaskan di halaman pertama. Pilih halaman berikutnya untuk instrumen lain; hasil tidak mengklaim memindai seluruh market sekaligus. Scanner klasik tetap tersedia untuk kemampuan lama termasuk saham. API klasik `/api/signals` dan pemakainya tidak diganti.
@@ -22,7 +22,22 @@ Pemindaian mencakup katalog Forex/Crypto yang sudah ada, maksimal enam instrumen
 | Data basi | Setidaknya satu timeframe melewati masa berlaku; level entry disembunyikan. |
 | Data belum cukup | Provider gagal, pemanasan kurang, data invalid, atau ada gap yang belum terverifikasi. Bukan sinyal netral. |
 
-## Aturan yang dapat diaudit
+## Rencana trading manual: kandidat vs bersyarat
+
+Default horizon sekarang **Intraday (M15/H1/H4)**. Swing tetap dapat dipilih.
+
+- **Kandidat terkonfirmasi**: aturan ketat sebelumnya tetap berlaku. Level dihitung dari close final dan struktur; bukan harga bid/ask terkini atau instruksi order.
+- **BUY/SELL bersyarat — belum aktif**: ketika data tiga timeframe valid/fresh tetapi kandidat belum lolos, tampilkan level breakout yang bisa dipantau. Dua arah adalah alternatif, bukan dua order sekaligus. Konflik timeframe tidak diubah menjadi kandidat.
+- Pemicu berada pada batas channel 20 bar dan pivot terdekat: BUY di atas maksimum resistance/channel/close, SELL di bawah minimum support/channel/close. Entry indikatif memakai buffer 0,1 ATR. Entry yang berjarak lebih dari 3 ATR dari close tidak ditampilkan.
+- SL skenario bersyarat berjarak 1,5 ATR; TP1 2R dan TP2 3R adalah **proyeksi aritmetis**, bukan target support/resistance yang sudah tervalidasi. Struktur setelah breakout belum dipetakan. Angka ini bukan peningkatan profitabilitas yang telah dibuktikan.
+- Tunggu candle timeframe pemicu selesai melewati batas, kemudian **pindai ulang** untuk memeriksa tren timeframe lebih tinggi, momentum dan ruang target. Jangan menggunakan proyeksi lama langsung sebagai order saat harga menyentuh pemicu.
+- Rencana batal jika SL terlewati sebelum konfirmasi, feed basi, atau biaya/kondisi berita membuat risiko tidak layak. Data invalid/stale tidak menghasilkan skenario; UI juga menyembunyikannya saat kedaluwarsa.
+
+Halaman tidak lagi kosong hanya karena pemicu kandidat belum muncul, tetapi tetap tidak mengarang level ketika data gagal. Khusus XAU, semua angka tetap referensi **GC=F**, bukan level spot MT5 yang bisa langsung disalin.
+
+Pemeriksaan feed langsung 8 September 2026: BTC intraday memiliki tiga timeframe fresh dan satu rencana bersyarat (bukan kandidat). GC=F masih diblokir: data intraday melompat dari 4 September malam UTC ke 8 September 04:00 UTC. Ini tidak diasumsikan sepenuhnya sebagai libur; rentang timestamp gap sekarang ditampilkan agar penyebab tidak adanya level jelas. Hasil pemindaian berikutnya dapat berubah. Dukungan feed spot MT5 yang kontinu belum ditambahkan pada perubahan ini.
+
+## Aturan kandidat yang dapat diaudit
 
 - Hanya candle selesai, minimal 250 bar per timeframe. Waktu provider adalah awal bar; akhir dihitung dari durasi timeframe. Candle berjalan tidak dipakai untuk indikator/pemicu.
 - OHLC harus positif, finite, koheren; duplikat, urutan mundur, tanggal masa depan dan OHLC parsial memblokir setup. Nilai O/H/L yang hilang tidak diganti dengan harga close.
@@ -46,8 +61,9 @@ Tidak ada asumsi volume spot Forex terpusat. Volume relatif hanya ditampilkan ji
 
 ## Sumber harga dan batas pemakaian
 
-- `XAU/USD` → Yahoo `GC=F`, **futures emas**, bukan spot XAUUSD MT5. `XAG/USD` → `SI=F`. Basis, rollover dan batas sesi dapat menghasilkan level berbeda. [Spesifikasi dan jam kontrak emas GC](https://www.schwab.com/futures/gold-futures).
-- Simbol internal `BTC/USDT` → Yahoo `BTC-USD`; tampilan Advanced menyebut **BTC/USD**. Bukan harga Binance USDT atau CFD MT5. Konvensi internal dipertahankan agar navigasi lama tetap kompatibel.
+- `market=crypto` memakai candle Binance Spot USDT (mis. `BTCUSDT`) dan tetap menampilkan sumbernya; harga harus dicocokkan dengan broker sebelum entry.
+- `market=forex` memakai snapshot candle/bid/ask MT5 melalui bridge read-only. Tanpa snapshot segar, instrumen ditandai unavailable—tidak diganti diam-diam dengan `GC=F` atau Yahoo.
+- `source=reference` memilih Yahoo secara eksplisit. `GC=F` adalah futures emas, bukan spot XAU/USD MT5; `BTC-USD` adalah referensi USD, bukan Binance USDT atau CFD MT5.
 - Forex menggunakan feed referensi Yahoo, bukan spread/bid/ask broker. Jam broker, termasuk pair eksotik, bisa berbeda. [Contoh perbedaan sesi instrumen dan libur dari OANDA](https://www.oanda.com/us-en/trading/hours-of-operation/).
 - Berita, kalender ekonomi, fundamental, order book dan sentimen tidak ditambahkan sebagai skor palsu/netral ketika data tidak tersedia.
 - Chart aset dan Scanner klasik masih menggunakan mesin lama; jangan menganggap hasilnya identik dengan Advanced.
@@ -62,7 +78,7 @@ Model ini belum memiliki backtest out-of-sample atau bukti forward-test net-of-c
 - Maksimal empat fetch aktif, 12 penunggu dengan deadline 20 detik, timeout fetch 12 detik; instance provider terpisah dari antrean legacy.
 - Permintaan candle: M15 selama 7 hari, H1 selama 90 hari, D1 selama 730 hari; ketersediaan aktual bisa kurang. Pemanasan tetap wajib, tanpa fallback data rekaan.
 - UI refresh 90 detik, timeout 45 detik, membatalkan request lama saat filter berubah, menolak respons yang tidak cocok, dan menyembunyikan level kedaluwarsa. Kegagalan baru tidak mempertahankan hasil lama seolah fresh.
-- Tidak diperlukan migration Supabase, API key baru, perubahan `.env`, atau restart robot untuk fitur ini. Perubahan harus dipublikasikan terlebih dahulu agar muncul pada website online.
+- Snapshot broker memerlukan migration `supabase/migrations/20260908000100_add_signal_broker_snapshots.sql`, deploy website, lalu jalankan `signal_market_bridge.py` (atau `run_signal_bridge.bat`) pada PC/VPS yang terhubung ke terminal MT5. Bridge bersifat read-only dan tidak memanggil order API.
 
 ## Verifikasi pengembangan
 
