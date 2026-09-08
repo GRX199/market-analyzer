@@ -19,8 +19,10 @@ export function parseBrokerSnapshot(value: unknown, now = Date.now(), requireRec
     || !text(v.broker) || !text(v.server) || !['demo', 'real'].includes(String(v.accountKind))
     || !text(v.accountRef, 24) || !/^[a-f0-9]{24}$/.test(v.accountRef)
     || !iso(v.capturedAt) || !iso(v.quoteTime) || !positive(v.bid) || !positive(v.ask) || v.ask < v.bid) throw new Error('Identitas/quote MT5 tidak valid.');
-  const symbolBase = String(v.symbol).replace('/', '');
-  if (!String(v.instrument).toUpperCase().startsWith(symbolBase)) throw new Error('Instrumen MT5 tidak cocok dengan simbol snapshot.');
+  const symbolBase = String(v.symbol).replace('/', '').toUpperCase();
+  const instrumentBase = String(v.instrument).toUpperCase().replace(/[MC]$/, '');
+  const cryptoEquivalent = symbolBase.endsWith('USDT') ? symbolBase.slice(0, -1) : symbolBase;
+  if (!(instrumentBase.startsWith(symbolBase) || instrumentBase.startsWith(cryptoEquivalent))) throw new Error('Instrumen MT5 tidak cocok dengan simbol snapshot.');
   const captured = Date.parse(v.capturedAt), quote = Date.parse(v.quoteTime);
   if (!Number.isFinite(captured) || !Number.isFinite(quote) || captured > now + 30_000 || quote > captured + 30_000
     || quote > now + 30_000 || (requireRecent && (now - captured > 180_000 || now - quote > 180_000))) throw new Error('Sinkronisasi/quote MT5 kedaluwarsa; jalankan pengirim data dan periksa koneksi terminal.');
