@@ -68,6 +68,11 @@ async function feed(asset: SignalAsset, timeframe: FeedTimeframe, source: 'marke
   const work = limitedFeed(async () => {
     let result: FeedResult;
     try {
+      if (source === 'market' && asset.marketType === 'forex') {
+        result = { candles: [], error: 'Snapshot MT5 segar belum tersedia; jalankan signal_market_bridge.py. Tidak memakai GC=F/Yahoo sebagai pengganti.' };
+        cache.set(key, { result, expires: Date.now() + 10_000 });
+        return result;
+      }
       const candles = source === 'market' && asset.marketType === 'crypto'
         ? await fetchBinanceSignalCandles(asset.symbol, timeframe === '15m' ? '15m' : timeframe === '1H' ? '1H' : timeframe === '4H' ? '4H' : '1D')
         : await fetchYahooSignalCandles(asset.symbol, asset.marketType, timeframe === '4H' ? '1H' : timeframe);
