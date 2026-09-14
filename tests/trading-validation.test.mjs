@@ -8,6 +8,7 @@ import {
   isTradingUserAuthorized,
   parseClaimTradesInput,
   parseCreateTradeInput,
+  parseDirectTradeInput,
   parseFinalizeTradeInput,
   parseRobotNotificationInput,
   parseTelegramNotificationInput,
@@ -113,6 +114,39 @@ test('rejects unsafe trade actions and volume', () => {
     }).success,
     false
   );
+});
+
+test('direct Signals orders preserve account scope and pending geometry', () => {
+  const valid = parseDirectTradeInput({
+    symbol: 'XAUUSDm', marketType: 'forex', action: 'buy', orderType: 'buy_limit',
+    volume: 0.01, quotePrice: 2400, entryPrice: 2395, stopLoss: 2385, takeProfit: 2415,
+    accountKind: 'demo', idempotencyKey: 'signals:12345678',
+    conditionalAcknowledged: false, liveConfirmation: true,
+  });
+  assert.equal(valid.success, true);
+  if (valid.success) {
+    assert.equal(valid.data.accountKind, 'demo');
+    assert.equal(valid.data.marketType, 'forex');
+  }
+  assert.equal(parseDirectTradeInput({
+    symbol: 'BTCUSDm', marketType: 'crypto', action: 'sell', orderType: 'buy_stop',
+    volume: 0.01, quotePrice: 100, entryPrice: 101, stopLoss: 99, takeProfit: 102,
+    accountKind: 'demo', idempotencyKey: 'signals:12345679',
+    conditionalAcknowledged: false, liveConfirmation: true,
+  }).success, false);
+  assert.equal(parseDirectTradeInput({
+    symbol: 'EURUSDm', marketType: 'forex', action: 'sell', orderType: 'sell_stop',
+    volume: 0.01, quotePrice: 1.1, entryPrice: 1.09, stopLoss: 1.11, takeProfit: 1.08,
+    accountKind: 'real', idempotencyKey: 'signals:12345680',
+    conditionalAcknowledged: false, liveConfirmation: false,
+  }).success, false);
+});
+
+test('worker claim account scope is optional for backwards compatibility and validated when present', () => {
+  assert.deepEqual(parseClaimTradesInput({ worker_id: 'mt5-worker:demo-1', limit: 1, account_kind: 'real' }), {
+    success: true, data: { worker_id: 'mt5-worker:demo-1', limit: 1, account_kind: 'real' },
+  });
+  assert.equal(parseClaimTradesInput({ worker_id: 'mt5-worker:demo-1', limit: 1, account_kind: 'paper' }).success, false);
 });
 
 test('claim contract uses exact worker_id and limit keys', () => {

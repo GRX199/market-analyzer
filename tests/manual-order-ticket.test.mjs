@@ -40,11 +40,11 @@ test('conditional ticket requires explicit acknowledgement and positive volume',
   assert.equal(validateManualOrderDraft(draft('buy_stop', { entry: 101, volume: 0 })).valid, false);
 });
 
-test('Signals page exposes four manual ticket actions without dispatching an order', async () => {
+test('Signals page exposes four manual ticket actions and a guarded direct-order route', async () => {
   const source = await readFile(new URL('../src/app/signals/page.tsx', import.meta.url), 'utf8');
   for (const type of ['buy_limit', 'buy_stop', 'sell_limit', 'sell_stop']) assert.match(source, new RegExp(type));
   for (const label of ['BUY LIMIT', 'BUY STOP', 'SELL LIMIT', 'SELL STOP']) assert.equal(manualOrderLabel(label.toLowerCase().replace(' ', '_')), label);
   assert.match(source, /\.sort\(\(left, right\) => compareSignals\(left, right/);
   assert.match(source, /Salin template MT5/);
-  assert.doesNotMatch(source, /fetch\(['"]\/api\/trades/);
+  assert.match(source, /fetch\(['"]\/api\/trades\/direct/);
 });

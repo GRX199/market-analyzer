@@ -50,6 +50,14 @@ Status proses robot tidak dapat dibuktikan oleh browser karena robot berjalan
 di proses Windows terpisah. Konfirmasi log startup robot, status Algo Trading,
 serta akun/nomor login pada terminal MT5 sebelum mengaktifkan enqueue.
 
+Tombol `Kirim order` pada Signals Advanced hanya efektif untuk snapshot broker
+MT5. Pilih akun Demo atau Real, periksa quote/Entry/SL/TP dan centang konfirmasi.
+Website menyimpan intent lengkap ke antrean; worker yang terhubung ke akun
+terpilih mengulang seluruh pemeriksaan dan memanggil MT5 satu kali.
+`TRADING_REAL_ORDERS_ENABLED` tetap `false` secara default, sehingga memilih
+Real di UI tidak dapat membuka akun real tanpa konfigurasi server dan guard MT5
+real yang terpisah.
+
 ## Pemeriksaan wajib
 
 ```powershell
@@ -147,7 +155,7 @@ watchlist tidak berjalan di background. Pilih cadence sesuai quota provider
 gagal berulang atau tidak adanya heartbeat scheduler.
 
 Terapkan migration sampai
-`20260903000100_track_executed_trade_volume.sql`. Migration queue hingga
+`20260915000100_add_direct_order_intents.sql`. Migration queue hingga
 `20260801000400_enforce_single_inflight_trade.sql` wajib sebelum mengaktifkan
 trading atau cron. Migration `003` menghapus overload claim tanpa owner, menambahkan
 version fence scanner, dan mengamankan tabel legacy `signal_history`.
@@ -166,6 +174,11 @@ Migration volume eksekusi menambah `auto_trades.executed_volume`. Pasang
 migration ini sebelum menjalankan worker versi baru agar finalisasi order dapat
 merekam lot aktual broker dan halaman antrean dapat membandingkannya dengan lot
 yang diminta.
+
+Migration direct order menambah `order_type`, quote/Entry/SL/TP, dan
+`account_kind` (`demo`/`real`). RPC claim kini menyaring scope akun dan unique
+processing index berlaku per owner+akun, sehingga worker demo dan real tidak
+akan mengambil intent satu sama lain.
 
 Sebelum migration: matikan enqueue, worker, dan cron; buat backup; audit seluruh
 row `processing`; lalu rekonsiliasi owner kosong, lebih dari satu row processing

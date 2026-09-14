@@ -40,6 +40,8 @@ interface OperationsStatus {
     switchesAligned: boolean;
     workerTokenConfigured: boolean;
     adminCredentialConfigured: boolean;
+    directOrdersEnabled: boolean;
+    realDirectOrdersEnabled: boolean;
     canQueueOrders: boolean;
   };
   integrations: {
@@ -280,6 +282,8 @@ export default function OperationsPage() {
               <StatusRow label="Kill switch antarmuka" detail="NEXT_PUBLIC_TRADING_ENABLED selaras dengan server." ok={status?.trading.browserEnabled === true && status?.trading.switchesAligned === true} />
               <StatusRow label="Token worker" detail="Bearer token khusus robot terpasang dan bukan placeholder." ok={status?.trading.workerTokenConfigured === true} />
               <StatusRow label="Akses antrean server" detail="Service-role hanya tersedia pada backend website." ok={status?.trading.adminCredentialConfigured === true} />
+              <StatusRow label="Direct order Signals" detail="Tombol Signals hanya mengantrekan order broker-backed dengan Entry/SL/TP lengkap." ok={status?.trading.directOrdersEnabled === true} />
+              <StatusRow label="Direct order real" detail="Tetap terkunci sampai TRADING_REAL_ORDERS_ENABLED dan guard MT5 real diaktifkan secara sengaja." ok={status?.trading.realDirectOrdersEnabled === true} optional />
             </CardContent>
           </Card>
 

@@ -62,8 +62,12 @@ function OrderTicket({ row, plan, scenario }: { row: AdvancedSignal; plan: Refer
   const [secondTarget, setSecondTarget] = useState(String(plan.secondTarget ?? ''));
   const [volume, setVolume] = useState('0.01');
   const [acknowledged, setAcknowledged] = useState(false);
+  const [accountKind, setAccountKind] = useState<'demo' | 'real'>('demo');
+  const [accountAcknowledged, setAccountAcknowledged] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState<string | null>(null);
   const quoteFor = (type: ManualOrderType) => {
     if (row.source.kind !== 'broker') return null;
     return type.startsWith('buy') ? row.source.ask ?? null : row.source.bid ?? null;
@@ -71,7 +75,7 @@ function OrderTicket({ row, plan, scenario }: { row: AdvancedSignal; plan: Refer
   const openTicket = (type: ManualOrderType) => {
     setOrderType(type); setQuote(String(quoteFor(type) ?? '')); setEntry(String(plan.entry));
     setStopLoss(String(plan.stopLoss)); setTakeProfit(String(plan.takeProfit)); setSecondTarget(String(plan.secondTarget ?? ''));
-    setAcknowledged(false); setError(null); setCopied(false); setOpen(true);
+    setAcknowledged(false); setAccountKind('demo'); setAccountAcknowledged(false); setError(null); setCopied(false); setSubmitted(null); setOpen(true);
   };
   const copyTemplate = async () => {
     const validation = validateManualOrderDraft({ orderType, quote: Number(quote), entry: Number(entry), stopLoss: Number(stopLoss), takeProfit: Number(takeProfit), secondTarget: Number(secondTarget), volume: Number(volume), conditional: Boolean(scenario), acknowledged });
@@ -94,24 +98,52 @@ function OrderTicket({ row, plan, scenario }: { row: AdvancedSignal; plan: Refer
       await navigator.clipboard.writeText(template); setCopied(true); setError(null);
     } catch (caught) { setCopied(false); setError(caught instanceof Error ? caught.message : 'Template belum dapat disalin.'); }
   };
+  const submitOrder = async () => {
+    if (row.source.kind !== 'broker') { setError('Direct order hanya tersedia untuk snapshot broker MT5, bukan proxy/reference.'); return; }
+    const validation = validateManualOrderDraft({ orderType, quote: Number(quote), entry: Number(entry), stopLoss: Number(stopLoss), takeProfit: Number(takeProfit), secondTarget: Number(secondTarget), volume: Number(volume), conditional: Boolean(scenario), acknowledged });
+    if (!validation.valid) { setError(validation.error); return; }
+    if (!accountAcknowledged) { setError('Centang konfirmasi akun dan parameter sebelum mengirim.'); return; }
+    setSubmitting(true); setError(null); setSubmitted(null);
+    const idempotencyKey = `signals:${row.symbol.replace(/[^A-Za-z0-9._:/-]/g, '-')}:${Date.now()}`;
+    try {
+      const response = await fetch('/api/trades/direct', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          symbol: row.source.instrument, marketType: row.marketType, action: validation.side,
+          orderType, volume: Number(volume), quotePrice: Number(quote), entryPrice: Number(entry),
+          stopLoss: Number(stopLoss), takeProfit: Number(takeProfit), accountKind,
+          idempotencyKey, conditionalAcknowledged: Boolean(scenario) && acknowledged,
+          liveConfirmation: accountKind === 'demo' || accountAcknowledged,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(typeof payload?.error === 'string' ? payload.error : `Order ditolak (HTTP ${response.status}).`);
+      const ticket = payload?.trade?.id ?? 'queued';
+      setSubmitted(`Order masuk antrean (${ticket}). MT5 worker akan memeriksa quote, akun, margin, lot, SL/TP lalu mengirim sekali.`);
+    } catch (caught) { setError(caught instanceof Error ? caught.message : 'Order belum dapat dikirim.'); }
+    finally { setSubmitting(false); }
+  };
   return <section aria-label="Tiket pending order manual" className="rounded-xl border border-primary/20 bg-primary/5 p-4">
-    <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="font-semibold">Siapkan tiket order</h4><Badge variant="outline">Manual · no-send</Badge></div>
-    <p className="mt-2 text-sm leading-6 text-muted-foreground">Pilih tipe pending order untuk mengisi tiket lengkap. Tombol ini tidak mengirim order; setelah validasi Anda menyalin detail ke MT5 dan tetap menekan Submit secara manual.</p>
+    <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="font-semibold">Order langsung ke MT5</h4><Badge variant="outline">Satu kirim · idempotent</Badge></div>
+    <p className="mt-2 text-sm leading-6 text-muted-foreground">Pilih tipe pending order. Setelah konfirmasi, order masuk antrean dan worker memvalidasi ulang quote broker, akun, risiko, lot, Entry, SL dan TP sebelum satu kali pengiriman.</p>
     <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">{(['buy_limit', 'buy_stop', 'sell_limit', 'sell_stop'] as ManualOrderType[]).map(type => <Button key={type} type="button" variant="outline" size="sm" onClick={() => openTicket(type)}>{manualOrderLabel(type)}</Button>)}</div>
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
-        <DialogHeader><DialogTitle>{manualOrderLabel(orderType)} · {row.displaySymbol}</DialogTitle><DialogDescription>Isi quote broker terbaru, periksa geometri dan salin tiket ke MT5. Tidak ada request order dari halaman Signals.</DialogDescription></DialogHeader>
+        <DialogHeader><DialogTitle>{manualOrderLabel(orderType)} · {row.displaySymbol}</DialogTitle><DialogDescription>Isi quote broker terbaru, periksa geometri, pilih akun tujuan, lalu kirim satu order terproteksi ke antrean MT5.</DialogDescription></DialogHeader>
         <div className="space-y-3">
           {scenario && <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm leading-6 text-amber-700 dark:text-amber-300">Ini masih skenario bersyarat. Jangan pasang pending order sebelum candle pemicu selesai dan Anda memuat ulang signal.</div>}
+          <label className="block text-sm font-medium">Akun tujuan<Select value={accountKind} onValueChange={value => { if (value === 'demo' || value === 'real') { setAccountKind(value); setAccountAcknowledged(false); } }}><SelectTrigger className="mt-1"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="demo">Demo · forward test</SelectItem><SelectItem value="real">Real · Standard Cent (terkunci konfigurasi)</SelectItem></SelectContent></Select></label>
           <label className="block text-sm font-medium">Quote broker ({orderType.startsWith('buy') ? 'Ask' : 'Bid'})<Input className="mt-1" type="number" inputMode="decimal" step="any" value={quote} onChange={event => setQuote(event.target.value)} placeholder="Masukkan quote MT5 terbaru" /></label>
           <label className="block text-sm font-medium">Volume (lot)<Input className="mt-1" type="number" inputMode="decimal" step="any" min="0" value={volume} onChange={event => setVolume(event.target.value)} /></label>
           <div className="grid grid-cols-2 gap-3"><label className="block text-sm font-medium">Entry<Input className="mt-1" type="number" inputMode="decimal" step="any" value={entry} onChange={event => setEntry(event.target.value)} /></label><label className="block text-sm font-medium">Stop Loss<Input className="mt-1" type="number" inputMode="decimal" step="any" value={stopLoss} onChange={event => setStopLoss(event.target.value)} /></label><label className="block text-sm font-medium">Take Profit 1<Input className="mt-1" type="number" inputMode="decimal" step="any" value={takeProfit} onChange={event => setTakeProfit(event.target.value)} /></label><label className="block text-sm font-medium">Take Profit 2<Input className="mt-1" type="number" inputMode="decimal" step="any" value={secondTarget} onChange={event => setSecondTarget(event.target.value)} /></label></div>
           {scenario && <label className="flex items-start gap-2 rounded-lg border p-3 text-sm leading-5"><input type="checkbox" checked={acknowledged} onChange={event => setAcknowledged(event.target.checked)} className="mt-1" />Saya mengerti ini conditional dan akan menunggu konfirmasi candle + scan ulang.</label>}
+          <label className="flex items-start gap-2 rounded-lg border border-primary/30 p-3 text-sm leading-5"><input type="checkbox" checked={accountAcknowledged} onChange={event => setAccountAcknowledged(event.target.checked)} className="mt-1" />Saya memeriksa akun <strong>{accountKind === 'real' ? 'REAL Standard Cent' : 'DEMO'}</strong>, volume, Entry, SL, TP dan memahami bahwa order dapat ditolak oleh guard broker.</label>
           <div className="rounded-lg border bg-muted/30 p-3 text-xs leading-5 text-muted-foreground">Aturan otomatis: {orderType.startsWith('buy') ? 'BUY: SL &lt; Entry &lt; TP1 &lt; TP2' : 'SELL: SL &gt; Entry &gt; TP1 &gt; TP2'}; {orderType.endsWith('limit') ? 'limit berada di sisi dalam quote' : 'stop berada di sisi luar quote'}. Lot step, margin, komisi, swap dan slippage tetap harus dicek di MT5.</div>
           {error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/5 p-3 text-sm text-red-700 dark:text-red-300">{error}</p>}
-          {copied && <p role="status" className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm text-emerald-700 dark:text-emerald-300"><Check className="h-4 w-4" />Template tersalin. Periksa ulang MT5 sebelum Submit.</p>}
+          {copied && <p role="status" className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm text-emerald-700 dark:text-emerald-300"><Check className="h-4 w-4" />Template tersalin.</p>}
+          {submitted && <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm text-emerald-700 dark:text-emerald-300">{submitted}</p>}
         </div>
-        <DialogFooter><Button type="button" variant="outline" onClick={() => setOpen(false)}>Tutup</Button><Button type="button" onClick={() => void copyTemplate()}><Copy className="h-4 w-4" />Salin template MT5</Button></DialogFooter>
+        <DialogFooter><Button type="button" variant="outline" onClick={() => setOpen(false)}>Tutup</Button><Button type="button" variant="outline" onClick={() => void copyTemplate()}><Copy className="h-4 w-4" />Salin template MT5</Button><Button type="button" onClick={() => void submitOrder()} disabled={submitting || row.source.kind !== 'broker' || Boolean(scenario) && !acknowledged || !accountAcknowledged}>{submitting ? 'Mengirim…' : 'Kirim order'}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   </section>;
@@ -174,7 +206,7 @@ function SignalDetail({ row, now }: { row: AdvancedSignal; now: number }) {
           {execution.quoteEntry !== null && <dl className="mt-3 grid grid-cols-2 gap-3 tabular-nums"><div><dt className="text-muted-foreground">Entry pada {quoteSide} snapshot</dt><dd>{price(execution.quoteEntry)}</dd></div><div><dt className="text-muted-foreground">R:R pada quote</dt><dd>{execution.riskReward === null ? '—' : `1:${number(execution.riskReward)}`}</dd></div><div><dt className="text-muted-foreground">Pergeseran entry</dt><dd>{number(execution.entryDriftR)}R · positif = lebih buruk</dd></div><div><dt className="text-muted-foreground">Spread harga</dt><dd>{price(execution.spread)}</dd></div></dl>}
           <p className="mt-3 text-xs leading-5 text-muted-foreground">SL/TP referensi tidak digeser untuk memperbesar R:R. BUY dinilai pada Ask dengan pemicu SL/TP pada Bid; SELL sebaliknya. Belum termasuk komisi, swap, slippage atau perubahan harga sejak snapshot. Ini bukan hasil profit maupun izin eksekusi.</p>
         </section>}
-        <p className="text-xs leading-5 text-amber-700 dark:text-amber-300">Kandidat memakai close candle; entry skenario adalah proyeksi setelah pemicu. Keduanya bukan harga eksekusi saat ini. Cocokkan bid/ask dan risiko broker; level tidak dikirim ke robot. Berlaku sampai {date(row.expiresAt)}.</p>
+        <p className="text-xs leading-5 text-amber-700 dark:text-amber-300">Kandidat memakai close candle; entry skenario adalah proyeksi setelah pemicu. Tombol Kirim order hanya aktif untuk snapshot broker dan tetap divalidasi ulang oleh worker MT5. Reference/spot tidak dapat dikirim langsung. Berlaku sampai {date(row.expiresAt)}.</p>
       </section>
       <div className="grid grid-cols-2 gap-4">
         <div><p className="text-sm text-muted-foreground">Bias harga</p><p className="text-lg font-semibold">{biasLabel(row.bias)}</p></div>
@@ -280,7 +312,7 @@ export default function SignalScannerPage() {
       <FilterSelect label="Horizon analisis" value={horizon} options={[{ value: 'intraday', label: 'Intraday · M15 / H1 / H4' }, { value: 'swing', label: 'Swing · H1 / H4 / D1' }]} onChange={value => { if (value === 'intraday' || value === 'swing') setHorizon(value); }} />
       <FilterSelect label="Instrumen" value={symbol ?? 'page'} options={[{ value: 'page', label: 'Pindai per halaman' }, ...filteredCatalog.map(asset => ({ value: asset.symbol, label: `${source === 'market' ? asset.displaySymbol : asset.symbol.replace('/USDT', '/USD')} · ${asset.name}` }))]} onChange={value => { setSymbol(value === 'page' ? null : value); setPage(0); }} />
     </section>
-    <div className="flex items-start gap-3 rounded-xl border border-amber-500/25 bg-amber-500/5 p-4 text-sm leading-6"><ShieldAlert className="mt-1 h-5 w-5 shrink-0 text-amber-500" /><p>Analisis ini hanya untuk trading manual dan tidak mengirim order. Market utama memakai Binance Spot untuk crypto; Forex/emas memerlukan snapshot broker MT5. Reference/Yahoo adalah proxy—jangan salin level langsung ke broker.</p></div>
+    <div className="flex items-start gap-3 rounded-xl border border-amber-500/25 bg-amber-500/5 p-4 text-sm leading-6"><ShieldAlert className="mt-1 h-5 w-5 shrink-0 text-amber-500" /><p>Signal dari Binance Spot dan Reference/Yahoo tetap informasional. Hanya snapshot MT5 broker yang memiliki tombol order langsung; worker akan memeriksa ulang akun demo/real, quote, margin, lot, geometri Entry/SL/TP dan guard risiko. Jangan salin level proxy ke broker.</p></div>
     <div className="flex flex-wrap items-center justify-between gap-3 text-sm" role="status"><p className="flex flex-wrap items-center gap-2"><Activity className="h-4 w-4 text-primary" />{loading ? 'Memindai candle final…' : error ? 'Pemindaian gagal' : `${rows.length} instrumen · ${candidates} kandidat lolos quote · ${watching} rencana bersyarat${brokerBlocked ? ` · ${brokerBlocked} tertahan quote` : ''}`}<span className="text-muted-foreground">· refresh 90 detik</span></p><p className="text-muted-foreground">{data ? `Pemindaian ${date(data.generatedAt)}` : 'Menunggu data provider'}</p></div>
     {error && <div role="alert" className="rounded-xl border border-red-500/30 bg-red-500/5 p-4 text-sm">{error} Data lama tidak dianggap sebagai sinyal baru.</div>}
     <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(380px,1fr)]">

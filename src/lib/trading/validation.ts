@@ -3,6 +3,7 @@ export const DEMO_CRYPTO_REQUESTED_VOLUME = 0.01;
 export const WORKER_CLAIM_LIMIT = 1;
 
 const SYMBOL_PATTERN = /^[A-Z0-9][A-Z0-9./_#-]{1,31}$/;
+const DIRECT_SYMBOL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9./_#-]{1,31}$/;
 const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]{7,127}$/;
 const WORKER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{2,63}$/;
 const UUID_PATTERN =
@@ -37,9 +38,35 @@ export type CreateTradeInput = {
   idempotencyKey: string;
 };
 
+export const DIRECT_ORDER_TYPES = [
+  'buy_limit',
+  'buy_stop',
+  'sell_limit',
+  'sell_stop',
+] as const;
+export type DirectOrderType = (typeof DIRECT_ORDER_TYPES)[number];
+export type TradingAccountKind = 'demo' | 'real';
+
+export type DirectTradeInput = {
+  symbol: string;
+  marketType: 'crypto' | 'forex';
+  action: 'buy' | 'sell';
+  orderType: DirectOrderType;
+  volume: number;
+  quotePrice: number;
+  entryPrice: number;
+  stopLoss: number;
+  takeProfit: number;
+  accountKind: TradingAccountKind;
+  idempotencyKey: string;
+  conditionalAcknowledged: boolean;
+  liveConfirmation: boolean;
+};
+
 export type ClaimTradesInput = {
   worker_id: string;
   limit: 1;
+  account_kind?: TradingAccountKind;
 };
 
 type FinalizeClaimFence = {
@@ -219,6 +246,83 @@ export function parseCreateTradeInput(
   };
 }
 
+function parsePositivePrice(value: unknown, field: string): ValidationResult<number> {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0 || value > 1_000_000_000_000_000) {
+    return failure(`${field} must be a positive finite number`);
+  }
+  return { success: true, data: value };
+}
+
+/** Validate the complete, broker-backed Signals order intent. */
+export function parseDirectTradeInput(
+  value: unknown
+): ValidationResult<DirectTradeInput> {
+  if (!isRecord(value)) return failure('request body must be a JSON object');
+  if (typeof value.symbol !== 'string') return failure('symbol must be a string');
+  const symbol = value.symbol.trim();
+  if (!DIRECT_SYMBOL_PATTERN.test(symbol)) return failure('symbol must be 2-32 safe broker-symbol characters');
+  if (value.marketType !== 'crypto' && value.marketType !== 'forex') return failure('marketType must be crypto or forex');
+  if (value.action !== 'buy' && value.action !== 'sell') return failure('action must be buy or sell');
+  if (typeof value.orderType !== 'string' || !DIRECT_ORDER_TYPES.includes(value.orderType as DirectOrderType)) {
+    return failure('orderType must be a supported pending order type');
+  }
+  const orderType = value.orderType as DirectOrderType;
+  const expectedAction = orderType.startsWith('buy') ? 'buy' : 'sell';
+  if (value.action !== expectedAction) return failure('action must match the orderType side');
+  if (typeof value.volume !== 'number' || !Number.isFinite(value.volume) || value.volume <= 0 || value.volume > MAX_TRADE_VOLUME) {
+    return failure(`volume must be greater than 0 and at most ${MAX_TRADE_VOLUME}`);
+  }
+  const parsedPrices = {
+    quotePrice: parsePositivePrice(value.quotePrice, 'quotePrice'),
+    entryPrice: parsePositivePrice(value.entryPrice, 'entryPrice'),
+    stopLoss: parsePositivePrice(value.stopLoss, 'stopLoss'),
+    takeProfit: parsePositivePrice(value.takeProfit, 'takeProfit'),
+  };
+  if (!parsedPrices.quotePrice.success) return parsedPrices.quotePrice;
+  if (!parsedPrices.entryPrice.success) return parsedPrices.entryPrice;
+  if (!parsedPrices.stopLoss.success) return parsedPrices.stopLoss;
+  if (!parsedPrices.takeProfit.success) return parsedPrices.takeProfit;
+  const quotePrice = parsedPrices.quotePrice.data;
+  const entryPrice = parsedPrices.entryPrice.data;
+  const stopLoss = parsedPrices.stopLoss.data;
+  const takeProfit = parsedPrices.takeProfit.data;
+  const isLimit = orderType.endsWith('limit');
+  const entryOnCorrectSide = expectedAction === 'buy'
+    ? isLimit ? entryPrice < quotePrice : entryPrice > quotePrice
+    : isLimit ? entryPrice > quotePrice : entryPrice < quotePrice;
+  if (!entryOnCorrectSide) return failure(`${orderType} entry is on the wrong side of the broker quote`);
+  const protectionValid = expectedAction === 'buy'
+    ? stopLoss < entryPrice && entryPrice < takeProfit
+    : stopLoss > entryPrice && entryPrice > takeProfit;
+  if (!protectionValid) return failure(expectedAction === 'buy' ? 'BUY requires SL < Entry < TP' : 'SELL requires SL > Entry > TP');
+  if (typeof value.accountKind !== 'string' || (value.accountKind !== 'demo' && value.accountKind !== 'real')) {
+    return failure('accountKind must be demo or real');
+  }
+  if (typeof value.conditionalAcknowledged !== 'boolean') return failure('conditionalAcknowledged must be boolean');
+  if (typeof value.liveConfirmation !== 'boolean') return failure('liveConfirmation must be boolean');
+  if (value.accountKind === 'real' && !value.liveConfirmation) return failure('real orders require explicit live confirmation');
+  const idempotencyKey = parseIdempotencyKey(value.idempotencyKey);
+  if (!idempotencyKey.success) return idempotencyKey;
+  return {
+    success: true,
+    data: {
+      symbol,
+      marketType: value.marketType,
+      action: value.action,
+      orderType,
+      volume: value.volume,
+      quotePrice,
+      entryPrice,
+      stopLoss,
+      takeProfit,
+      accountKind: value.accountKind,
+      idempotencyKey: idempotencyKey.data,
+      conditionalAcknowledged: value.conditionalAcknowledged,
+      liveConfirmation: value.liveConfirmation,
+    },
+  };
+}
+
 export function parseClaimTradesInput(
   value: unknown
 ): ValidationResult<ClaimTradesInput> {
@@ -235,11 +339,20 @@ export function parseClaimTradesInput(
     return failure(`limit must be exactly ${WORKER_CLAIM_LIMIT}`);
   }
 
+  let accountKind: TradingAccountKind | undefined;
+  if (value.account_kind !== undefined) {
+    if (value.account_kind !== 'demo' && value.account_kind !== 'real') {
+      return failure('account_kind must be demo or real');
+    }
+    accountKind = value.account_kind;
+  }
+
   return {
     success: true,
     data: {
       worker_id: workerId.data,
       limit: WORKER_CLAIM_LIMIT,
+      ...(accountKind ? { account_kind: accountKind } : {}),
     },
   };
 }

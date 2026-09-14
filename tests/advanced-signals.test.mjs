@@ -226,7 +226,7 @@ test('zero/invalid provider volume is not an invented directional confirmation',
   }
 });
 
-test('UI fences old filter responses, expires reference levels, and does not arm trades', async () => {
+test('UI fences old filter responses, expires reference levels, and uses the guarded direct-order route', async () => {
   const page = await readFile(new URL('../src/app/signals/page.tsx', import.meta.url), 'utf8');
   assert.match(page, /requestRef\.current !== controller/);
   assert.match(page, /body\.scope\.symbol !== symbol/);
@@ -235,7 +235,8 @@ test('UI fences old filter responses, expires reference levels, and does not arm
   assert.match(page, /row\.source\.kind !== 'broker' \|\| execution\.status === 'review'/);
   assert.match(page, /Skor bukan probabilitas menang/);
   assert.match(page, /Scanner klasik/);
-  assert.doesNotMatch(page, /api\/trades|order_send|setTradingEnabled/);
+  assert.match(page, /api\/trades\/direct/);
+  assert.doesNotMatch(page, /order_send|setTradingEnabled/);
 });
 
 test('fresh WAIT and conflicting trends expose conditional levels without promoting an entry', () => {

@@ -125,7 +125,8 @@ test('UI fences owner changes, observes resume events, and never dispatches orde
   assert.match(page, /signalDisplayTime\(data.generatedAt/);
   assert.match(page, /visibilitychange/); assert.match(page, /window.addEventListener\('focus'/);
   assert.match(page, /Jangan gunakan entry lama/); assert.match(page, /assessBrokerPlan\(row, currentTime\)/);
-  assert.doesNotMatch(page, /api\/trades|order_send|setTradingEnabled/);
+  assert.match(page, /api\/trades\/direct/);
+  assert.doesNotMatch(page, /order_send|setTradingEnabled/);
   const health = await readFile(new URL('../src/components/trading/signal-feed-health.tsx', import.meta.url), 'utf8');
   assert.match(health, /signalDisplayTime/); assert.match(health, /state\?\.owner === userId/);
 });

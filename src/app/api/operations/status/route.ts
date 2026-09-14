@@ -71,6 +71,8 @@ export async function GET() {
       switchesAligned,
       workerTokenConfigured,
       adminCredentialConfigured,
+      directOrdersEnabled: serverTradingEnabled,
+      realDirectOrdersEnabled: process.env.TRADING_REAL_ORDERS_ENABLED === 'true',
       canQueueOrders:
         serverTradingEnabled
         && browserTradingEnabled

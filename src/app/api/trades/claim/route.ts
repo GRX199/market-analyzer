@@ -20,6 +20,12 @@ const CLAIM_FIELDS = [
   'market_type',
   'action',
   'volume',
+  'order_type',
+  'quote_price',
+  'entry_price',
+  'stop_loss',
+  'take_profit',
+  'account_kind',
   'status',
   'worker_id',
   'claimed_at',
@@ -42,6 +48,7 @@ async function findExistingWorkerClaim(
   admin: SupabaseClient,
   ownerUserId: string,
   workerId: string,
+  accountKind: 'demo' | 'real',
 ) {
   return admin
     .from('auto_trades')
@@ -49,6 +56,7 @@ async function findExistingWorkerClaim(
     .eq('user_id', ownerUserId)
     .eq('status', 'processing')
     .eq('worker_id', workerId)
+    .eq('account_kind', accountKind)
     .order('claimed_at', { ascending: true })
     .limit(1)
     .maybeSingle();
@@ -103,6 +111,7 @@ export async function POST(request: Request) {
       admin,
       ownerUserId,
       validated.data.worker_id,
+      validated.data.account_kind ?? 'demo',
     );
   if (existingClaimError) {
     console.error('Failed to recover an existing worker claim', {
@@ -119,6 +128,7 @@ export async function POST(request: Request) {
     worker_id: validated.data.worker_id,
     owner_user_id: ownerUserId,
     limit: validated.data.limit,
+    account_kind: validated.data.account_kind ?? 'demo',
   });
 
   if (error) {
@@ -135,6 +145,7 @@ export async function POST(request: Request) {
         admin,
         ownerUserId,
         validated.data.worker_id,
+        validated.data.account_kind ?? 'demo',
       );
     if (racedClaimError) {
       console.error('Failed to recover a concurrent worker claim', {
