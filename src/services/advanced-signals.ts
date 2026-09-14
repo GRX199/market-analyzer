@@ -1,24 +1,17 @@
 import { FOREX_SYMBOLS, CRYPTO_SYMBOLS } from '@/lib/constants';
-import { aggregateCompleteFourHours, analyzeAdvancedSignal, type AdvancedSignal, type SignalHorizon, type FrameInput } from '@/lib/analysis/advanced-signals';
+import { aggregateCompleteFourHours, analyzeAdvancedSignal, HORIZON_FRAMES, type AdvancedSignal, type SignalHorizon, type FrameInput, type SignalSession } from '@/lib/analysis/advanced-signals';
 import { fetchYahooSignalCandles, mapSymbolToYahoo } from '@/services/api/yahoo-finance';
-import type { BrokerSnapshot } from '@/lib/analysis/broker-snapshot';
-
-async function fetchBinanceSignalCandles(symbol: string, timeframe: '15m'|'1H'|'4H'|'1D'): Promise<OHLCV[]> {
-  const interval = ({'15m':'15m','1H':'1h','4H':'4h','1D':'1d'} as const)[timeframe];
-  const response = await fetch(`https://data-api.binance.vision/api/v3/klines?symbol=${encodeURIComponent(symbol.replace('/', ''))}&interval=${interval}&limit=320`, { cache: 'no-store', signal: AbortSignal.timeout(12_000), redirect: 'error' });
-  if (!response.ok) throw new Error(`Binance spot HTTP ${response.status}`);
-  const rows = await response.json();
-  if (!Array.isArray(rows)) throw new Error('Binance candle format invalid');
-  return rows.map((row: unknown[]) => { const [time, open, high, low, close, volume] = row.slice(0, 6).map(Number); if (![time,open,high,low,close,volume].every(Number.isFinite) || high < Math.max(open, close) || low > Math.min(open, close)) throw new Error('Binance OHLC invalid'); return { time: time / 1000, open, high, low, close, volume }; });
-}
+import { parseBrokerSnapshot, type BrokerSnapshot } from '@/lib/analysis/broker-snapshot';
+import { fetchBinanceSignalCandles } from '@/services/api/binance-signals';
 import type { OHLCV } from '@/types/market';
 
 export type SignalMarket = 'all' | 'forex' | 'crypto';
+export type SignalSource = 'market' | 'mt5' | 'reference';
 export interface SignalAsset { symbol: string; displaySymbol: string; name: string; marketType: 'forex' | 'crypto' }
 export const SIGNAL_PAGE_SIZE = 6;
 export const ADVANCED_UNIVERSE: SignalAsset[] = (() => {
   const forex = FOREX_SYMBOLS.map(row => ({ ...row, displaySymbol: row.symbol, marketType: 'forex' as const }));
-  const crypto = CRYPTO_SYMBOLS.map(row => ({ ...row, displaySymbol: row.symbol.replace('/USDT', '/USD'), marketType: 'crypto' as const }));
+  const crypto = CRYPTO_SYMBOLS.map(row => ({ ...row, displaySymbol: row.symbol, marketType: 'crypto' as const }));
   const priority = ['XAU/USD', 'BTC/USDT', 'EUR/USD', 'ETH/USDT', 'GBP/USD', 'SOL/USDT'];
   const all = [...forex, ...crypto];
   return [...priority.map(symbol => all.find(row => row.symbol === symbol)!), ...all.filter(row => !priority.includes(row.symbol))];
@@ -26,7 +19,7 @@ export const ADVANCED_UNIVERSE: SignalAsset[] = (() => {
 
 export function resolveSignalSymbol(raw: string): string | null {
   const compact = raw.trim().toUpperCase().replace(/[/-]/g, '');
-  return ADVANCED_UNIVERSE.find(row => row.symbol.replace('/', '') === compact || row.displaySymbol.replace('/', '') === compact)?.symbol ?? null;
+  return ADVANCED_UNIVERSE.find(row => row.symbol.replace('/', '') === compact || row.symbol.replace('/USDT', '/USD').replace('/', '') === compact)?.symbol ?? null;
 }
 
 export function selectSignalUniverse(market: SignalMarket, page: number, symbol: string | null = null) {
@@ -60,7 +53,8 @@ async function limitedFeed<T>(work: () => Promise<T>): Promise<T> {
   finally { const next = waiters.shift(); if (next) next(); else activeFeeds--; }
 }
 
-async function feed(asset: SignalAsset, timeframe: FeedTimeframe, source: 'market' | 'reference' = 'market'): Promise<FeedResult> {
+async function feed(asset: SignalAsset, timeframe: FeedTimeframe, source: 'market' | 'reference'): Promise<FeedResult> {
+  if (source === 'market' && asset.marketType !== 'crypto') return { candles: [], error: 'Snapshot MT5 belum tersedia.' };
   const key = `${source}:${asset.symbol}:${timeframe}`;
   const hit = cache.get(key);
   if (hit && hit.expires > Date.now()) return hit.result;
@@ -68,16 +62,11 @@ async function feed(asset: SignalAsset, timeframe: FeedTimeframe, source: 'marke
   const work = limitedFeed(async () => {
     let result: FeedResult;
     try {
-      if (source === 'market' && asset.marketType === 'forex') {
-        result = { candles: [], error: 'Snapshot MT5 segar belum tersedia; jalankan signal_market_bridge.py. Tidak memakai GC=F/Yahoo sebagai pengganti.' };
-        cache.set(key, { result, expires: Date.now() + 10_000 });
-        return result;
-      }
       const candles = source === 'market' && asset.marketType === 'crypto'
-        ? await fetchBinanceSignalCandles(asset.symbol, timeframe === '15m' ? '15m' : timeframe === '1H' ? '1H' : timeframe === '4H' ? '4H' : '1D')
+        ? await fetchBinanceSignalCandles(asset.symbol, timeframe)
         : await fetchYahooSignalCandles(asset.symbol, asset.marketType, timeframe === '4H' ? '1H' : timeframe);
       result = candles.length ? { candles } : { candles: [], error: 'Provider belum mengirim candle; bukan sinyal netral.' };
-    } catch { result = { candles: [], error: 'Data provider gagal dimuat; coba muat ulang.' }; }
+    } catch (error) { result = { candles: [], error: source === 'market' && error instanceof Error ? error.message : 'Data provider gagal dimuat; coba muat ulang.' }; }
     if (cache.size >= 48) cache.delete(cache.keys().next().value!);
     cache.set(key, { result, expires: Date.now() + (result.error ? 10_000 : 60_000) });
     return result;
@@ -86,23 +75,50 @@ async function feed(asset: SignalAsset, timeframe: FeedTimeframe, source: 'marke
   try { return await work; } finally { pending.delete(key); }
 }
 
-export async function scanAdvancedSignals(assets: SignalAsset[], horizon: SignalHorizon, options: { source?: 'market' | 'reference'; brokerSnapshots?: Record<string, BrokerSnapshot> } = {}): Promise<AdvancedSignal[]> {
+export async function scanAdvancedSignals(assets: SignalAsset[], horizon: SignalHorizon, options: { source?: SignalSource; brokerSnapshots?: Record<string, unknown>; brokerError?: string } = {}): Promise<AdvancedSignal[]> {
   const source = options.source ?? 'market';
   return Promise.all(assets.map(async asset => {
-    const broker = options.brokerSnapshots?.[asset.symbol];
-    const brokerFrame = (tf: FrameInput['timeframe']): FeedResult => { const frame = broker?.frames.find(item => item.timeframe === tf); return { candles: frame?.candles ?? [], error: frame ? undefined : 'Snapshot MT5 timeframe tidak tersedia.' }; };
+    const metal = ['XAU/USD', 'XAG/USD'].includes(asset.symbol);
+    if (source === 'mt5' || source === 'market' && asset.marketType === 'forex') {
+      const now = Date.now();
+      let broker: BrokerSnapshot | undefined, error = options.brokerError;
+      try {
+        const raw = options.brokerSnapshots?.[asset.symbol];
+        if (raw) {
+          broker = parseBrokerSnapshot(raw, now, false);
+          if (broker.symbol !== asset.symbol) { broker = undefined; throw new Error('Simbol snapshot tidak cocok dengan permintaan.'); }
+        } else error ??= 'Bridge MT5 belum mengirim simbol ini. Jalankan run_signal_bridge.bat; histori tidak diganti Yahoo.';
+      } catch (cause) { error = cause instanceof Error ? cause.message : 'Snapshot MT5 invalid.'; }
+      const exness = broker && /^Exness\b/i.test(broker.broker) && /^Exness-MT5/i.test(broker.server);
+      const session: SignalSession = exness && asset.marketType === 'forex' ? metal ? 'exness-metals' : 'exness-forex' : 'continuous';
+      const validUntil = broker ? new Date(Math.min(Date.parse(broker.capturedAt), Date.parse(broker.quoteTime)) + 180_000).toISOString() : undefined;
+      const frames: FrameInput[] = HORIZON_FRAMES[horizon].map(timeframe => ({ timeframe, session,
+        candles: broker?.frames.find(frame => frame.timeframe === timeframe)?.candles ?? [], error }));
+      const row = analyzeAdvancedSignal({ ...asset, displaySymbol: asset.symbol.replace('/USDT', '/USD'), source: {
+        provider: 'MT5 Broker', kind: 'broker', instrument: broker?.instrument ?? asset.symbol.replace('/USDT', 'USD').replace('/', ''), isProxy: false,
+        note: broker ? `${broker.instrument} · CFD broker ${broker.broker}; candle native dan quote akun ${broker.accountKind}. Bukan futures/spot exchange.` : error!,
+        ...(broker && { accountKind: broker.accountKind, server: broker.server, capturedAt: broker.capturedAt, quoteTime: broker.quoteTime, bid: broker.bid, ask: broker.ask, validUntil }),
+      } }, horizon, frames, now);
+      if (validUntil) {
+        row.expiresAt = new Date(Math.min(Date.parse(validUntil), row.expiresAt ? Date.parse(row.expiresAt) : Infinity)).toISOString();
+        if (now >= Date.parse(validUntil)) {
+          row.status = 'stale'; row.plan = null; row.manualScenarios = []; row.conviction = null;
+          row.reasons = ['Quote/snapshot MT5 melewati 3 menit. Periksa bridge, koneksi terminal, dan sesi pasar.', ...row.reasons];
+        }
+      }
+      return row;
+    }
     const [hourly, other, nativeH4] = await Promise.all([
-      broker ? Promise.resolve(brokerFrame('1H')) : feed(asset, '1H', source),
-      broker ? Promise.resolve(brokerFrame(horizon === 'intraday' ? '15m' : '1D')) : feed(asset, horizon === 'intraday' ? '15m' : '1D', source),
-      broker ? Promise.resolve(brokerFrame('4H')) : source === 'market' && asset.marketType === 'crypto' ? feed(asset, '4H', source) : Promise.resolve<FeedResult>({ candles: [] }),
+      feed(asset, '1H', source),
+      feed(asset, horizon === 'intraday' ? '15m' : '1D', source),
+      source === 'market' ? feed(asset, '4H', source) : Promise.resolve<FeedResult>({ candles: [] }),
     ]);
     const h1: FrameInput = { timeframe: '1H', ...hourly };
-    const h4: FrameInput = { timeframe: '4H', candles: nativeH4.candles.length ? nativeH4.candles : aggregateCompleteFourHours(hourly.candles), error: nativeH4.error ?? hourly.error };
+    const h4: FrameInput = source === 'market' ? { timeframe: '4H', ...nativeH4 } : { timeframe: '4H', candles: aggregateCompleteFourHours(hourly.candles), error: hourly.error };
     const frames: FrameInput[] = horizon === 'intraday' ? [{ timeframe: '15m', ...other }, h1, h4] : [h1, h4, { timeframe: '1D', ...other }];
-    const instrument = broker?.instrument ?? (source === 'market' && asset.marketType === 'crypto' ? asset.symbol.replace('/', '') : mapSymbolToYahoo(asset.symbol, asset.marketType));
-    const metal = asset.symbol === 'XAU/USD' || asset.symbol === 'XAG/USD';
-    return analyzeAdvancedSignal({ ...asset, source: { provider: broker ? `MT5 Broker (${broker.broker})` : source === 'market' && asset.marketType === 'crypto' ? 'Binance Spot' : 'Yahoo Finance', instrument,
-      isProxy: !broker && (source !== 'market' || metal),
+    const instrument = source === 'market' ? asset.symbol.replace('/', '') : mapSymbolToYahoo(asset.symbol, asset.marketType);
+    return analyzeAdvancedSignal({ ...asset, displaySymbol: source === 'market' ? asset.symbol : asset.symbol.replace('/USDT', '/USD'), source: { provider: source === 'market' ? 'Binance Spot' : 'Yahoo Finance', instrument,
+      kind: source === 'market' ? 'spot' : 'reference', isProxy: source === 'reference',
       note: metal ? `${instrument} adalah proxy futures, bukan spot ${asset.symbol} MT5. Jangan salin level langsung ke broker.`
         : asset.marketType === 'crypto' && source === 'market' ? `${instrument} adalah candle Binance Spot USDT; cocokkan harga dengan broker sebelum entry.`
           : asset.marketType === 'crypto' ? `${instrument} memakai kuotasi USD referensi; bukan USDT Binance atau CFD MT5.`

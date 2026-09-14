@@ -12,6 +12,7 @@ const iso = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}-
 
 /** Whitelist fields; account IDs, balances, passwords and owner IDs never pass through. */
 export function parseBrokerSnapshot(value: unknown, now = Date.now(), requireRecent = true): BrokerSnapshot {
+  if (!Number.isFinite(now) || now <= 0) throw new Error('Jam pemeriksaan tidak valid.');
   if (!value || typeof value !== 'object') throw new Error('Snapshot MT5 tidak valid.');
   const v = value as Record<string, unknown>;
   if (!text(v.symbol, 24) || !/^[A-Z0-9]{2,12}\/[A-Z]{3,4}$/.test(v.symbol)
@@ -20,9 +21,10 @@ export function parseBrokerSnapshot(value: unknown, now = Date.now(), requireRec
     || !text(v.accountRef, 24) || !/^[a-f0-9]{24}$/.test(v.accountRef)
     || !iso(v.capturedAt) || !iso(v.quoteTime) || !positive(v.bid) || !positive(v.ask) || v.ask < v.bid) throw new Error('Identitas/quote MT5 tidak valid.');
   const symbolBase = String(v.symbol).replace('/', '').toUpperCase();
-  const instrumentBase = String(v.instrument).toUpperCase().replace(/[MC]$/, '');
+  const instrumentBase = String(v.instrument).toUpperCase();
   const cryptoEquivalent = symbolBase.endsWith('USDT') ? symbolBase.slice(0, -1) : symbolBase;
-  if (!(instrumentBase.startsWith(symbolBase) || instrumentBase.startsWith(cryptoEquivalent))) throw new Error('Instrumen MT5 tidak cocok dengan simbol snapshot.');
+  const allowed = [symbolBase, cryptoEquivalent].flatMap(base => [base, `${base}M`, `${base}C`]);
+  if (!allowed.includes(instrumentBase)) throw new Error('Instrumen MT5 tidak cocok dengan simbol snapshot.');
   const captured = Date.parse(v.capturedAt), quote = Date.parse(v.quoteTime);
   if (!Number.isFinite(captured) || !Number.isFinite(quote) || captured > now + 30_000 || quote > captured + 30_000
     || quote > now + 30_000 || (requireRecent && (now - captured > 180_000 || now - quote > 180_000))) throw new Error('Sinkronisasi/quote MT5 kedaluwarsa; jalankan pengirim data dan periksa koneksi terminal.');

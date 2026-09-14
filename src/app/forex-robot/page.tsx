@@ -26,38 +26,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { BrokerRuntimeNotice } from '@/components/trading/broker-runtime-notice';
-
-type ForexPreviewSignal = 'buy' | 'sell' | 'wait' | 'unavailable';
-type ForexPreviewTrend = 'bullish' | 'bearish' | 'neutral';
-type ForexStrategyMode = 'stable_h1' | 'aggressive_m15';
-
-interface ForexPreviewRow {
-  symbol: string;
-  name: string;
-  signal: ForexPreviewSignal;
-  trend?: ForexPreviewTrend;
-  price?: number;
-  ema50?: number;
-  ema200?: number;
-  emaSeparationAtr?: number;
-  breakoutHigh?: number;
-  breakoutLow?: number;
-  rsi?: number;
-  previousRsi?: number;
-  atr?: number;
-  stopLoss?: number | null;
-  takeProfit?: number | null;
-  lastClosedAt?: string;
-  reason: string;
-}
-
-interface ForexPreview {
-  scannedAt: string;
-  strategyMode: ForexStrategyMode;
-  timeframe: '1H' | '15m';
-  source: string;
-  rows: ForexPreviewRow[];
-}
+import { parseForexPreview, presentForexPreview, type ForexPreview, type ForexPreviewSignal, type ForexStrategyMode } from '@/lib/trading/forex-preview-presentation';
+import { advanceSignalClock, signalDisplayTime, type SignalReceiptClock } from '@/lib/analysis/signal-presentation';
 
 const STRATEGY_DETAILS: Record<ForexStrategyMode, {
   label: string;
@@ -101,71 +71,6 @@ const STRATEGY_DETAILS: Record<ForexStrategyMode, {
   },
 };
 
-function finiteOptional(value: unknown): number | undefined {
-  if (value === undefined || value === null || value === '') return undefined;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function parsePreview(value: unknown): ForexPreview | null {
-  if (typeof value !== 'object' || value === null) return null;
-  const root = value as Record<string, unknown>;
-  const data = typeof root.data === 'object' && root.data !== null
-    ? root.data as Record<string, unknown>
-    : null;
-  if (
-    !data
-    || typeof data.scannedAt !== 'string'
-    || !['stable_h1', 'aggressive_m15'].includes(String(data.strategyMode))
-    || !['1H', '15m'].includes(String(data.timeframe))
-    || !Array.isArray(data.rows)
-  ) return null;
-
-  const rows = data.rows.flatMap((candidate): ForexPreviewRow[] => {
-    if (typeof candidate !== 'object' || candidate === null) return [];
-    const row = candidate as Record<string, unknown>;
-    const signal = String(row.signal);
-    if (
-      typeof row.symbol !== 'string'
-      || typeof row.name !== 'string'
-      || typeof row.reason !== 'string'
-      || !['buy', 'sell', 'wait', 'unavailable'].includes(signal)
-    ) {
-      return [];
-    }
-    const trend = ['bullish', 'bearish', 'neutral'].includes(String(row.trend))
-      ? row.trend as ForexPreviewTrend
-      : undefined;
-    return [{
-      symbol: row.symbol,
-      name: row.name,
-      signal: signal as ForexPreviewSignal,
-      trend,
-      price: finiteOptional(row.price),
-      ema50: finiteOptional(row.ema50),
-      ema200: finiteOptional(row.ema200),
-      emaSeparationAtr: finiteOptional(row.emaSeparationAtr),
-      breakoutHigh: finiteOptional(row.breakoutHigh),
-      breakoutLow: finiteOptional(row.breakoutLow),
-      rsi: finiteOptional(row.rsi),
-      previousRsi: finiteOptional(row.previousRsi),
-      atr: finiteOptional(row.atr),
-      stopLoss: row.stopLoss === null ? null : finiteOptional(row.stopLoss),
-      takeProfit: row.takeProfit === null ? null : finiteOptional(row.takeProfit),
-      lastClosedAt: typeof row.lastClosedAt === 'string' ? row.lastClosedAt : undefined,
-      reason: row.reason,
-    }];
-  });
-
-  return {
-    scannedAt: data.scannedAt,
-    strategyMode: data.strategyMode as ForexStrategyMode,
-    timeframe: data.timeframe as '1H' | '15m',
-    source: typeof data.source === 'string' ? data.source : 'Provider website',
-    rows,
-  };
-}
-
 function formatPrice(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return '—';
   const digits = value >= 1000 ? 2 : value >= 10 ? 3 : value >= 1 ? 5 : 6;
@@ -179,6 +84,7 @@ function signalPresentation(signal: ForexPreviewSignal) {
   if (signal === 'buy') return { label: 'BUY', className: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' };
   if (signal === 'sell') return { label: 'SELL', className: 'border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400' };
   if (signal === 'wait') return { label: 'WAIT', className: 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400' };
+  if (signal === 'stale') return { label: 'KEDALUWARSA', className: 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400' };
   return { label: 'NO DATA', className: 'border-border bg-muted/50 text-muted-foreground' };
 }
 
@@ -189,6 +95,20 @@ export default function ForexRobotPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const requestRef = useRef<AbortController | null>(null);
+  const [receipt, setReceipt] = useState<SignalReceiptClock | null>(null);
+  const [clock, setClock] = useState({ wall: 0, monotonic: 0 });
+
+  useEffect(() => {
+    const tick = () => setClock(previous => advanceSignalClock(previous, Date.now(), performance.now()));
+    const timer = globalThis.setInterval(tick, 1_000);
+    globalThis.addEventListener('focus', tick);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      globalThis.clearInterval(timer);
+      globalThis.removeEventListener('focus', tick);
+      document.removeEventListener('visibilitychange', tick);
+    };
+  }, []);
 
   const refresh = useCallback(async (
     silent = false,
@@ -197,6 +117,9 @@ export default function ForexRobotPage() {
     requestRef.current?.abort();
     const controller = new AbortController();
     requestRef.current = controller;
+    const startedAt = performance.now();
+    let timedOut = false;
+    const timeout = globalThis.setTimeout(() => { timedOut = true; controller.abort(); }, 20_000);
     if (silent) setRefreshing(true);
     else setLoading(true);
 
@@ -207,25 +130,32 @@ export default function ForexRobotPage() {
         signal: controller.signal,
       });
       const payload: unknown = await response.json().catch(() => null);
+      if (timedOut) throw new Error('Pembaruan melewati batas 20 detik.');
       if (!response.ok) {
         const row = typeof payload === 'object' && payload !== null
           ? payload as Record<string, unknown>
           : {};
         throw new Error(typeof row.error === 'string' ? row.error : `HTTP ${response.status}`);
       }
-      const parsed = parsePreview(payload);
+      const parsed = parseForexPreview(payload);
       if (!parsed || parsed.strategyMode !== requestedMode) {
         throw new Error('Respons monitor Forex tidak sesuai mode yang dipilih.');
       }
       if (controller.signal.aborted || requestRef.current !== controller) return;
+      const receivedAt = Date.now(), receivedMonotonicAt = performance.now();
+      setReceipt({ receivedAt, receivedMonotonicAt, requestDurationMs: receivedMonotonicAt - startedAt });
+      setClock({ wall: receivedAt, monotonic: receivedMonotonicAt });
       setPreview(parsed);
       setError(null);
     } catch (caughtError) {
-      if (!controller.signal.aborted && requestRef.current === controller) {
-        setError(caughtError instanceof Error ? caughtError.message : 'Monitor Forex gagal dimuat.');
+      if (requestRef.current === controller && (!controller.signal.aborted || timedOut)) {
+        setPreview(null);
+        setReceipt(null);
+        setError(timedOut ? 'Pembaruan melewati batas 20 detik. Coba lagi.' : caughtError instanceof Error ? caughtError.message : 'Monitor Forex gagal dimuat.');
       }
     } finally {
-      if (!controller.signal.aborted) {
+      globalThis.clearTimeout(timeout);
+      if (requestRef.current === controller && (!controller.signal.aborted || timedOut)) {
         setLoading(false);
         setRefreshing(false);
       }
@@ -239,19 +169,22 @@ export default function ForexRobotPage() {
       globalThis.clearTimeout(initialTimer);
       globalThis.clearInterval(refreshInterval);
       requestRef.current?.abort();
+      requestRef.current = null;
     };
   }, [refresh]);
 
+  const visibleRows = useMemo(() => preview && receipt ? presentForexPreview(preview,
+    signalDisplayTime(preview.scannedAt, receipt, clock.wall, clock.monotonic)) : [], [preview, receipt, clock]);
   const summary = useMemo(() => ({
-    buy: preview?.rows.filter((row) => row.signal === 'buy').length ?? 0,
-    sell: preview?.rows.filter((row) => row.signal === 'sell').length ?? 0,
-    ready: preview?.rows.filter((row) => row.signal !== 'unavailable').length ?? 0,
-  }), [preview]);
+    buy: visibleRows.filter((row) => row.signal === 'buy').length,
+    sell: visibleRows.filter((row) => row.signal === 'sell').length,
+    ready: visibleRows.filter((row) => !['unavailable', 'stale'].includes(row.signal)).length,
+  }), [visibleRows]);
 
-  const sortedRows = useMemo(() => [...(preview?.rows ?? [])].sort((left, right) => {
-    const priority: Record<ForexPreviewSignal, number> = { buy: 0, sell: 0, wait: 1, unavailable: 2 };
+  const sortedRows = useMemo(() => [...visibleRows].sort((left, right) => {
+    const priority: Record<ForexPreviewSignal, number> = { buy: 0, sell: 0, wait: 1, stale: 2, unavailable: 3 };
     return priority[left.signal] - priority[right.signal];
-  }), [preview]);
+  }), [visibleRows]);
   const strategy = STRATEGY_DETAILS[strategyMode];
 
   return (
@@ -310,12 +243,13 @@ export default function ForexRobotPage() {
         </div>
 
         <div role="note" className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
-          <p className="font-semibold">Audit historis 7 September 2026 · demo saja</p>
+          <p className="font-semibold">Audit diperbarui 10 September 2026 · profit konsisten belum terbukti</p>
           <p className="mt-1 leading-6 text-muted-foreground">
-            EURJPY H1: profit factor holdout 1,04 turun menjadi 0,81 ketika transaksi yang sama diberi penalti biaya tambahan.
-            Ketahanan biayanya belum memadai. XAU H1/M15 positif pada holdout, tetapi XAU H1 negatif pada training dengan resimulasi biaya 2×.
-            Ini uji ulang data historis, bukan validasi masa depan atau proyeksi profit akun. Audit ini tidak mengubah mode atau lot robot.
+            Audit 90 hari sampai 9 September: periode tes XAU H1 −0,60R (3 trade) dan XAU M15 −1,19R (7 trade).
+            BTC H1 positif +1,93R pada tes yang hanya 2 trade, tetapi total 90 harinya −5,59R.
+            R adalah unit risiko simulasi, bukan hasil nominal akun. Biaya merupakan asumsi; ini bukan forward-test atau izin real trading.
           </p>
+          <p className="mt-2 text-xs leading-5 text-muted-foreground">Audit 7 September pada jendela berbeda pernah mencatat holdout XAU positif; itu tidak membuktikan hasil stabil pada periode terbaru. EURJPY juga belum tahan penalti biaya (PF 1,04 → 0,81). Mode dan risiko robot tidak diubah.</p>
           <Link href="/trade-intelligence" className="mt-2 inline-block font-medium text-primary underline underline-offset-4">Periksa bukti forward-test akun Anda</Link>
         </div>
 
@@ -343,7 +277,9 @@ export default function ForexRobotPage() {
                 if (value !== 'stable_h1' && value !== 'aggressive_m15') return;
                 if (value === strategyMode) return;
                 requestRef.current?.abort();
+                requestRef.current = null;
                 setPreview(null);
+                setReceipt(null);
                 setError(null);
                 setLoading(true);
                 setStrategyMode(value);
@@ -362,7 +298,7 @@ export default function ForexRobotPage() {
 
         {error && (
           <div role="alert" className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-600 dark:text-red-400">
-            Monitor Forex gagal diperbarui: {error}{preview ? ' Data terakhir tetap ditampilkan.' : ''}
+            Monitor Forex gagal diperbarui: {error} Kandidat dan level lama disembunyikan.
           </div>
         )}
 
@@ -405,7 +341,7 @@ export default function ForexRobotPage() {
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <CardTitle className="flex items-center gap-2"><Gauge className="h-5 w-5 text-primary" /> Preview {strategy.label}</CardTitle>
-                <CardDescription className="mt-1">Sinyal indikatif; quote dan guard broker tetap menjadi sumber keputusan robot.</CardDescription>
+                <CardDescription className="mt-1">Referensi GC=F dari Yahoo Finance, bukan harga XAU/USD MT5. Jangan salin level ke broker.</CardDescription>
               </div>
               <p className="text-xs text-muted-foreground">
                 {preview?.scannedAt ? `Diperbarui ${new Date(preview.scannedAt).toLocaleTimeString('id-ID')}` : 'Menunggu data'}
@@ -413,6 +349,11 @@ export default function ForexRobotPage() {
             </div>
           </CardHeader>
           <CardContent>
+            <p className="mb-4 text-xs leading-5 text-muted-foreground">
+              {preview?.source ?? 'Yahoo Finance preview'} · GC=F futures. Kandidat berlaku maksimal 120 detik setelah candle ditutup;
+              data monitor kedaluwarsa paling lambat 5 menit setelah pemindaian. Ini bukan bukti robot ON.
+              {' '}<Link href="/signals" className="font-medium text-primary underline">Gunakan Signals dengan sumber MT5 untuk level broker.</Link>
+            </p>
             {loading && !preview ? (
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {Array.from({ length: 5 }, (_, index) => <Skeleton key={index} className="h-56 rounded-2xl" />)}
@@ -425,14 +366,14 @@ export default function ForexRobotPage() {
                     <article key={row.symbol} className="rounded-2xl border border-border/70 bg-background/60 p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <h2 className="font-mono text-lg font-bold">{row.symbol}</h2>
+                          <h2 className="font-mono text-lg font-bold">GC=F · referensi emas</h2>
                           <p className="text-xs text-muted-foreground">{row.name}</p>
                         </div>
                         <Badge variant="outline" className={signal.className}>{signal.label}</Badge>
                       </div>
                       <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
                         <div className="rounded-xl bg-muted/50 p-3">
-                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Harga close</p>
+                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Close referensi (bukan live)</p>
                           <p className="mt-1 font-mono font-semibold">{formatPrice(row.price)}</p>
                         </div>
                         <div className="rounded-xl bg-muted/50 p-3">
@@ -476,7 +417,7 @@ export default function ForexRobotPage() {
                       </div>
                       <p className="mt-4 min-h-10 text-xs leading-5 text-muted-foreground">{row.reason}</p>
                       <div className="mt-3 flex items-center justify-between border-t border-border/60 pt-3 text-[10px] text-muted-foreground">
-                        <span className="flex items-center gap-1"><Clock3 className="h-3 w-3" /> {row.lastClosedAt ? new Date(row.lastClosedAt).toLocaleString('id-ID') : 'Belum tersedia'}</span>
+                        <span className="flex items-center gap-1"><Clock3 className="h-3 w-3" /> Tutup: {row.lastClosedAt ? new Date(row.lastClosedAt).toLocaleString('id-ID') : 'Belum tersedia'}</span>
                         <Link href={`/asset/${encodeURIComponent(row.symbol)}`} className="flex items-center gap-1 font-medium text-primary hover:underline">
                           Detail <ExternalLink className="h-3 w-3" />
                         </Link>
@@ -493,7 +434,7 @@ export default function ForexRobotPage() {
           <Card>
             <CardHeader>
               <CardTitle>Aturan strategi Forex</CardTitle>
-              <CardDescription>Kondisi entry {strategy.label} yang sama dengan robot Forex lokal.</CardDescription>
+              <CardDescription>Ringkasan aturan {strategy.label}. Feed, warmup, dan validasi eksekusi MT5 berbeda dari preview.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {strategy.rules.map(([number, title, detail]) => (
@@ -508,7 +449,7 @@ export default function ForexRobotPage() {
           <Card>
             <CardHeader>
               <CardTitle>Menyalakan pada akun demo</CardTitle>
-              <CardDescription>{strategy.label}; entry Crypto baru tetap terkunci.</CardDescription>
+              <CardDescription>{strategy.label}; BTC H1 mengikuti konfigurasi lokal, bukan sakelar website.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {[

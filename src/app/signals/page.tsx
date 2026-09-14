@@ -2,33 +2,124 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Activity, ArrowDown, ArrowUp, ChevronLeft, ChevronRight, RefreshCw, ScanLine, ShieldAlert } from 'lucide-react';
+import { Activity, ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, Copy, RefreshCw, ScanLine, ShieldAlert } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import type { AdvancedSignal, SetupStatus, SignalHorizon, ReferencePlan, ManualScenario } from '@/lib/analysis/advanced-signals';
+import { advanceSignalClock, assessBrokerPlan, effectiveSignalStatus as effectiveStatus, signalDisplayTime, type SignalReceiptClock } from '@/lib/analysis/signal-presentation';
+import { manualOrderLabel, validateManualOrderDraft, type ManualOrderType } from '@/lib/trading/manual-order-ticket';
+import { useUserStore } from '@/stores/user-store';
 import LegacySignalScanner from './legacy-scanner';
 
 type Market = 'all' | 'forex' | 'crypto';
-type Source = 'market' | 'reference';
+type Source = 'market' | 'mt5' | 'reference';
 type Asset = { symbol: string; displaySymbol: string; name: string; marketType: 'forex' | 'crypto' };
 interface ScanPayload {
   data: AdvancedSignal[]; generatedAt: string; universe: Asset[];
   scope: { market: Market; source: Source; horizon: SignalHorizon; page: number; pages: number; symbol: string | null; total: number };
 }
-const LABELS: Record<SetupStatus, string> = { candidate: 'Kandidat setup', wait: 'Tunggu', conflict: 'Konflik timeframe', stale: 'Data basi', unavailable: 'Data belum cukup' };
+const LABELS: Record<SetupStatus, string> = { candidate: 'Kandidat setup', wait: 'Tunggu konfirmasi', conflict: 'Konflik timeframe', stale: 'Data kedaluwarsa', unavailable: 'Data perlu diperiksa' };
 const number = (value: number | null, digits = 2) => value === null || !Number.isFinite(value) ? '—' : value.toLocaleString('id-ID', { maximumFractionDigits: digits });
 const price = (value: number | null) => number(value, value !== null && value < .01 ? 8 : value !== null && value < 10 ? 5 : 2);
 const date = (value: string | null) => value ? new Date(value).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
 const biasLabel = (bias: AdvancedSignal['bias']) => bias === 'bullish' ? 'Bullish' : bias === 'bearish' ? 'Bearish' : 'Netral';
-const effectiveStatus = (row: AdvancedSignal, now: number): SetupStatus => row.expiresAt && Date.parse(row.expiresAt) < now && row.status !== 'unavailable' ? 'stale' : row.status;
 
-function TradeLevels({ plan, scenario }: { plan: ReferencePlan; scenario?: ManualScenario }) {
+function compareSignals(left: AdvancedSignal, right: AdvancedSignal, now: number): number {
+  const priority = (row: AdvancedSignal) => {
+    const status = effectiveStatus(row, now);
+    if (status === 'candidate') {
+      // A live broker quote is the strongest manual signal because its
+      // original geometry still survives the current Bid/Ask check.
+      if (row.source.kind === 'broker') return assessBrokerPlan(row, now).status === 'review' ? 4 : 3;
+      return 3;
+    }
+    if (status === 'wait' && row.manualScenarios?.length) return 2;
+    if (status === 'conflict' && row.manualScenarios?.length) return 1;
+    return 0;
+  };
+  const priorityDelta = priority(right) - priority(left);
+  if (priorityDelta) return priorityDelta;
+  const convictionDelta = (right.conviction ?? -1) - (left.conviction ?? -1);
+  if (convictionDelta) return convictionDelta;
+  const freshDelta = right.frames.filter(frame => frame.quality === 'fresh' && !(frame.expiresAt && Date.parse(frame.expiresAt) <= now)).length
+    - left.frames.filter(frame => frame.quality === 'fresh' && !(frame.expiresAt && Date.parse(frame.expiresAt) <= now)).length;
+  return freshDelta || left.symbol.localeCompare(right.symbol);
+}
+
+function OrderTicket({ row, plan, scenario }: { row: AdvancedSignal; plan: ReferencePlan; scenario?: ManualScenario }) {
+  const [open, setOpen] = useState(false);
+  const [orderType, setOrderType] = useState<ManualOrderType>('buy_limit');
+  const [quote, setQuote] = useState('');
+  const [entry, setEntry] = useState(String(plan.entry));
+  const [stopLoss, setStopLoss] = useState(String(plan.stopLoss));
+  const [takeProfit, setTakeProfit] = useState(String(plan.takeProfit));
+  const [secondTarget, setSecondTarget] = useState(String(plan.secondTarget ?? ''));
+  const [volume, setVolume] = useState('0.01');
+  const [acknowledged, setAcknowledged] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const quoteFor = (type: ManualOrderType) => {
+    if (row.source.kind !== 'broker') return null;
+    return type.startsWith('buy') ? row.source.ask ?? null : row.source.bid ?? null;
+  };
+  const openTicket = (type: ManualOrderType) => {
+    setOrderType(type); setQuote(String(quoteFor(type) ?? '')); setEntry(String(plan.entry));
+    setStopLoss(String(plan.stopLoss)); setTakeProfit(String(plan.takeProfit)); setSecondTarget(String(plan.secondTarget ?? ''));
+    setAcknowledged(false); setError(null); setCopied(false); setOpen(true);
+  };
+  const copyTemplate = async () => {
+    const validation = validateManualOrderDraft({ orderType, quote: Number(quote), entry: Number(entry), stopLoss: Number(stopLoss), takeProfit: Number(takeProfit), secondTarget: Number(secondTarget), volume: Number(volume), conditional: Boolean(scenario), acknowledged });
+    if (!validation.valid) { setError(validation.error); setCopied(false); return; }
+    const template = [
+      'MT5 MANUAL ORDER TICKET',
+      `Symbol: ${row.source.instrument}`,
+      `Type: ${manualOrderLabel(orderType)}`,
+      `Volume: ${volume} lot`,
+      `Quote broker (${validation.side === 'buy' ? 'Ask' : 'Bid'}): ${quote}`,
+      `Entry: ${entry}`,
+      `Stop Loss: ${stopLoss}`,
+      `Take Profit 1: ${takeProfit}`,
+      `Take Profit 2: ${secondTarget}`,
+      `Source: ${row.source.provider} · ${row.source.note}`,
+      scenario ? 'Status: CONDITIONAL — tunggu candle konfirmasi dan scan ulang.' : 'Status: kandidat manual — verifikasi quote dan risiko sebelum submit.',
+    ].join('\n');
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard browser tidak tersedia.');
+      await navigator.clipboard.writeText(template); setCopied(true); setError(null);
+    } catch (caught) { setCopied(false); setError(caught instanceof Error ? caught.message : 'Template belum dapat disalin.'); }
+  };
+  return <section aria-label="Tiket pending order manual" className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+    <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="font-semibold">Siapkan tiket order</h4><Badge variant="outline">Manual · no-send</Badge></div>
+    <p className="mt-2 text-sm leading-6 text-muted-foreground">Pilih tipe pending order untuk mengisi tiket lengkap. Tombol ini tidak mengirim order; setelah validasi Anda menyalin detail ke MT5 dan tetap menekan Submit secara manual.</p>
+    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">{(['buy_limit', 'buy_stop', 'sell_limit', 'sell_stop'] as ManualOrderType[]).map(type => <Button key={type} type="button" variant="outline" size="sm" onClick={() => openTicket(type)}>{manualOrderLabel(type)}</Button>)}</div>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
+        <DialogHeader><DialogTitle>{manualOrderLabel(orderType)} · {row.displaySymbol}</DialogTitle><DialogDescription>Isi quote broker terbaru, periksa geometri dan salin tiket ke MT5. Tidak ada request order dari halaman Signals.</DialogDescription></DialogHeader>
+        <div className="space-y-3">
+          {scenario && <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm leading-6 text-amber-700 dark:text-amber-300">Ini masih skenario bersyarat. Jangan pasang pending order sebelum candle pemicu selesai dan Anda memuat ulang signal.</div>}
+          <label className="block text-sm font-medium">Quote broker ({orderType.startsWith('buy') ? 'Ask' : 'Bid'})<Input className="mt-1" type="number" inputMode="decimal" step="any" value={quote} onChange={event => setQuote(event.target.value)} placeholder="Masukkan quote MT5 terbaru" /></label>
+          <label className="block text-sm font-medium">Volume (lot)<Input className="mt-1" type="number" inputMode="decimal" step="any" min="0" value={volume} onChange={event => setVolume(event.target.value)} /></label>
+          <div className="grid grid-cols-2 gap-3"><label className="block text-sm font-medium">Entry<Input className="mt-1" type="number" inputMode="decimal" step="any" value={entry} onChange={event => setEntry(event.target.value)} /></label><label className="block text-sm font-medium">Stop Loss<Input className="mt-1" type="number" inputMode="decimal" step="any" value={stopLoss} onChange={event => setStopLoss(event.target.value)} /></label><label className="block text-sm font-medium">Take Profit 1<Input className="mt-1" type="number" inputMode="decimal" step="any" value={takeProfit} onChange={event => setTakeProfit(event.target.value)} /></label><label className="block text-sm font-medium">Take Profit 2<Input className="mt-1" type="number" inputMode="decimal" step="any" value={secondTarget} onChange={event => setSecondTarget(event.target.value)} /></label></div>
+          {scenario && <label className="flex items-start gap-2 rounded-lg border p-3 text-sm leading-5"><input type="checkbox" checked={acknowledged} onChange={event => setAcknowledged(event.target.checked)} className="mt-1" />Saya mengerti ini conditional dan akan menunggu konfirmasi candle + scan ulang.</label>}
+          <div className="rounded-lg border bg-muted/30 p-3 text-xs leading-5 text-muted-foreground">Aturan otomatis: {orderType.startsWith('buy') ? 'BUY: SL &lt; Entry &lt; TP1 &lt; TP2' : 'SELL: SL &gt; Entry &gt; TP1 &gt; TP2'}; {orderType.endsWith('limit') ? 'limit berada di sisi dalam quote' : 'stop berada di sisi luar quote'}. Lot step, margin, komisi, swap dan slippage tetap harus dicek di MT5.</div>
+          {error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/5 p-3 text-sm text-red-700 dark:text-red-300">{error}</p>}
+          {copied && <p role="status" className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm text-emerald-700 dark:text-emerald-300"><Check className="h-4 w-4" />Template tersalin. Periksa ulang MT5 sebelum Submit.</p>}
+        </div>
+        <DialogFooter><Button type="button" variant="outline" onClick={() => setOpen(false)}>Tutup</Button><Button type="button" onClick={() => void copyTemplate()}><Copy className="h-4 w-4" />Salin template MT5</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
+  </section>;
+}
+
+function TradeLevels({ plan, scenario, row }: { plan: ReferencePlan; scenario?: ManualScenario; row: AdvancedSignal }) {
   return <section className={cn('rounded-xl border p-4', plan.side === 'buy' ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-red-500/30 bg-red-500/5')}>
-    <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">{plan.side.toUpperCase()} · {scenario ? 'Tunggu breakout' : 'Kandidat terkonfirmasi'}</h3><Badge variant="outline">{scenario ? 'Bersyarat · belum aktif' : 'Candle final'}</Badge></div>
+    <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">{plan.side.toUpperCase()} · {scenario ? 'Tunggu breakout' : 'Kandidat candle'}</h3><Badge variant="outline">{scenario ? 'Bersyarat · belum aktif' : 'Candle final'}</Badge></div>
     {scenario && <p className="mt-2 text-sm">Pemicu: close {plan.side === 'buy' ? 'di atas' : 'di bawah'} <strong className="tabular-nums">{price(scenario.triggerPrice)}</strong> · jarak entry {number(scenario.distanceAtr, 1)} ATR</p>}
     <dl className="mt-4 grid grid-cols-2 gap-3 text-sm tabular-nums">
       {[['Entry referensi', plan.entry], ['Stop Loss', plan.stopLoss], ['Take Profit 1', plan.takeProfit], ['Take Profit 2', plan.secondTarget]].map(([label, value]) => <div key={String(label)} className="rounded-lg bg-background/70 p-3"><dt className="text-xs text-muted-foreground">{label}</dt><dd className="mt-1 break-all text-lg font-semibold">{price(value as number | null)}</dd></div>)}
@@ -36,6 +127,7 @@ function TradeLevels({ plan, scenario }: { plan: ReferencePlan; scenario?: Manua
     <p className="mt-3 text-sm">R:R kotor 1:{number(plan.grossRiskReward)} · jarak SL {number(Math.abs(plan.entry - plan.stopLoss))} ({number(Math.abs(plan.entry - plan.stopLoss) / plan.entry * 100)}%)</p>
     <p className="mt-2 text-xs leading-5 text-muted-foreground">{plan.basis} Belum termasuk spread, swap dan slippage.</p>
     {scenario && <><p className="mt-3 text-sm leading-6">{scenario.confirmation}</p><p className="mt-2 text-xs leading-5 text-amber-700 dark:text-amber-300">{scenario.invalidation}</p></>}
+    <OrderTicket row={row} plan={plan} scenario={scenario} />
   </section>;
 }
 
@@ -48,7 +140,13 @@ function isPayload(value: unknown): value is ScanPayload {
 
 function SignalDetail({ row, now }: { row: AdvancedSignal; now: number }) {
   const status = effectiveStatus(row, now), expired = status === 'stale';
-  const plan = status === 'candidate' ? row.plan : null;
+  const execution = assessBrokerPlan(row, now);
+  // A broker candidate is only shown as a manual plan when the current
+  // bid/ask still fits the original geometry. Reference/spot candidates stay
+  // informational and must be matched to the user's broker separately.
+  const brokerBlocked = status === 'candidate' && row.source.kind === 'broker' && execution.status !== 'review';
+  const plan = status === 'candidate' && !brokerBlocked ? row.plan : null;
+  const quoteSide = row.plan?.side === 'buy' ? 'Ask' : row.plan?.side === 'sell' ? 'Bid' : '—';
   const scenarios = status === 'stale' || status === 'unavailable' ? [] : row.manualScenarios ?? [];
   return <Card className="overflow-hidden border-primary/20">
     <CardHeader className="border-b bg-muted/30">
@@ -60,10 +158,23 @@ function SignalDetail({ row, now }: { row: AdvancedSignal; now: number }) {
       <p className="text-sm leading-6 text-amber-700 dark:text-amber-300">{row.source.note}</p>
     </CardHeader>
     <CardContent className="space-y-6 p-4 md:p-5">
+      <section aria-label="Koneksi sumber harga" className="rounded-xl border bg-muted/20 p-4 text-sm">
+        <div className="flex flex-wrap justify-between gap-2"><h3 className="font-semibold">Sumber & kesegaran data</h3><Badge variant="outline">{row.source.kind === 'broker' ? `Akun ${row.source.accountKind ?? 'belum terhubung'}` : row.source.kind === 'spot' ? 'Spot USDT' : 'Referensi / proxy'}</Badge></div>
+        {row.source.kind === 'broker' ? <>
+          <dl className="mt-3 grid grid-cols-2 gap-3 tabular-nums"><div><dt className="text-muted-foreground">Bid / Ask snapshot</dt><dd>{price(row.source.bid ?? null)} / {price(row.source.ask ?? null)}</dd></div><div><dt className="text-muted-foreground">Spread harga</dt><dd>{price(row.source.ask !== undefined && row.source.bid !== undefined ? row.source.ask - row.source.bid : null)}</dd></div><div><dt className="text-muted-foreground">Quote terakhir</dt><dd>{date(row.source.quoteTime ?? null)}</dd></div><div><dt className="text-muted-foreground">Snapshot diterima</dt><dd>{date(row.source.capturedAt ?? null)}</dd></div></dl>
+          <p className="mt-3 text-xs text-muted-foreground">{row.source.server ?? 'Jalankan run_signal_bridge.bat pada terminal Exness.'} · Bridge mengirim data, bukan status robot ON. Quote dibatasi 3 menit; ini bukan streaming tick.</p>
+        </> : <p className="mt-2 text-muted-foreground">{row.source.kind === 'spot' ? 'Candle Binance spot USDT, bukan harga CFD Exness. Pilih MT5 Broker untuk analisis pada instrumen terminal Anda.' : 'Mode pembanding. Harga dan sesi dapat berbeda dari broker.'}</p>}
+      </section>
       <section aria-label="Rencana trading manual" className="space-y-3">
-        <div><h3 className="text-lg font-semibold">Entry · Stop Loss · Take Profit</h3><p className="mt-1 text-sm leading-6 text-muted-foreground">{plan ? 'Kandidat lolos filter pada candle terakhir, bukan jaminan harga masih tersedia.' : 'Rencana bersyarat untuk dipantau, bukan instruksi entry sekarang. Dua arah adalah alternatif, bukan dua order sekaligus.'}</p></div>
-        {plan ? <TradeLevels plan={plan} /> : scenarios.length ? scenarios.map(scenario => <TradeLevels key={scenario.side} plan={scenario} scenario={scenario} />) : <p className="rounded-xl border border-dashed p-4 text-sm leading-6 text-muted-foreground">{expired ? 'Level kedaluwarsa disembunyikan. Muat ulang sebelum menilai entry.' : status === 'unavailable' ? 'Data belum memenuhi pemeriksaan kualitas. Alasan dan timeframe yang bermasalah tercantum di bawah; harga tidak dibuat-buat.' : 'Belum ada level dekat harga yang layak dipantau (maksimal 3 ATR). Tunggu struktur baru.'}</p>}
-        <p className="text-xs leading-5 text-amber-700 dark:text-amber-300">{row.source.note} Cocokkan chart broker; level referensi ini tidak dikirim ke robot. Berlaku sampai {date(row.expiresAt)}.</p>
+        <div><h3 className="text-lg font-semibold">Entry · Stop Loss · Take Profit</h3><p className="mt-1 text-sm leading-6 text-muted-foreground">{brokerBlocked ? 'Quote broker saat ini tidak lagi mendukung geometri rencana. Level lama disembunyikan; muat ulang untuk setup baru.' : plan ? 'Kandidat lolos filter pada candle terakhir dan pemeriksaan quote broker, bukan jaminan harga masih tersedia.' : 'Rencana bersyarat untuk dipantau, bukan instruksi entry sekarang. Dua arah adalah alternatif, bukan dua order sekaligus.'}</p></div>
+        {plan ? <TradeLevels row={row} plan={plan} /> : scenarios.length ? scenarios.map(scenario => <TradeLevels key={scenario.side} row={row} plan={scenario} scenario={scenario} />) : <p className="rounded-xl border border-dashed p-4 text-sm leading-6 text-muted-foreground">{expired ? 'Level kedaluwarsa disembunyikan. Muat ulang sebelum menilai entry.' : brokerBlocked ? 'Quote broker membuat R:R di bawah batas atau harga sudah melewati level. Jangan mengejar entry lama.' : status === 'unavailable' ? 'Data belum memenuhi pemeriksaan kualitas. Alasan dan timeframe yang bermasalah tercantum di bawah; harga tidak dibuat-buat.' : 'Belum ada level dekat harga yang layak dipantau (maksimal 3 ATR). Tunggu struktur baru.'}</p>}
+        {status === 'candidate' && row.source.kind === 'broker' && <section aria-label="Pemeriksaan harga entry broker" className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm">
+          <h4 className="font-semibold">{execution.status === 'blocked' ? 'Jangan gunakan entry lama' : 'Bandingkan dengan quote broker'}</h4>
+          <p className="mt-2 leading-6">{execution.reason}</p>
+          {execution.quoteEntry !== null && <dl className="mt-3 grid grid-cols-2 gap-3 tabular-nums"><div><dt className="text-muted-foreground">Entry pada {quoteSide} snapshot</dt><dd>{price(execution.quoteEntry)}</dd></div><div><dt className="text-muted-foreground">R:R pada quote</dt><dd>{execution.riskReward === null ? '—' : `1:${number(execution.riskReward)}`}</dd></div><div><dt className="text-muted-foreground">Pergeseran entry</dt><dd>{number(execution.entryDriftR)}R · positif = lebih buruk</dd></div><div><dt className="text-muted-foreground">Spread harga</dt><dd>{price(execution.spread)}</dd></div></dl>}
+          <p className="mt-3 text-xs leading-5 text-muted-foreground">SL/TP referensi tidak digeser untuk memperbesar R:R. BUY dinilai pada Ask dengan pemicu SL/TP pada Bid; SELL sebaliknya. Belum termasuk komisi, swap, slippage atau perubahan harga sejak snapshot. Ini bukan hasil profit maupun izin eksekusi.</p>
+        </section>}
+        <p className="text-xs leading-5 text-amber-700 dark:text-amber-300">Kandidat memakai close candle; entry skenario adalah proyeksi setelah pemicu. Keduanya bukan harga eksekusi saat ini. Cocokkan bid/ask dan risiko broker; level tidak dikirim ke robot. Berlaku sampai {date(row.expiresAt)}.</p>
       </section>
       <div className="grid grid-cols-2 gap-4">
         <div><p className="text-sm text-muted-foreground">Bias harga</p><p className="text-lg font-semibold">{biasLabel(row.bias)}</p></div>
@@ -85,7 +196,7 @@ function SignalDetail({ row, now }: { row: AdvancedSignal; now: number }) {
         <div className="mt-1 h-1.5 rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${expired ? 0 : group.points / group.maximum * 100}%` }} /></div>
         <p className="mt-1 text-xs text-muted-foreground">{group.detail}</p>
       </div>)}</div>
-      <section><h3 className="font-semibold">Alasan keputusan</h3><ul className="mt-3 space-y-2 text-sm leading-6">{row.reasons.map(reason => <li key={reason} className="border-l-2 border-primary/30 pl-3">{reason}</li>)}</ul></section>
+      <section><h3 className="font-semibold">{status === 'unavailable' || expired ? 'Perbaiki data sebelum menilai entry' : 'Alasan keputusan'}</h3><ul className="mt-3 space-y-2 text-sm leading-6">{row.reasons.map(reason => <li key={reason} className="border-l-2 border-primary/30 pl-3">{reason}</li>)}</ul></section>
       <details className="rounded-xl border p-4 text-sm">
         <summary className="cursor-pointer font-medium">Struktur, volatilitas & kualitas data</summary>
         <div className="mt-4 space-y-4">{row.frames.map(frame => <div key={frame.timeframe} className="border-t pt-3">
@@ -96,6 +207,7 @@ function SignalDetail({ row, now }: { row: AdvancedSignal; now: number }) {
       </details>
       <div className="space-y-2 text-sm leading-6 text-muted-foreground">{row.cautions.slice(1).map(caution => <p key={caution}>{caution}</p>)}</div>
       <Link href={`/asset/${encodeURIComponent(row.symbol)}`} className={buttonVariants({ variant: 'outline', className: 'w-full' })}>Buka chart & analisis aset</Link>
+      <p className="text-xs text-muted-foreground">Chart aset memakai feed terpisah; jangan menganggap levelnya identik. Status robot dan antrean tersedia di <Link className="underline" href="/operations">Robot & Sistem</Link>.</p>
       <p className="text-xs text-muted-foreground">{row.modelVersion} · analisis {date(row.generatedAt)} · berakhir {date(row.expiresAt)}</p>
     </CardContent>
   </Card>;
@@ -106,41 +218,53 @@ function FilterSelect({ label, value, options, onChange }: { label: string; valu
 }
 
 export default function SignalScannerPage() {
+  const userId = useUserStore(s => s.authenticatedUserId);
   const [legacy, setLegacy] = useState(false);
   const [market, setMarket] = useState<Market>('all'), [source, setSource] = useState<Source>('market'), [horizon, setHorizon] = useState<SignalHorizon>('intraday');
   const [symbol, setSymbol] = useState<string | null>(null), [page, setPage] = useState(0), [focused, setFocused] = useState('XAU/USD');
-  const [payload, setPayload] = useState<(ScanPayload & { receivedAt: number }) | null>(null);
+  const [payload, setPayload] = useState<(ScanPayload & SignalReceiptClock & { owner: string }) | null>(null);
   const [catalog, setCatalog] = useState<Asset[]>([
     { symbol: 'XAU/USD', displaySymbol: 'XAU/USD', name: 'Gold', marketType: 'forex' },
-    { symbol: 'BTC/USDT', displaySymbol: 'BTC/USD', name: 'Bitcoin', marketType: 'crypto' },
+    { symbol: 'BTC/USDT', displaySymbol: 'BTC/USDT', name: 'Bitcoin', marketType: 'crypto' },
   ]);
-  const [loading, setLoading] = useState(true), [error, setError] = useState<string | null>(null), [now, setNow] = useState(Date.now);
+  const [loading, setLoading] = useState(true), [error, setError] = useState<string | null>(null);
+  const [clock, setClock] = useState(() => ({ wall: Date.now(), monotonic: performance.now() }));
   const requestRef = useRef<AbortController | null>(null);
   const refresh = useCallback(async () => {
     requestRef.current?.abort();
+    if (!userId) return;
     const controller = new AbortController(); requestRef.current = controller; setLoading(true);
+    const startedAt = performance.now();
     try {
       const query = new URLSearchParams({ market, source, horizon, page: String(page) }); if (symbol) query.set('symbol', symbol);
       const response = await fetch(`/api/signals/advanced?${query}`, { cache: 'no-store', credentials: 'same-origin', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(45_000)]) });
       const body: unknown = await response.json().catch(() => null);
-      if (controller.signal.aborted || requestRef.current !== controller) return;
+      if (controller.signal.aborted || requestRef.current !== controller || useUserStore.getState().authenticatedUserId !== userId) return;
       if (!response.ok) throw new Error(body && typeof body === 'object' && 'error' in body ? String(body.error) : `HTTP ${response.status}`);
       if (!isPayload(body) || body.scope.market !== market || body.scope.source !== source || body.scope.horizon !== horizon || body.scope.page !== page || body.scope.symbol !== symbol) throw new Error('Respons tidak sesuai filter pemindaian.');
-      setPayload({ ...body, receivedAt: Date.now() }); setCatalog(body.universe); setError(null);
+      const receivedAt = Date.now(), receivedMonotonicAt = performance.now();
+      setPayload({ ...body, owner: userId, receivedAt, receivedMonotonicAt, requestDurationMs: receivedMonotonicAt - startedAt });
+      setClock({ wall: receivedAt, monotonic: receivedMonotonicAt }); setCatalog(body.universe); setError(null);
     } catch (caught) {
       if (!controller.signal.aborted && requestRef.current === controller) { setPayload(null); setError(caught instanceof Error ? caught.message : 'Pemindaian belum berhasil.'); }
     } finally { if (!controller.signal.aborted && requestRef.current === controller) setLoading(false); }
-  }, [market, source, horizon, page, symbol]);
+  }, [market, source, horizon, page, symbol, userId]);
   useEffect(() => {
-    if (legacy) { requestRef.current?.abort(); return; }
-    const start = setTimeout(() => void refresh(), 0), interval = setInterval(() => void refresh(), 90_000), ticker = setInterval(() => setNow(Date.now()), 10_000);
-    return () => { clearTimeout(start); clearInterval(interval); clearInterval(ticker); requestRef.current?.abort(); };
-  }, [refresh, legacy]);
+    if (legacy || !userId) { requestRef.current?.abort(); return; }
+    const tick = () => setClock(previous => advanceSignalClock(previous, Date.now(), performance.now()));
+    const start = setTimeout(() => void refresh(), 0), interval = setInterval(() => void refresh(), 90_000), ticker = setInterval(tick, 1_000);
+    window.addEventListener('focus', tick); document.addEventListener('visibilitychange', tick);
+    return () => { clearTimeout(start); clearInterval(interval); clearInterval(ticker); requestRef.current?.abort(); window.removeEventListener('focus', tick); document.removeEventListener('visibilitychange', tick); };
+  }, [refresh, legacy, userId]);
   if (legacy) return <LegacySignalScanner onAdvanced={() => setLegacy(false)} />;
-  const data = payload?.scope.market === market && payload.scope.source === source && payload.scope.horizon === horizon && payload.scope.page === page && payload.scope.symbol === symbol ? payload : null;
-  const currentTime = data ? Date.parse(data.generatedAt) + Math.max(0, now - data.receivedAt) : now;
-  const rows = data?.data ?? [], selected = rows.find(row => row.symbol === focused) ?? rows[0];
-  const candidates = rows.filter(row => effectiveStatus(row, currentTime) === 'candidate').length;
+  const data = userId && payload?.owner === userId && payload.scope.market === market && payload.scope.source === source && payload.scope.horizon === horizon && payload.scope.page === page && payload.scope.symbol === symbol ? payload : null;
+  const currentTime = data ? signalDisplayTime(data.generatedAt, data, clock.wall, clock.monotonic) : clock.wall;
+  const rows = [...(data?.data ?? [])].sort((left, right) => compareSignals(left, right, currentTime)), selected = rows.find(row => row.symbol === focused) ?? rows[0];
+  const candidates = rows.filter(row => {
+    if (effectiveStatus(row, currentTime) !== 'candidate') return false;
+    return row.source.kind !== 'broker' || assessBrokerPlan(row, currentTime).status === 'review';
+  }).length;
+  const brokerBlocked = rows.filter(row => effectiveStatus(row, currentTime) === 'candidate' && row.source.kind === 'broker' && assessBrokerPlan(row, currentTime).status !== 'review').length;
   const watching = rows.filter(row => ['wait', 'conflict'].includes(effectiveStatus(row, currentTime)) && row.manualScenarios?.length).length;
   const filteredCatalog = catalog.filter(asset => market === 'all' || asset.marketType === market);
   const focusSymbol = (value: string) => { setMarket('all'); setPage(0); setSymbol(value); setFocused(value); };
@@ -149,24 +273,25 @@ export default function SignalScannerPage() {
       <div><h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight"><ScanLine className="h-6 w-6 text-primary" />Signals Advanced</h1><p className="mt-2 max-w-2xl text-base text-muted-foreground">Rencana trading manual: Entry, SL, TP1 & TP2 dengan analisis tiga timeframe. Bedakan kandidat terkonfirmasi dari skenario yang masih menunggu pemicu.</p></div>
       <div className="flex gap-2"><Button variant="outline" onClick={() => setLegacy(true)}>Scanner klasik</Button><Button onClick={() => void refresh()} disabled={loading}><RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />Muat ulang</Button></div>
     </header>
-    <div className="flex flex-wrap items-center gap-2"><Button variant="outline" onClick={() => focusSymbol('XAU/USD')}>Fokus XAUUSD</Button><Button variant="outline" onClick={() => focusSymbol('BTC/USDT')}>Fokus BTCUSD</Button><Button variant="ghost" onClick={() => { setMarket('all'); setSymbol(null); setPage(0); }}>Semua Forex & Crypto</Button></div>
+    <div className="flex flex-wrap items-center gap-2"><Button variant="outline" onClick={() => focusSymbol('XAU/USD')}>Fokus XAUUSD</Button><Button variant="outline" onClick={() => focusSymbol('BTC/USDT')}>Fokus BTC</Button><Button variant="ghost" onClick={() => { setMarket('all'); setSymbol(null); setPage(0); }}>Semua Forex & Crypto</Button></div>
     <section aria-label="Filter Signals" className="grid gap-4 rounded-xl border bg-card p-4 sm:grid-cols-4">
       <FilterSelect label="Market" value={market} options={[{ value: 'all', label: 'Forex & Crypto' }, { value: 'forex', label: 'Forex & Metals' }, { value: 'crypto', label: 'Crypto' }]} onChange={value => { if (value === 'all' || value === 'forex' || value === 'crypto') { setMarket(value); setPage(0); setSymbol(null); } }} />
-      <FilterSelect label="Sumber harga" value={source} options={[{ value: 'market', label: 'Market utama' }, { value: 'reference', label: 'Reference / Yahoo' }]} onChange={value => { if (value === 'market' || value === 'reference') { setSource(value); setPage(0); setSymbol(null); } }} />
+      <FilterSelect label="Sumber harga" value={source} options={[{ value: 'market', label: 'MT5 Forex + Binance Spot' }, { value: 'mt5', label: 'MT5 Broker · Forex & Crypto' }, { value: 'reference', label: 'Reference / Yahoo' }]} onChange={value => { if (value === 'market' || value === 'mt5' || value === 'reference') setSource(value); }} />
       <FilterSelect label="Horizon analisis" value={horizon} options={[{ value: 'intraday', label: 'Intraday · M15 / H1 / H4' }, { value: 'swing', label: 'Swing · H1 / H4 / D1' }]} onChange={value => { if (value === 'intraday' || value === 'swing') setHorizon(value); }} />
-      <FilterSelect label="Instrumen" value={symbol ?? 'page'} options={[{ value: 'page', label: 'Pindai per halaman' }, ...filteredCatalog.map(asset => ({ value: asset.symbol, label: `${asset.displaySymbol} · ${asset.name}` }))]} onChange={value => { setSymbol(value === 'page' ? null : value); setPage(0); }} />
+      <FilterSelect label="Instrumen" value={symbol ?? 'page'} options={[{ value: 'page', label: 'Pindai per halaman' }, ...filteredCatalog.map(asset => ({ value: asset.symbol, label: `${source === 'market' ? asset.displaySymbol : asset.symbol.replace('/USDT', '/USD')} · ${asset.name}` }))]} onChange={value => { setSymbol(value === 'page' ? null : value); setPage(0); }} />
     </section>
     <div className="flex items-start gap-3 rounded-xl border border-amber-500/25 bg-amber-500/5 p-4 text-sm leading-6"><ShieldAlert className="mt-1 h-5 w-5 shrink-0 text-amber-500" /><p>Analisis ini hanya untuk trading manual dan tidak mengirim order. Market utama memakai Binance Spot untuk crypto; Forex/emas memerlukan snapshot broker MT5. Reference/Yahoo adalah proxy—jangan salin level langsung ke broker.</p></div>
-    <div className="flex flex-wrap items-center justify-between gap-3 text-sm" role="status"><p className="flex flex-wrap items-center gap-2"><Activity className="h-4 w-4 text-primary" />{loading ? 'Memindai candle final…' : error ? 'Pemindaian gagal' : `${rows.length} instrumen · ${candidates} kandidat · ${watching} dengan rencana bersyarat`}<span className="text-muted-foreground">· refresh 90 detik</span></p><p className="text-muted-foreground">{data ? `Pemindaian ${date(data.generatedAt)}` : 'Menunggu data provider'}</p></div>
+    <div className="flex flex-wrap items-center justify-between gap-3 text-sm" role="status"><p className="flex flex-wrap items-center gap-2"><Activity className="h-4 w-4 text-primary" />{loading ? 'Memindai candle final…' : error ? 'Pemindaian gagal' : `${rows.length} instrumen · ${candidates} kandidat lolos quote · ${watching} rencana bersyarat${brokerBlocked ? ` · ${brokerBlocked} tertahan quote` : ''}`}<span className="text-muted-foreground">· refresh 90 detik</span></p><p className="text-muted-foreground">{data ? `Pemindaian ${date(data.generatedAt)}` : 'Menunggu data provider'}</p></div>
     {error && <div role="alert" className="rounded-xl border border-red-500/30 bg-red-500/5 p-4 text-sm">{error} Data lama tidak dianggap sebagai sinyal baru.</div>}
     <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(380px,1fr)]">
       <section aria-label="Hasil scanner" className="space-y-3">
         {!rows.length && <div className="rounded-xl border border-dashed p-8 text-base text-muted-foreground">{loading ? 'Mengambil data instrumen terpilih. Kegagalan provider akan ditampilkan.' : 'Belum ada hasil. Pilih instrumen lalu muat ulang.'}</div>}
-        {rows.map(row => { const status = effectiveStatus(row, currentTime), base = row.frames[0]; return <button key={row.id} type="button" onClick={() => setFocused(row.symbol)} aria-pressed={selected?.symbol === row.symbol} className={cn('w-full rounded-xl border bg-card p-4 text-left transition-colors hover:border-primary/50', selected?.symbol === row.symbol && 'border-primary ring-1 ring-primary/20')}>
+        {rows.map(row => { const status = effectiveStatus(row, currentTime), base = row.frames[0], execution = assessBrokerPlan(row, currentTime); return <button key={row.id} type="button" onClick={() => setFocused(row.symbol)} aria-pressed={selected?.symbol === row.symbol} className={cn('w-full rounded-xl border bg-card p-4 text-left transition-colors hover:border-primary/50', selected?.symbol === row.symbol && 'border-primary ring-1 ring-primary/20')}>
           <div className="flex flex-wrap justify-between gap-2"><div><h2 className="text-lg font-semibold">{row.displaySymbol}</h2><p className="text-xs text-muted-foreground">{row.source.instrument} · {row.marketType}</p></div><Badge variant="outline" className={cn('self-start text-sm', status === 'candidate' ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground')}>{LABELS[status]}</Badge></div>
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2"><p className="flex items-center gap-1 text-sm font-medium">{row.bias === 'bullish' ? <ArrowUp className="h-4 w-4 text-emerald-500" /> : row.bias === 'bearish' ? <ArrowDown className="h-4 w-4 text-red-500" /> : null}{biasLabel(row.bias)} · {price(base.close)}</p><p className="text-sm tabular-nums">Aturan {status === 'stale' ? '—' : number(row.conviction, 0)}/100</p></div>
           <div className="mt-3 flex flex-wrap gap-2">{row.frames.map(frame => <span key={frame.timeframe} className="rounded-md bg-muted px-2 py-1 text-xs">{frame.timeframe} · {frame.quality === 'fresh' && !(frame.expiresAt && Date.parse(frame.expiresAt) < currentTime) ? biasLabel(frame.bias) : frame.quality === 'unavailable' ? 'no data' : 'basi'}</span>)}</div>
-          {status !== 'stale' && status !== 'unavailable' && (row.plan || row.manualScenarios?.length) ? <div className="mt-3 space-y-2 border-t pt-3">{(status === 'candidate' && row.plan ? [row.plan] : row.manualScenarios ?? []).map(level => <div key={level.side} className="rounded-lg bg-muted/50 p-3 text-xs tabular-nums"><p className="mb-2 font-semibold">{level.side.toUpperCase()} · {status === 'candidate' ? 'Kandidat' : 'Bersyarat — belum entry'}</p><div className="grid grid-cols-2 gap-2 sm:grid-cols-4"><span>Entry<br /><strong>{price(level.entry)}</strong></span><span>SL<br /><strong>{price(level.stopLoss)}</strong></span><span>TP1<br /><strong>{price(level.takeProfit)}</strong></span><span>TP2<br /><strong>{price(level.secondTarget)}</strong></span></div></div>)}</div> : null}
+          {status !== 'stale' && status !== 'unavailable' && ((status === 'candidate' && row.plan && (row.source.kind !== 'broker' || execution.status === 'review')) || (status !== 'candidate' && row.manualScenarios?.length)) ? <div className="mt-3 space-y-2 border-t pt-3">{(status === 'candidate' && row.plan ? [row.plan] : row.manualScenarios ?? []).map(level => <div key={level.side} className="rounded-lg bg-muted/50 p-3 text-xs tabular-nums"><p className="mb-2 font-semibold">{level.side.toUpperCase()} · {status === 'candidate' ? 'Kandidat' : 'Bersyarat — belum entry'}</p><div className="grid grid-cols-2 gap-2 sm:grid-cols-4"><span>Entry<br /><strong>{price(level.entry)}</strong></span><span>SL<br /><strong>{price(level.stopLoss)}</strong></span><span>TP1<br /><strong>{price(level.takeProfit)}</strong></span><span>TP2<br /><strong>{price(level.secondTarget)}</strong></span></div></div>)}</div> : null}
+          {status === 'candidate' && row.source.kind === 'broker' && <p className="mt-3 rounded-lg border border-amber-500/25 p-3 text-sm leading-6 text-amber-700 dark:text-amber-300">{execution.status === 'blocked' ? 'Entry lama tidak layak: ' : 'Pemeriksaan broker: '}{execution.reason}</p>}
           <p className="mt-3 text-sm leading-6 text-muted-foreground">{status === 'stale' ? 'Data melewati batas waktu; jangan memakai level lama.' : row.reasons[0]}</p><p className="mt-2 text-xs text-muted-foreground">Candle final {date(base.lastClosedAt)} · pilih untuk detail</p>
         </button>; })}
         {!symbol && <div className="flex items-center justify-between gap-2 pt-2"><Button variant="outline" disabled={loading || page === 0} onClick={() => setPage(value => value - 1)}><ChevronLeft className="h-4 w-4" />Sebelumnya</Button><span className="text-sm">{page + 1} / {data?.scope.pages ?? '—'}</span><Button variant="outline" disabled={loading || !data || page + 1 >= data.scope.pages} onClick={() => setPage(value => value + 1)}>Berikutnya<ChevronRight className="h-4 w-4" /></Button></div>}

@@ -4,13 +4,13 @@ export type SignalHorizon = 'intraday' | 'swing';
 export type AnalysisTimeframe = '15m' | '1H' | '4H' | '1D';
 export type SignalBias = 'bullish' | 'bearish' | 'neutral';
 export type SetupStatus = 'candidate' | 'wait' | 'conflict' | 'stale' | 'unavailable';
-export const SIGNAL_MODEL_VERSION = 'confluence-v2-manual';
+export const SIGNAL_MODEL_VERSION = 'confluence-v3-source-aware';
 export const HORIZON_FRAMES: Record<SignalHorizon, AnalysisTimeframe[]> = {
   intraday: ['15m', '1H', '4H'], swing: ['1H', '4H', '1D'],
 };
 export const FRAME_SECONDS: Record<AnalysisTimeframe, number> = { '15m': 900, '1H': 3600, '4H': 14400, '1D': 86400 };
 
-export type SignalSession = 'continuous' | 'forex' | 'metal-futures';
+export type SignalSession = 'continuous' | 'forex' | 'metal-futures' | 'exness-metals' | 'exness-forex';
 export interface FrameInput { timeframe: AnalysisTimeframe; candles: OHLCV[]; error?: string; session?: SignalSession }
 export interface FrameAnalysis {
   timeframe: AnalysisTimeframe; quality: 'fresh' | 'stale' | 'unavailable';
@@ -33,7 +33,9 @@ export interface ManualScenario extends ReferencePlan {
 }
 export interface AdvancedSignal {
   id: string; symbol: string; displaySymbol: string; name: string; marketType: 'forex' | 'crypto';
-  source: { provider: string; instrument: string; isProxy: boolean; note: string };
+  source: { provider: string; instrument: string; isProxy: boolean; note: string;
+    kind?: 'broker' | 'spot' | 'reference'; accountKind?: 'demo' | 'real'; server?: string;
+    capturedAt?: string; quoteTime?: string; bid?: number; ask?: number; validUntil?: string };
   horizon: SignalHorizon; modelVersion: string; generatedAt: string; expiresAt: string | null;
   bias: SignalBias; status: SetupStatus; conviction: number | null; setup: string;
   frames: FrameAnalysis[]; reasons: string[]; cautions: string[]; plan: ReferencePlan | null;
@@ -132,7 +134,7 @@ const sessionClocks = {
   'metal-futures': new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', timeZoneName: 'shortOffset', weekday: 'short', hour: '2-digit', hourCycle: 'h23' }),
 };
 function sessionParts(time: number, session: Exclude<SignalSession, 'continuous'>) {
-  const parts = sessionClocks[session].formatToParts(new Date(time * 1000));
+  const parts = sessionClocks[session.startsWith('exness-') ? 'metal-futures' : session as keyof typeof sessionClocks].formatToParts(new Date(time * 1000));
   const offset = parts.find(part => part.type === 'timeZoneName')!.value.match(/^GMT(?:([+-])(\d{1,2})(?::(\d{2}))?)?$/);
   const offsetSeconds = offset ? (offset[1] === '-' ? -1 : 1) * (Number(offset[2] ?? 0) * 3600 + Number(offset[3] ?? 0) * 60) : NaN;
   return { day: parts.find(part => part.type === 'weekday')!.value, hour: Number(parts.find(part => part.type === 'hour')!.value), offsetSeconds };
@@ -141,6 +143,22 @@ function sessionParts(time: number, session: Exclude<SignalSession, 'continuous'
 /** Limited regular-session heuristic, not a holiday calendar or broker availability check. */
 function regularClosure(time: number, seconds: number, session: SignalSession): boolean {
   if (session === 'continuous') return false;
+  if (session.startsWith('exness-')) {
+    // Exness UTC native bars: a missing bucket is explained only if ALL of it
+    // is closed. Never apply Yahoo's partial-H4 aggregation rule to MT5 bars.
+    const step = Math.min(seconds, 900);
+    for (let offset = 0; offset < seconds; offset += step) {
+      const instant = time + offset;
+      // Official Exness Labor Day schedule: no quotes 18:28–22:01:30 UTC.
+      // Quote/close-only reopening is NOT a licence to execute new orders.
+      if (session === 'exness-metals' && instant >= Date.parse('2026-09-07T18:28:00Z') / 1000
+        && instant + step <= Date.parse('2026-09-07T22:01:30Z') / 1000) continue;
+      const { day, hour } = sessionParts(instant, session);
+      const weekend = day === 'Sat' || day === 'Fri' && hour >= 17 || day === 'Sun' && hour < (session === 'exness-metals' ? 18 : 17);
+      if (!weekend && !(session === 'exness-metals' && hour === 17)) return false;
+    }
+    return true;
+  }
   if (seconds === 86400) {
     // Daily bars follow the provider's local calendar, including DST.
     const { day } = sessionParts(time + seconds / 2, session);
@@ -162,7 +180,7 @@ function cadenceIssue(rows: Candle[], seconds: number, session: SignalSession): 
   for (let i = 1; i < recent.length; i++) {
     const previous = recent[i - 1].time, current = recent[i].time, delta = current - previous;
     if (delta === seconds) continue;
-    const dailySession = seconds === 86400 && session !== 'continuous';
+    const dailySession = seconds === 86400 && (session === 'forex' || session === 'metal-futures');
     const localDelta = dailySession ? delta + sessionParts(current, session).offsetSeconds - sessionParts(previous, session).offsetSeconds : delta;
     const steps = Math.round(localDelta / seconds);
     // A 23h/25h day is allowed only when an actual provider-zone offset change explains it.
@@ -210,7 +228,8 @@ export function analyzeSignalFrame(input: FrameInput, now = Date.now()): FrameAn
   const session = input.session ?? 'continuous';
   const gap = cadenceIssue(rows, seconds, session);
   if (gap) { result.notes.push(gap); return result; }
-  if (session !== 'continuous') result.notes.push('Kontinuitas diperiksa pada 50 bar terakhir dengan perkiraan sesi reguler; hari libur/jadwal khusus belum diverifikasi.');
+  if (session.startsWith('exness-')) result.notes.push('Candle native UTC Exness; sesi reguler dan penutupan khusus XAU/XAG 7 Sep 2026 diperiksa. Gap lain tetap diblokir.');
+  else if (session !== 'continuous') result.notes.push('Kontinuitas diperiksa pada 50 bar terakhir dengan perkiraan sesi reguler; hari libur/jadwal khusus belum diverifikasi.');
   result.quality = now > expires ? 'stale' : 'fresh';
   if (result.quality === 'stale') result.notes.unshift('Candle terakhir sudah basi; provider terlambat atau sesi pasar tutup.');
   const closes = rows.map(row => row.close), ema20 = signalEMA(closes, 20), ema50 = signalEMA(closes, 50), ema200 = signalEMA(closes, 200);
@@ -289,7 +308,7 @@ export function analyzeAdvancedSignal(meta: Pick<AdvancedSignal, 'symbol' | 'dis
   const expected = HORIZON_FRAMES[horizon];
   const session: SignalSession = meta.marketType === 'crypto' ? 'continuous' : ['XAU/USD', 'XAG/USD'].includes(meta.symbol) ? 'metal-futures' : 'forex';
   const frames = expected.map(timeframe => analyzeSignalFrame(inputs.filter(row => row.timeframe === timeframe).length === 1
-    ? { ...inputs.find(row => row.timeframe === timeframe)!, session } : { timeframe, candles: [], error: 'Timeframe hilang atau duplikat.' }, now));
+    ? { ...inputs.find(row => row.timeframe === timeframe)!, session: inputs.find(row => row.timeframe === timeframe)!.session ?? session } : { timeframe, candles: [], error: 'Timeframe hilang atau duplikat.' }, now));
   const base = frames[0], bias = base.bias, buy = bias === 'bullish';
   const aligned = bias !== 'neutral' && frames.every(row => row.bias === bias);
   const conflict = bias !== 'neutral' && frames.slice(1).some(row => row.bias !== 'neutral' && row.bias !== bias);
@@ -305,11 +324,13 @@ export function analyzeAdvancedSignal(meta: Pick<AdvancedSignal, 'symbol' | 'dis
   const unavailable = frames.some(row => row.quality === 'unavailable'), stale = frames.some(row => row.quality === 'stale');
   let status: SetupStatus = unavailable ? 'unavailable' : stale ? 'stale' : conflict ? 'conflict' : 'wait';
   if (unavailable || stale) reasons.push(...frames.filter(row => row.quality !== 'fresh').flatMap(row => row.notes.map(note => `${row.timeframe}: ${note}`)));
-  if (conflict) reasons.push('Tren timeframe lebih tinggi berlawanan; jangan membaca momentum lokal sebagai konfirmasi.');
-  if (!aligned) reasons.push('Tunggu bias tiga timeframe searah.');
-  if (base.regime !== 'trend') reasons.push('ADX belum mencapai 25; model trend-following menunggu.');
-  if (!momentum) reasons.push('RSI belum mendukung arah atau sudah ekstrem.');
-  if (!base.trigger) reasons.push('Tunggu close breakout 20 bar atau RSI recovery 45/55.');
+  if (!unavailable && !stale) {
+    if (conflict) reasons.push('Tren timeframe lebih tinggi berlawanan; jangan membaca momentum lokal sebagai konfirmasi.');
+    if (!aligned) reasons.push('Tunggu bias tiga timeframe searah.');
+    if (base.regime !== 'trend') reasons.push('ADX belum mencapai 25; model trend-following menunggu.');
+    if (!momentum) reasons.push('RSI belum mendukung arah atau sudah ekstrem.');
+    if (!base.trigger) reasons.push('Tunggu close breakout 20 bar atau RSI recovery 45/55.');
+  }
   const extended = (base.extensionAtr ?? Infinity) > 2.5 || (base.rangeAtr ?? Infinity) > 2.5;
   if (extended && !unavailable) reasons.push('Candle terlalu jauh dari EMA20 atau rentangnya >2,5 ATR; jangan mengejar gerakan.');
   let plan: ReferencePlan | null = null;

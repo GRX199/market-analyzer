@@ -1,14 +1,21 @@
 # Signals Advanced
 
-Fitur analisis referensi Forex, logam dan Crypto di `/signals`. Model `confluence-v2-manual` ini terpisah dari strategi serta eksekusi robot MT5. Tidak mengirim order, mengubah lot, membuka akses akun real, atau mengubah batas risiko.
+Fitur analisis referensi Forex, logam dan Crypto di `/signals`. Model `confluence-v3-source-aware` ini terpisah dari strategi serta eksekusi robot MT5. Tidak mengirim order, mengubah lot, membuka akses akun real, atau mengubah batas risiko.
+
+Audit 90 hari kini tersedia di [SIGNALS_VALIDATION.md](SIGNALS_VALIDATION.md).
+Hasilnya **belum membuktikan profit konsisten**: sampel sangat kecil, XAU
+validation negatif dan BTC test negatif setelah asumsi biaya. Unit test yang
+lulus atau tampilnya Entry/SL/TP bukan bukti strategi profitable.
 
 ## Cara menggunakan
 
 1. Masuk ke website, lalu buka **Signals**.
-2. Pilih **Fokus XAUUSD**, **Fokus BTCUSD**, atau instrumen dari daftar.
+2. Pilih **Fokus XAUUSD**, **Fokus BTC**, atau instrumen dari daftar.
 3. Pilih **Intraday (M15/H1/H4)** atau **Swing (H1/H4/D1)**. Ini horizon analisis website, bukan tombol pengganti mode robot.
 4. Entry, SL, TP1 dan TP2 terlihat langsung di kartu scanner. Pilih hasil untuk melihat rencana manual, syarat konfirmasi, matriks timeframe, alasan keputusan, struktur dan ATR.
 5. Periksa sumber harga, waktu candle, spread broker dan berita sebelum mempertimbangkan transaksi. Jangan menyalin level futures emas ke spot MT5.
+6. Kartu dengan prioritas tertinggi muncul lebih dahulu: kandidat dengan quote broker yang masih lolos ditempatkan di atas kandidat referensi/spot, lalu skenario tunggu. Urutan ini hanya membantu triase, bukan probabilitas menang.
+7. Pada panel level, pilih `BUY LIMIT`, `BUY STOP`, `SELL LIMIT`, atau `SELL STOP` untuk membuka tiket manual. Tiket memeriksa quote, sisi pending, volume, serta urutan SL/TP lalu menyediakan tombol **Salin template MT5**. Halaman tidak mengirim order; submit tetap dilakukan manual di terminal setelah verifikasi lot, margin, spread, komisi, swap dan slippage.
 
 Pemindaian mencakup katalog Forex/Crypto yang sudah ada, maksimal enam instrumen per halaman. XAU, BTC, EUR, ETH, GBP dan SOL diprioritaskan di halaman pertama. Pilih halaman berikutnya untuk instrumen lain; hasil tidak mengklaim memindai seluruh market sekaligus. Scanner klasik tetap tersedia untuk kemampuan lama termasuk saham. API klasik `/api/signals` dan pemakainya tidak diganti.
 
@@ -22,11 +29,45 @@ Pemindaian mencakup katalog Forex/Crypto yang sudah ada, maksimal enam instrumen
 | Data basi | Setidaknya satu timeframe melewati masa berlaku; level entry disembunyikan. |
 | Data belum cukup | Provider gagal, pemanasan kurang, data invalid, atau ada gap yang belum terverifikasi. Bukan sinyal netral. |
 
+Antarmuka kini menyebut status terakhir **Data perlu diperiksa**, membedakannya dari **Tunggu konfirmasi**. Bila kualitas data gagal, alasan teknis didahulukan; RSI/ADX yang belum bisa dihitung tidak disebut sebagai filter strategi yang gagal.
+
+## Pembaruan data broker — 9 September 2026
+
+- `source=market`: MT5 untuk Forex/metals, Binance Spot USDT untuk crypto. Tidak ada fallback otomatis antarsumber.
+- `source=mt5`: MT5 untuk semua instrumen, termasuk BTCUSDm/BTCUSDc. Kunci katalog BTC/USDT tetap dipakai untuk navigasi; label, quote, dan analisis menyebut BTC/USD CFD, **bukan konversi harga USD ke USDT**.
+- `source=reference`: Yahoo hanya bila dipilih; futures dan USD referensi diberi label proxy.
+- Detail menampilkan akun demo/real, server, bid/ask snapshot, spread harga dan timestamp. Snapshot bukan streaming tick. Akun real pada metadata berarti **sumber data real**, bukan izin robot real.
+- Umur quote dan snapshot maksimal 180 detik. Expiry level adalah yang paling awal di antara expiry candle, quote dan snapshot; refresh tidak memperpanjang data lama.
+- Jam tampilan memakai waktu server ditambah durasi request secara konservatif dan waktu yang berlalu. Perubahan jam PC ke belakang tidak memperpanjang sinyal. Masa berlaku diperiksa setiap detik dan ketika tab mendapat fokus kembali; expiry hilang/invalid tidak ditampilkan sebagai kandidat.
+- Hasil privat terikat user yang meminta scan. Pergantian login langsung menyembunyikan snapshot user sebelumnya dan respons terlambat tidak dapat menggantikannya.
+- Kandidat broker memiliki pemeriksaan R:R pada bid/ask snapshot, terpisah dari R:R kotor candle. Geometri memakai entry BUY pada Ask / SELL pada Bid dan pemicu SL/TP pada sisi penutupan sesuai [prinsip MT5](https://www.metatrader5.com/en/terminal/help/trading/general_concept). Entry lama diberi peringatan jika quote melampaui SL/TP1 atau R:R tersisa <1,5; SL/TP tidak digeser untuk membuat angka lebih menarik. Hasil yang masih muat hanya **review**, bukan izin transaksi; komisi, swap, slippage, lot/margin dan batas broker belum diverifikasi. Skenario bersyarat tidak memperoleh pemeriksaan seolah sudah terkonfirmasi.
+- Perbaikan sesi Exness: native H4 berbeda dari H4 hasil agregasi Yahoo. Bucket MT5 hilang tidak dimaafkan jika sebagian bucket seharusnya buka. Kalender libur tidak diterapkan pada Binance/Yahoo/broker lain.
+- Gap H1 XAU pada 7 Sep 2026 terverifikasi: [Exness Labor Day schedule](https://get.exness.help/hc/en-us/articles/17923046759836-Holiday-trading-hours) menyatakan tutup 18:28 UTC, close-only mulai 22:01:30, buka 22:05. Hanya bucket sepenuhnya di dalam penutupan yang dikecualikan; bukan mengabaikan seluruh tanggal. Sumber diperiksa 9 Sep WITA. Ini bukan kalender seluruh libur/maintenance mendatang.
+- Panel **Feed MT5 untuk Signals** di Robot & Sistem membaca snapshot milik user via RLS. Feed segar tidak membuktikan robot ON. Campuran akun segar diberi peringatan.
+
+Collector yang dipelihara berada di `tools/mt5/signal_market_bridge.py`; launcher lama di sibling `mt5-robot` diarahkan ke file ini. `.env` tetap berada di `mt5-robot`, tidak diunggah ke Git.
+
+```powershell
+# Dari folder market-analyzer — tidak ada order yang dikirim:
+python tools/mt5/signal_market_bridge.py --dry-run --once
+node tools/probe-signals.mjs
+python tools/mt5/robot_audit.py
+# Upload snapshot (token dan URL dari mt5-robot/.env):
+python tools/mt5/signal_market_bridge.py --once
+```
+
+Default bridge mengirim enam simbol utama plus simbol konfigurasi yang suffix-nya cocok. `SIGNAL_MT5_SYMBOLS` dapat memilih 1–16 nama Market Watch yang eksplisit; instrumen tidak tersedia tidak diganti diam-diam. API masih menolak histori <250 bar di salah satu dari empat timeframe. Kegagalan satu simbol tidak menghentikan simbol lain; pergantian akun menghentikan collector. Log OK membutuhkan JSON pengakuan server, HTTP 409 dibedakan dari upload baru, kegagalan `--once` menghasilkan exit nonzero. Header/token tidak dicetak.
+
+Tidak ada migration tambahan untuk pembaruan ini; memakai tabel snapshot dari migration 20260908000100. Perubahan lokal tetap perlu deploy sebelum berlaku online. `tools/mt5` memakai dependensi Python yang sama dengan robot; tidak termasuk runtime Python di Vercel.
+
 ## Rencana trading manual: kandidat vs bersyarat
 
 Default horizon sekarang **Intraday (M15/H1/H4)**. Swing tetap dapat dipilih.
 
 - **Kandidat terkonfirmasi**: aturan ketat sebelumnya tetap berlaku. Level dihitung dari close final dan struktur; bukan harga bid/ask terkini atau instruksi order.
+- **Kandidat broker yang lolos quote**: pada sumber MT5, kartu hanya menampilkan Entry/SL/TP jika bid/ask snapshot masih segar, belum menembus perlindungan, dan R:R pada sisi quote masih minimal 1,5. Ringkasan memisahkan jumlah kandidat yang lolos pemeriksaan ini dari kandidat yang tertahan quote. Jika tertahan, level lama sengaja disembunyikan—muat ulang dan jangan mengejar harga lama.
+- **Kandidat non-broker**: level tetap bersifat referensi. Crypto Binance Spot USDT dan reference/Yahoo harus dicocokkan ulang dengan bid/ask broker Anda; angka tersebut tidak memperoleh pemeriksaan quote MT5.
+- **Tiket pending manual**: tombol order pada kartu adalah pembuat template, bukan endpoint eksekusi. Untuk BUY LIMIT/SELL LIMIT/BUY STOP/SELL STOP, quote broker wajib diisi dan entry harus berada pada sisi yang benar; SL/TP harus memenuhi geometri arah. Skenario conditional juga membutuhkan acknowledgement dan tetap harus menunggu candle konfirmasi.
 - **BUY/SELL bersyarat — belum aktif**: ketika data tiga timeframe valid/fresh tetapi kandidat belum lolos, tampilkan level breakout yang bisa dipantau. Dua arah adalah alternatif, bukan dua order sekaligus. Konflik timeframe tidak diubah menjadi kandidat.
 - Pemicu berada pada batas channel 20 bar dan pivot terdekat: BUY di atas maksimum resistance/channel/close, SELL di bawah minimum support/channel/close. Entry indikatif memakai buffer 0,1 ATR. Entry yang berjarak lebih dari 3 ATR dari close tidak ditampilkan.
 - SL skenario bersyarat berjarak 1,5 ATR; TP1 2R dan TP2 3R adalah **proyeksi aritmetis**, bukan target support/resistance yang sudah tervalidasi. Struktur setelah breakout belum dipetakan. Angka ini bukan peningkatan profitabilitas yang telah dibuktikan.
@@ -64,11 +105,11 @@ Tidak ada asumsi volume spot Forex terpusat. Volume relatif hanya ditampilkan ji
 - `market=crypto` memakai candle Binance Spot USDT (mis. `BTCUSDT`) dan tetap menampilkan sumbernya; harga harus dicocokkan dengan broker sebelum entry.
 - `market=forex` memakai snapshot candle/bid/ask MT5 melalui bridge read-only. Tanpa snapshot segar, instrumen ditandai unavailable—tidak diganti diam-diam dengan `GC=F` atau Yahoo.
 - `source=reference` memilih Yahoo secara eksplisit. `GC=F` adalah futures emas, bukan spot XAU/USD MT5; `BTC-USD` adalah referensi USD, bukan Binance USDT atau CFD MT5.
-- Forex menggunakan feed referensi Yahoo, bukan spread/bid/ask broker. Jam broker, termasuk pair eksotik, bisa berbeda. [Contoh perbedaan sesi instrumen dan libur dari OANDA](https://www.oanda.com/us-en/trading/hours-of-operation/).
+- Hanya mode `source=reference` Forex yang memakai Yahoo tanpa spread/bid/ask broker. Mode MT5 tidak menggunakan kalender broker lain sebagai pengganti kalender sumber.
 - Berita, kalender ekonomi, fundamental, order book dan sentimen tidak ditambahkan sebagai skor palsu/netral ketika data tidak tersedia.
 - Chart aset dan Scanner klasik masih menggunakan mesin lama; jangan menganggap hasilnya identik dengan Advanced.
 
-Model ini belum memiliki backtest out-of-sample atau bukti forward-test net-of-costs. Tes kode memastikan aturan dan kegagalan data ditangani sesuai desain, **bukan membuktikan strategi profitable**. Validasi profit memerlukan data broker yang sesuai, biaya realistis, pengujian periode terpisah dan evaluasi demo. Tidak ada jaminan profit stabil/konsisten. [Peringatan CFTC mengenai sistem trading](https://www.cftc.gov/LearnAndProtect/AdvisoriesAndArticles/fraudadv_tradingsystem.html).
+Model ini memiliki [audit retrospektif 90 hari](SIGNALS_VALIDATION.md) dengan periode terpisah dan asumsi biaya, tetapi belum memiliki bukti forward-test net-of-costs. Hasil audit belum membuktikan profit konsisten; jangan menyebut periode yang sudah dilihat sebagai holdout baru untuk tuning ulang. Tes kode memastikan aturan dan kegagalan data ditangani sesuai desain, **bukan membuktikan strategi profitable**. Validasi profit memerlukan biaya broker realistis dan evaluasi baru yang terikat versi. Tidak ada jaminan profit stabil/konsisten. [Peringatan CFTC mengenai sistem trading](https://www.cftc.gov/LearnAndProtect/AdvisoriesAndArticles/fraudadv_tradingsystem.html).
 
 ## Keandalan dan operasional
 
@@ -79,8 +120,17 @@ Model ini belum memiliki backtest out-of-sample atau bukti forward-test net-of-c
 - Permintaan candle: M15 selama 7 hari, H1 selama 90 hari, D1 selama 730 hari; ketersediaan aktual bisa kurang. Pemanasan tetap wajib, tanpa fallback data rekaan.
 - UI refresh 90 detik, timeout 45 detik, membatalkan request lama saat filter berubah, menolak respons yang tidak cocok, dan menyembunyikan level kedaluwarsa. Kegagalan baru tidak mempertahankan hasil lama seolah fresh.
 - Snapshot broker memerlukan migration `supabase/migrations/20260908000100_add_signal_broker_snapshots.sql`, deploy website, lalu jalankan `signal_market_bridge.py` (atau `run_signal_bridge.bat`) pada PC/VPS yang terhubung ke terminal MT5. Bridge bersifat read-only dan tidak memanggil order API.
+- Untuk audit histori read-only, bila ada lebih dari satu instalasi MT5, set `SIGNAL_MT5_TERMINAL_PATH` ke `terminal64.exe` yang sudah terbuka. Collector mencocokkan executable tersebut sebelum attach; tanpa path ia menolak kecuali tepat satu terminal berjalan. Ini tidak mengubah akun atau mengirim order.
 
 ## Verifikasi pengembangan
+
+Halaman Robot Forex adalah preview terpisah, bukan Signals Advanced. Mulai perubahan lokal
+15 September, preview menamai GC=F sebagai futures referensi, menggunakan pembacaan OHLC
+ketat tanpa mengisi harga kosong, dan membedakan waktu buka/tutup candle. Kandidat
+kedaluwarsa 120 detik setelah close; WAIT kedaluwarsa paling lambat 5 menit dari scan atau
+close candle berikutnya + 90 detik. Level lama disembunyikan saat kedaluwarsa atau refresh
+gagal/timeout 20 detik. Batas ini tidak mengubah konfigurasi atau guard robot MT5.
+[Audit runtime robot](ROBOT_RUNTIME_VALIDATION.md) juga terpisah dari audit model Signals.
 
 Jalankan `npm run check` untuk lint, type-check, seluruh tes dan build produksi. Suite Advanced memeriksa matematika indikator, candle final/gap/stale, H4 lengkap, BUY/SELL simetris, konflik timeframe, batas SL/TP, auth API, alias/cakupan seluruh katalog, timeout/semaphore/cache, dan kontrak pemisahan dari order robot.
 

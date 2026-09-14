@@ -26,6 +26,25 @@ const mirror = rows => rows.map(r => ({ ...r, open: 300 - r.open, high: 300 - r.
 const inputs = (sell = false) => HORIZON_FRAMES.intraday.map(timeframe => ({ timeframe, candles: sell ? mirror(breakout(timeframe)) : breakout(timeframe) }));
 const closeTo = (actual, expected, epsilon = 1e-9) => assert.ok(Math.abs(actual - expected) < epsilon, `${actual} != ${expected}`);
 
+test('Exness Labor Day explains only confirmed XAU/XAG closure, not missing open-session candles', () => {
+  const end = Date.parse('2026-09-08T12:00:00Z');
+  const closedFrom = Date.parse('2026-09-07T19:00:00Z') / 1000, closedTo = Date.parse('2026-09-07T22:00:00Z') / 1000;
+  const history = candles('1H', 320, end).filter(r => r.time < closedFrom || r.time >= closedTo);
+  assert.equal(analyzeSignalFrame({ timeframe: '1H', candles: history, session: 'exness-metals' }, end).quality, 'fresh');
+  for (const session of ['metal-futures', 'continuous', 'exness-forex']) assert.equal(analyzeSignalFrame({ timeframe: '1H', candles: history, session }, end).quality, 'unavailable');
+  const extraGap = history.filter(r => r.time !== closedFrom - 3600);
+  assert.equal(analyzeSignalFrame({ timeframe: '1H', candles: extraGap, session: 'exness-metals' }, end).quality, 'unavailable');
+  const h4 = candles('4H', 320, end).filter(r => r.time !== Date.parse('2026-09-07T20:00:00Z') / 1000);
+  assert.equal(analyzeSignalFrame({ timeframe: '4H', candles: h4, session: 'exness-metals' }, end).quality, 'unavailable', 'native H4 partly open must exist');
+});
+
+test('MT5 session context survives multi-timeframe analysis; invalid data is not called a trend failure', () => {
+  const result = analyzeAdvancedSignal({ ...meta, symbol: 'XAU/USD', marketType: 'forex' }, 'intraday',
+    HORIZON_FRAMES.intraday.map(timeframe => ({ timeframe, candles: [], session: 'exness-metals', error: 'Snapshot belum masuk' })), now);
+  assert.equal(result.status, 'unavailable'); assert.equal(result.plan, null);
+  assert.ok(result.reasons.every(r => r.includes('Snapshot belum masuk')));
+});
+
 test('Wilder RSI preserves flat=50, all gains=100, all losses=0 and fixed numeric fixture', () => {
   assert.equal(signalRSI(Array(30).fill(10)), 50);
   assert.equal(signalRSI(Array.from({ length: 30 }, (_, i) => i)), 100);
@@ -212,7 +231,8 @@ test('UI fences old filter responses, expires reference levels, and does not arm
   assert.match(page, /requestRef\.current !== controller/);
   assert.match(page, /body\.scope\.symbol !== symbol/);
   assert.match(page, /AbortSignal\.timeout\(45_000\)/);
-  assert.match(page, /status === 'candidate' \? row\.plan : null/);
+  assert.match(page, /status === 'candidate' && !brokerBlocked \? row\.plan : null/);
+  assert.match(page, /row\.source\.kind !== 'broker' \|\| execution\.status === 'review'/);
   assert.match(page, /Skor bukan probabilitas menang/);
   assert.match(page, /Scanner klasik/);
   assert.doesNotMatch(page, /api\/trades|order_send|setTradingEnabled/);

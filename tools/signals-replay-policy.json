@@ -1,0 +1,21 @@
+{
+  "protocol": "signals-v3-intraday-audit-v1",
+  "purpose": "Frozen retrospective audit, not an optimizer or live-trading configuration",
+  "windowDays": 90,
+  "historyBars": { "15m": 16000, "1H": 5000, "4H": 1800 },
+  "warmupBars": 320,
+  "maxHoldingBars": 48,
+  "folds": [
+    { "name": "development", "fromFraction": 0, "toFraction": 0.6 },
+    { "name": "validation", "fromFraction": 0.6, "toFraction": 0.8 },
+    { "name": "test", "fromFraction": 0.8, "toFraction": 1 }
+  ],
+  "costAssumptions": {
+    "feeBpsPerSide": 0.5,
+    "slippageBpsPerSide": 0.5,
+    "holdingBpsPerDay": 1,
+    "spreadFloorPrice": { "XAU/USD": 0.4, "BTC/USDT": 20 }
+  },
+  "costMultipliers": [1, 2],
+  "warning": "These are explicit sensitivity assumptions, NOT verified historical Exness charges. No parameter search, trade authorization, or real-readiness pass."
+}

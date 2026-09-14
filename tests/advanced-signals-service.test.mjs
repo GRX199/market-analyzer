@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
 import ts from 'typescript';
+import * as analysis from '../src/lib/analysis/advanced-signals.ts';
+import { parseBrokerSnapshot } from '../src/lib/analysis/broker-snapshot.ts';
 
 const source = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 function loadModule(code, dependencies, globals = {}) {
@@ -25,12 +27,15 @@ async function flush() { for (let i = 0; i < 20; i++) await Promise.resolve(); }
 function makeService() {
   let now = 0, timerId = 0, active = 0, peak = 0, calls = 0;
   const timers = new Map(), controls = [];
-  const api = loadModule(`${source('src/services/advanced-signals.ts')}\nexport { feed as __feed };`, {
+  const api = loadModule(`${source('src/services/advanced-signals.ts')}\nexport const __feed = (asset, tf) => feed(asset, tf, 'reference');`, {
     '@/lib/constants': constants,
     '@/lib/analysis/advanced-signals': {
+      HORIZON_FRAMES: analysis.HORIZON_FRAMES,
       aggregateCompleteFourHours: candles => candles,
       analyzeAdvancedSignal: (asset, horizon, frames) => ({ ...asset, horizon, frames }),
     },
+    '@/lib/analysis/broker-snapshot': { parseBrokerSnapshot },
+    '@/services/api/binance-signals': { fetchBinanceSignalCandles() { throw new Error('Unexpected spot request'); } },
     '@/services/api/yahoo-finance': {
       mapSymbolToYahoo: symbol => symbol,
       fetchYahooSignalCandles(symbol, market, timeframe) {
@@ -106,7 +111,7 @@ test('provider errors are cached for ten seconds, then retried', async () => {
 });
 
 test('partial failure propagates to H1 and H4; provenance remains explicit', async () => {
-  const h = makeService(); const pending = h.api.scanAdvancedSignals([asset('XAU/USD')], 'swing');
+  const h = makeService(); const pending = h.api.scanAdvancedSignals([asset('XAU/USD')], 'swing', { source: 'reference' });
   h.controls.find(r => r.timeframe === '1H').reject(new Error('Hourly unavailable'));
   h.controls.find(r => r.timeframe === '1D').resolve([candle]);
   const [row] = await pending;
@@ -115,27 +120,30 @@ test('partial failure propagates to H1 and H4; provenance remains explicit', asy
   assert.match(row.source.note, /bukan spot/);
 });
 
-function makeRoute({ user = { id: 'test-user' }, authError = null, authThrows = false, scanThrows = false } = {}) {
-  const service = makeService().api, scans = []; let authCalls = 0;
+function makeRoute({ user = { id: 'test-user' }, authError = null, authThrows = false, scanThrows = false, snapshotRows = [], dbError = null } = {}) {
+  const service = makeService().api, scans = [], queries = []; let authCalls = 0;
   const route = loadModule(source('src/app/api/signals/advanced/route.ts'), {
     'next/server': { NextResponse: { json(body, options) {
       return new Response(JSON.stringify(body), { ...options, headers: { 'Content-Type': 'application/json', ...options.headers } });
     } } },
     '@/lib/supabase/server': { async createServerSupabaseClient() {
       if (authThrows) throw new Error('Auth unavailable');
-      return { auth: { async getUser() { authCalls++; return { data: { user }, error: authError }; } } };
+      return { auth: { async getUser() { authCalls++; return { data: { user }, error: authError }; } }, from(table) {
+        const query = { table }; queries.push(query);
+        return { select(columns) { query.columns = columns; return this; }, eq(key, value) { query[key] = value; return this; }, async in(key, value) { query[key] = value; return { data: snapshotRows, error: dbError }; } };
+      } };
     } },
-    '@/services/advanced-signals': { ...service, async scanAdvancedSignals(assets, horizon) {
-      scans.push({ assets, horizon }); if (scanThrows) throw new Error('Scanner unavailable');
+    '@/services/advanced-signals': { ...service, async scanAdvancedSignals(assets, horizon, options) {
+      scans.push({ assets, horizon, options }); if (scanThrows) throw new Error('Scanner unavailable');
       return assets.map(row => ({ symbol: row.symbol, status: 'wait' }));
     } },
   });
-  return { request: (query = '') => route.GET(new Request(`https://example.test/api/signals/advanced${query}`)), scans, authCalls: () => authCalls };
+  return { request: (query = '') => route.GET(new Request(`https://example.test/api/signals/advanced${query}`)), scans, queries, authCalls: () => authCalls };
 }
 
 test('advanced API rejects invalid inputs without auth or provider work', async () => {
   const route = makeRoute();
-  for (const query of ['?market=stocks', '?horizon=1H', '?page=-1', '?page=999', '?page=9', '?symbol=UNKNOWN', '?symbol=', '?market=forex&symbol=BTCUSD']) {
+  for (const query of ['?source=unknown', '?market=stocks', '?horizon=1H', '?page=-1', '?page=999', '?page=9', '?symbol=UNKNOWN', '?symbol=', '?market=forex&symbol=BTCUSD']) {
     const response = await route.request(query); assert.equal(response.status, 400, query);
     assert.match(response.headers.get('Cache-Control'), /no-store/);
   }
@@ -172,6 +180,67 @@ test('scanner exception returns non-cacheable service failure', async () => {
   const response = await makeRoute({ scanThrows: true }).request();
   assert.equal(response.status, 503); assert.equal((await response.json()).success, false);
   assert.match(response.headers.get('Cache-Control'), /no-store/);
+});
+
+test('broker query is owner-scoped, source-specific and storage errors are not hidden', async () => {
+  const route = makeRoute({ snapshotRows: [{ symbol: 'BTC/USDT', payload: { fixture: true } }] });
+  const response = await route.request('?source=mt5&symbol=BTCUSD');
+  assert.equal(response.status, 200); assert.equal((await response.json()).scope.source, 'mt5');
+  assert.equal(route.queries[0].user_id, 'test-user'); assert.deepEqual(Array.from(route.queries[0].symbol), ['BTC/USDT']);
+  assert.equal(route.scans[0].options.brokerSnapshots['BTC/USDT'].fixture, true);
+  await route.request('?source=market&market=crypto'); await route.request('?source=reference');
+  assert.equal(route.queries.length, 1);
+  const unavailable = makeRoute({ dbError: { code: '42P01' } });
+  assert.equal((await unavailable.request()).status, 200);
+  assert.match(unavailable.scans[0].options.brokerError, /migration/);
+  const anonymous = makeRoute({ user: null }); await anonymous.request('?source=mt5'); assert.equal(anonymous.queries.length, 0);
+});
+
+const scanNow = Date.UTC(2026, 8, 9, 12);
+function fixtureSnapshot(symbol = 'XAU/USD', instrument = 'XAUUSDm') {
+  return { symbol, instrument, broker: 'Exness Technologies Ltd', server: 'Exness-MT5Trial14', accountKind: 'demo', accountRef: 'a'.repeat(24),
+    capturedAt: new Date(scanNow - 60_000).toISOString(), quoteTime: new Date(scanNow - 60_000).toISOString(), bid: 110, ask: 110.1,
+    frames: Object.entries(analysis.FRAME_SECONDS).map(([timeframe, seconds]) => ({ timeframe, candles: Array.from({ length: 320 }, (_, i) => {
+      const close = 100 + i * .03 + Math.sin(i) * .2;
+      return { time: scanNow / 1000 - seconds * (321 - i), open: close - .02, high: close + .2, low: close - .2, close, volume: 10 };
+    }) })) };
+}
+function integratedService() {
+  const calls = [];
+  const api = loadModule(source('src/services/advanced-signals.ts'), {
+    '@/lib/constants': constants, '@/lib/analysis/advanced-signals': analysis,
+    '@/lib/analysis/broker-snapshot': { parseBrokerSnapshot },
+    '@/services/api/binance-signals': { async fetchBinanceSignalCandles(symbol, tf) { calls.push({ provider: 'binance', symbol, tf }); return fixtureSnapshot().frames.find(f => f.timeframe === tf).candles; } },
+    '@/services/api/yahoo-finance': { mapSymbolToYahoo: symbol => symbol, async fetchYahooSignalCandles() { throw new Error('Unexpected Yahoo fallback'); } },
+  }, { Date: class extends Date { static now() { return scanNow; } } });
+  return { ...api, calls };
+}
+test('MT5 native source never becomes futures; quote expiry caps all manual levels', async () => {
+  const service = integratedService(), snapshot = fixtureSnapshot();
+  const [row] = await service.scanAdvancedSignals([asset('XAU/USD')], 'intraday', { brokerSnapshots: { 'XAU/USD': snapshot } });
+  assert.equal(row.source.isProxy, false); assert.equal(row.source.instrument, 'XAUUSDm'); assert.equal(row.source.kind, 'broker');
+  assert.doesNotMatch(row.source.note, /adalah proxy/); assert.equal(row.source.accountKind, 'demo');
+  assert.ok(Date.parse(row.expiresAt) <= Date.parse(snapshot.quoteTime) + 180_000);
+  assert.ok(!('accountRef' in row.source)); assert.equal(service.calls.length, 0);
+  snapshot.quoteTime = new Date(scanNow - 180_001).toISOString();
+  const [stale] = await service.scanAdvancedSignals([asset('XAU/USD')], 'intraday', { brokerSnapshots: { 'XAU/USD': snapshot } });
+  assert.equal(stale.status, 'stale'); assert.equal(stale.plan, null); assert.equal(stale.manualScenarios.length, 0);
+});
+test('missing or mismatched MT5 data fails closed without fictional trend reasons or Yahoo', async () => {
+  const service = integratedService();
+  const [missing] = await service.scanAdvancedSignals([asset('XAU/USD')], 'intraday');
+  assert.equal(missing.status, 'unavailable'); assert.equal(missing.source.provider, 'MT5 Broker');
+  assert.ok(missing.reasons.every(r => !r.includes('ADX') && !r.includes('RSI')));
+  const [wrong] = await service.scanAdvancedSignals([asset('XAU/USD')], 'intraday', { brokerSnapshots: { 'XAU/USD': fixtureSnapshot('BTC/USDT', 'BTCUSDm') } });
+  assert.equal(wrong.status, 'unavailable'); assert.equal(wrong.plan, null); assert.equal(service.calls.length, 0);
+});
+test('Binance defaults to USDT with three native frames; MT5 BTC must be explicitly selected', async () => {
+  const service = integratedService(), btc = { ...asset('BTC/USDT'), marketType: 'crypto' };
+  const [spot] = await service.scanAdvancedSignals([btc], 'intraday', { brokerSnapshots: { 'BTC/USDT': fixtureSnapshot('BTC/USDT', 'BTCUSDm') } });
+  assert.equal(spot.displaySymbol, 'BTC/USDT'); assert.equal(spot.source.provider, 'Binance Spot');
+  assert.deepEqual(service.calls.map(c => c.tf).sort(), ['15m', '1H', '4H']);
+  const [broker] = await service.scanAdvancedSignals([btc], 'intraday', { source: 'mt5', brokerSnapshots: { 'BTC/USDT': fixtureSnapshot('BTC/USDT', 'BTCUSDm') } });
+  assert.equal(broker.displaySymbol, 'BTC/USD'); assert.equal(broker.source.instrument, 'BTCUSDm'); assert.equal(service.calls.length, 3);
 });
 
 test('strict Yahoo feed does not fabricate missing OHLC and isolates scanner requests', async () => {

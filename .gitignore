@@ -48,4 +48,7 @@ next-env.d.ts
 
 # Local code index and private account review notes
 /.codegraph/
+__pycache__/
+*.pyc
 /ROBOT_IMPROVEMENT_REVIEW.md
+/local-reports/

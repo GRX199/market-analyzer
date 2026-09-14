@@ -3,8 +3,9 @@ import { NextResponse } from 'next/server';
 import { FOREX_SYMBOLS } from '@/lib/constants';
 import { calculateEMA } from '@/lib/analysis/technical';
 import { calculateForexATR, calculateForexRSI } from '@/lib/trading/forex-preview-indicators';
-import { getOHLCV } from '@/services/market-data';
-import type { OHLCV, Timeframe } from '@/types/market';
+import { forexPreviewExpiry } from '@/lib/trading/forex-preview-presentation';
+import { fetchYahooSignalCandles } from '@/services/api/yahoo-finance';
+import type { OHLCV } from '@/types/market';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -16,14 +17,14 @@ const RSI_RECOVERY_LEVEL = 45;
 
 const MODE_CONFIG = {
   stable_h1: {
-    timeframe: '1H' as Timeframe,
+    timeframe: '1H',
     timeframeSeconds: 60 * 60,
     strategyFamily: 'donchian_breakout',
     atrStopMultiplier: 3,
     rewardRiskRatio: 10,
   },
   aggressive_m15: {
-    timeframe: '15m' as Timeframe,
+    timeframe: '15m',
     timeframeSeconds: 15 * 60,
     strategyFamily: 'pullback_recovery',
     atrStopMultiplier: 2,
@@ -32,7 +33,7 @@ const MODE_CONFIG = {
 } as const;
 
 type StrategyMode = keyof typeof MODE_CONFIG;
-type PreviewSignal = 'buy' | 'sell' | 'wait' | 'unavailable';
+type PreviewSignal = 'buy' | 'sell' | 'wait' | 'unavailable' | 'stale';
 
 function isStrategyMode(value: string | null): value is StrategyMode {
   return value === 'stable_h1' || value === 'aggressive_m15';
@@ -50,6 +51,16 @@ function candleTimeSeconds(candle: OHLCV): number | null {
 
 function completedCandles(candles: OHLCV[], timeframeSeconds: number, now = Date.now()): OHLCV[] {
   const activeCandleStart = Math.floor(now / (timeframeSeconds * 1000)) * timeframeSeconds;
+  let previous = -Infinity;
+  for (const candle of candles) {
+    const time = candleTimeSeconds(candle);
+    if (time === null || time <= previous || time * 1000 > now + 30_000
+      || ![candle.open, candle.high, candle.low, candle.close].every(value => typeof value === 'number' && Number.isFinite(value) && value > 0)
+      || candle.low > Math.min(candle.open, candle.close) || candle.high < Math.max(candle.open, candle.close)) {
+      throw new Error('Urutan/waktu/OHLC candle provider invalid');
+    }
+    previous = time;
+  }
   return candles.filter((candle) => {
     const time = candleTimeSeconds(candle);
     return time !== null && time < activeCandleStart;
@@ -60,9 +71,10 @@ async function analyzePair(mode: StrategyMode) {
   const config = MODE_CONFIG[mode];
   const name = FOREX_SYMBOLS.find((item) => item.symbol === ROBOT_PAIR)?.name ?? ROBOT_PAIR;
   try {
+    const history = await fetchYahooSignalCandles(ROBOT_PAIR, 'forex', config.timeframe);
+    const now = Date.now();
     const candles = completedCandles(
-      await getOHLCV(ROBOT_PAIR, config.timeframe),
-      config.timeframeSeconds,
+      history, config.timeframeSeconds, now,
     );
     if (candles.length < 225) {
       return {
@@ -169,6 +181,14 @@ async function analyzePair(mode: StrategyMode) {
 
     const stopDistance = atr * config.atrStopMultiplier;
     const targetDistance = stopDistance * config.rewardRiskRatio;
+    const candleOpenedAt = new Date(lastClosedTime * 1000).toISOString();
+    const lastClosedAt = new Date((lastClosedTime + config.timeframeSeconds) * 1000).toISOString();
+    const timeframe = mode === 'stable_h1' ? '1H' : '15m';
+    const expiry = forexPreviewExpiry(timeframe, new Date(now).toISOString(), lastClosedAt, signal);
+    if (!Number.isFinite(expiry) || now >= expiry) {
+      signal = 'stale';
+      reason = 'Candle referensi atau jendela kandidat sudah kedaluwarsa. Tunggu data/setup baru; level lama tidak ditampilkan.';
+    }
     return {
       symbol: ROBOT_PAIR,
       name,
@@ -190,7 +210,9 @@ async function analyzePair(mode: StrategyMode) {
       takeProfit: signal === 'buy'
         ? lastCandle.close + targetDistance
         : signal === 'sell' ? lastCandle.close - targetDistance : null,
-      lastClosedAt: new Date(lastClosedTime * 1000).toISOString(),
+      candleOpenedAt,
+      lastClosedAt,
+      expiresAt: Number.isFinite(expiry) ? new Date(expiry).toISOString() : undefined,
       reason,
     };
   } catch (error) {
@@ -224,6 +246,8 @@ export async function GET(request: Request) {
         strategyMode,
         timeframe: config.timeframe,
         source: 'Yahoo Finance preview',
+        sourceInstrument: 'GC=F',
+        isProxy: true,
         rows,
       },
     },

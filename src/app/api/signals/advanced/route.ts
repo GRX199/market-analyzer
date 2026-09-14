@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { ADVANCED_UNIVERSE, resolveSignalSymbol, scanAdvancedSignals, selectSignalUniverse, type SignalMarket } from '@/services/advanced-signals';
+import { ADVANCED_UNIVERSE, resolveSignalSymbol, scanAdvancedSignals, selectSignalUniverse, type SignalMarket, type SignalSource } from '@/services/advanced-signals';
 import type { SignalHorizon } from '@/lib/analysis/advanced-signals';
 
 export const runtime = 'nodejs';
@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   const source = params.get('source') ?? 'market';
   const rawPage = params.get('page') ?? '0', rawSymbol = params.get('symbol');
   const symbol = rawSymbol === null ? null : resolveSignalSymbol(rawSymbol);
-  if (!['all', 'forex', 'crypto'].includes(market) || !['market', 'reference'].includes(source) || !['intraday', 'swing'].includes(horizon)
+  if (!['all', 'forex', 'crypto'].includes(market) || !['market', 'mt5', 'reference'].includes(source) || !['intraday', 'swing'].includes(horizon)
     || !/^\d{1,2}$/.test(rawPage) || (rawSymbol !== null && symbol === null)) return json({ success: false, error: 'Filter Signals tidak valid.' }, 400);
   const page = Number(rawPage);
   const scope = selectSignalUniverse(market as SignalMarket, page, symbol);
@@ -28,12 +28,19 @@ export async function GET(request: Request) {
     userId = user.id;
   } catch { return json({ success: false, error: 'Layanan autentikasi belum tersedia.' }, 503); }
   try {
-    const snapshots: Record<string, any> = {};
-    if (source === 'market' && scope.selected.some(asset => asset.marketType === 'forex') && typeof (client as any).from === 'function') {
-      const result = await client.from('signal_broker_snapshots').select('symbol,payload').eq('user_id', userId).in('symbol', scope.selected.map(asset => asset.symbol));
-      if (!result.error) for (const row of result.data ?? []) { try { const { parseBrokerSnapshot } = await import('@/lib/analysis/broker-snapshot'); const parsed = parseBrokerSnapshot(row.payload, Date.now(), true); snapshots[parsed.symbol] = parsed; } catch { /* stale snapshots remain unavailable */ } }
+    const snapshots: Record<string, unknown> = {};
+    let brokerError: string | undefined;
+    const brokerSymbols = scope.selected.filter(asset => source === 'mt5' || source === 'market' && asset.marketType === 'forex').map(asset => asset.symbol);
+    if (brokerSymbols.length) {
+      try {
+        const result = await client.from('signal_broker_snapshots').select('symbol,payload').eq('user_id', userId).in('symbol', brokerSymbols);
+        if (result.error) brokerError = ['42P01', 'PGRST205'].includes(result.error.code)
+          ? 'Tabel snapshot belum tersedia: jalankan migration 20260908000100_add_signal_broker_snapshots.sql.'
+          : 'Data broker gagal dibaca dari penyimpanan. Periksa koneksi dan akses akun.';
+        else for (const row of result.data ?? []) if (brokerSymbols.includes(row.symbol)) snapshots[row.symbol] = row.payload;
+      } catch { brokerError = 'Penyimpanan snapshot MT5 tidak terhubung. Feed crypto spot tetap terpisah.'; }
     }
-    const rows = await scanAdvancedSignals(scope.selected, horizon as SignalHorizon, { source: source as 'market' | 'reference', brokerSnapshots: snapshots });
+    const rows = await scanAdvancedSignals(scope.selected, horizon as SignalHorizon, { source: source as SignalSource, brokerSnapshots: snapshots, brokerError });
     return json({ success: true, data: rows, scope: { market, source, horizon, page, symbol, total: scope.total, pages: scope.pages },
       universe: ADVANCED_UNIVERSE, generatedAt: new Date().toISOString(),
       summary: { scanned: rows.length, candidates: rows.filter(row => row.status === 'candidate').length,

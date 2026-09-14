@@ -24,6 +24,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useTradeHistory } from '@/hooks/use-trade-history';
 import { useUserStore } from '@/stores/user-store';
 import { cn } from '@/lib/utils';
+import { SignalFeedHealth } from '@/components/trading/signal-feed-health';
 
 interface OperationsStatus {
   checkedAt: string;
@@ -220,6 +221,7 @@ export default function OperationsPage() {
           </div>
         )}
 
+        <SignalFeedHealth />
         <div className="grid gap-4 md:grid-cols-3">
           <Card className={cn('border-2', tradingReady ? 'border-emerald-500/30' : 'border-blue-500/30')}>
             <CardHeader className="pb-3">
