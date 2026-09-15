@@ -24,7 +24,7 @@ Pemindaian mencakup katalog Forex/Crypto yang sudah ada, maksimal enam instrumen
 
 ### Katalog tambahan — 16 September 2026
 
-Katalog Signals kini memuat 43 Forex/metals dan 26 crypto:
+Katalog Signals kini memuat 43 Forex/metals dan 31 crypto:
 
 - Forex tambahan: NZD/JPY, CAD/CHF, NZD/CAD, NZD/CHF, EUR/NZD, GBP/NZD.
 - Forex lanjutan: USD/CNH, USD/NOK, USD/SEK, USD/PLN, EUR/NOK, EUR/SEK,
@@ -32,19 +32,62 @@ Katalog Signals kini memuat 43 Forex/metals dan 26 crypto:
 - Crypto tambahan: BCH/USDT, TRX/USDT, SUI/USDT, NEAR/USDT, UNI/USDT, AAVE/USDT.
 - Crypto lanjutan: ATOM/USDT, ETC/USDT, XLM/USDT, FIL/USDT, ARB/USDT,
   OP/USDT, dan INJ/USDT.
+- Crypto tambahan: ICP/USDT, APT/USDT, HBAR/USDT, VET/USDT, dan ALGO/USDT.
 - Polygon aktif menggunakan POL/USDT, mengikuti [pengumuman pergantian MATIC ke POL Binance](https://www.binance.com/en/support/announcement/detail/619c4929fc3f4a0d9df7f9ae1d4519a5).
   Referensi MATIC lama tidak diubah menjadi POL diam-diam; histori/order lama tidak dimigrasikan.
-- **Market populer lainnya** menyediakan 12 tombol akses cepat. Sumber harga
+- **Market populer lainnya** menyediakan 18 tombol akses cepat. Sumber harga
   yang dipilih pengguna tetap dipertahankan; daftar ini bukan ranking likuiditas/profit live.
 - Pemeriksaan read-only Binance: ketujuh pair BCH/TRX/SUI/NEAR/UNI/AAVE/POL
   berstatus TRADING, dan masing-masing mengembalikan 319 candle final fresh
   pada M15/H1/H4. Ini pemeriksaan saat pengembangan, bukan jaminan feed selalu tersedia.
   TON belum ditambahkan karena status exchangeInfo saat pemeriksaan adalah BREAK.
+- Pemeriksaan ulang endpoint publik yang digunakan aplikasi (`data-api.binance.vision`)
+  pada 16 September: ICP/APT/HBAR/VET/ALGO berstatus TRADING dan spot diizinkan;
+  masing-masing lolos pemeriksaan 319 candle final fresh pada M15/H1/H4 melalui
+  fungsi pengambilan data dan analisis frame aplikasi. TON masih BREAK.
+  Endpoint `api.binance.com` mengembalikan HTTP 403 dari lingkungan
+  pengembangan. Status exchange bukan bukti ketersediaan CFD di akun Exness.
 - Instrumen Forex baru memerlukan snapshot MT5 milik pengguna, atau mode reference
   yang dipilih eksplisit. Tidak ada penggantian feed broker secara diam-diam.
   Belum memverifikasi bahwa setiap instrumen tersedia pada akun Exness pengguna.
 - Pembaruan pengenal simbol pada sumber bridge tidak mengubah daftar simbol aktif,
   env, batas risiko, izin akun, atau worker yang sedang berjalan. Tidak membutuhkan migration.
+
+### Penyempurnaan trading manual — 16 September 2026
+
+- Harga dan spread ditampilkan sampai delapan desimal, termasuk pecahan JPY.
+  Angka tampilan bukan spesifikasi tick broker; worker tetap memeriksa pembulatan tick.
+- Kandidat broker dan kandidat spot/referensi dihitung terpisah. Kandidat broker
+  yang tertahan quote tidak didahulukan atas skenario yang masih layak dipantau.
+- Tiket menghitung ulang jarak entry–SL, entry–TP1, quote–entry, dan R:R dari
+  parameter yang sedang diisi. R:R di bawah 1,5 ditandai sebagai berbeda dari
+  syarat awal model. Ini perbandingan jarak harga sebelum biaya, bukan risiko uang
+  atau probabilitas menang.
+- TP1 adalah satu-satunya TP yang dikirim untuk volume order tersebut. TP2
+  opsional dan hanya dicantumkan sebagai referensi; tidak memecah lot atau
+  menjanjikan penutupan parsial. Sesuai [mekanisme TP MT5](https://www.metatrader5.com/en/terminal/help/trading/general_concept),
+  TP yang terpasang menutup posisi terkait ketika terpicu.
+- Default akun tiket mengikuti jenis akun snapshot. Perubahan parameter
+  membatalkan centang konfirmasi. Pergantian instrumen mereset tiket; snapshot
+  baru mengharuskan tiket dibuka kembali. Expiry diperiksa lagi saat klik.
+- ID request disimpan sebelum POST dan dipakai kembali untuk parameter order
+  yang sama, per pengguna dan per tab, termasuk setelah reload. Klik ganda
+  ditahan, retry memakai ID yang sama, dan respons `failed`/`rejected` tidak
+  ditampilkan sebagai eksekusi sukses. ID tidak berlaku lintas tab/browser atau
+  setelah penyimpanan tab dihapus. Parameter berbeda adalah request berbeda:
+  periksa Robot & Sistem dahulu jika hasil pengiriman sebelumnya belum jelas.
+- Pending order bersyarat dapat terpicu saat quote mencapai entry, sebelum
+  penutupan candle. Checkbox kini menjelaskan hal itu. Untuk menunggu konfirmasi
+  model, tunggu candle final lalu pindai ulang sebelum memasang pending order.
+
+Validasi: unit test untuk geometri, TP2 opsional, R:R tiket, presisi harga,
+persistensi ID dan isolasi pengguna. Test browser memakai backend simulasi lokal
+untuk lost-response, double-click, retry/reload, status gagal, snapshot berubah,
+pemisahan sumber, serta desktop/mobile. Tidak mengirim transaksi broker.
+Aturan strategi v4 dan hasil replay yang tercatat tidak diubah; perbaikan
+antarmuka ini tidak membuktikan peningkatan profit. Tidak ada migration baru.
+Hasil akhir: `npm run check` lulus (lint, TypeScript, 191 test, production build),
+7 test bridge Python lulus, serta test browser terisolasi desktop/mobile lulus.
 
 ### Status analisis
 

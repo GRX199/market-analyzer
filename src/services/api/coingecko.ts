@@ -37,6 +37,11 @@ const SYMBOL_TO_COINGECKO_ID: Record<string, string> = {
   'ARB/USDT': 'arbitrum',
   'OP/USDT': 'optimism',
   'INJ/USDT': 'injective-protocol',
+  'ICP/USDT': 'internet-computer',
+  'APT/USDT': 'aptos',
+  'HBAR/USDT': 'hedera-hashgraph',
+  'VET/USDT': 'vechain',
+  'ALGO/USDT': 'algorand',
 };
 
 const COINGECKO_ID_TO_SYMBOL: Record<string, string> = Object.fromEntries(

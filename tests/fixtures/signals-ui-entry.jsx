@@ -5,11 +5,16 @@ import { analyzeAdvancedSignal, FRAME_SECONDS } from '../../src/lib/analysis/adv
 import { FOREX_SYMBOLS, CRYPTO_SYMBOLS } from '../../src/lib/constants';
 
 // Synthetic price series; real analysis and UI, no backend or trading connection.
-window.fixture = { state: 'candidate', posts: [], requests: [] };
+window.fixture = { state: 'candidate', posts: [], requests: [], orderMode: 'forbidden', feedKind: 'broker' };
 window.fetch = async (input, options = {}) => {
   const url = new URL(String(input), location.origin);
   if (options.method && options.method !== 'GET') {
-    window.fixture.posts.push(String(input)); throw new Error('Order submission forbidden in this test');
+    if (url.pathname !== '/api/trades/direct') throw new Error('Unexpected mutation in isolated test');
+    window.fixture.posts.push(JSON.parse(options.body));
+    if (window.fixture.orderMode === 'forbidden') throw new Error('Order submission forbidden in this test');
+    if (window.fixture.orderMode === 'lost-response') throw new Error('Synthetic lost response after server insert');
+    return new Response(JSON.stringify({ duplicate: true,
+      trade: { id: 'fixture-trade-1', status: 'failed', error_message: 'Synthetic broker rejection' } }), { status: 200 });
   }
   if (url.pathname !== '/api/signals/advanced') throw new Error(`Unmocked request: ${url.pathname}`);
   window.fixture.requests.push(Object.fromEntries(url.searchParams));
@@ -28,7 +33,7 @@ window.fetch = async (input, options = {}) => {
   const universe = [...FOREX_SYMBOLS.map(asset => ({ ...asset, displaySymbol: asset.symbol, marketType: 'forex' })), ...CRYPTO_SYMBOLS.map(asset => ({ ...asset, displaySymbol: asset.symbol, marketType: 'crypto' }))];
   const asset = universe.find(asset => asset.symbol === (url.searchParams.get('symbol') ?? 'XAU/USD'));
   const meta = { ...asset,
-    source: { kind: 'broker', provider: 'MT5 fixture', instrument: asset.symbol.replace('/USDT', 'USD').replace('/', '') + 'm', isProxy: false, note: 'SYNTHETIC TEST PRICES ONLY',
+    source: { kind: window.fixture.feedKind, provider: 'MT5 fixture', instrument: asset.symbol.replace('/USDT', 'USD').replace('/', '') + 'm', isProxy: false, note: 'SYNTHETIC TEST PRICES ONLY',
       accountKind: 'demo', server: 'Fixture only', bid: close, ask: close + .001,
       quoteTime: new Date(now).toISOString(), capturedAt: new Date(now).toISOString(), validUntil: new Date(now + 180_000).toISOString() } };
   const row = analyzeAdvancedSignal(meta, horizon, frames, now);

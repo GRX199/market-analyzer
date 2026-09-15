@@ -154,6 +154,11 @@ export const CRYPTO_SYMBOLS = [
   { symbol: 'ARB/USDT', name: 'Arbitrum' },
   { symbol: 'OP/USDT', name: 'Optimism' },
   { symbol: 'INJ/USDT', name: 'Injective' },
+  { symbol: 'ICP/USDT', name: 'Internet Computer' },
+  { symbol: 'APT/USDT', name: 'Aptos' },
+  { symbol: 'HBAR/USDT', name: 'Hedera' },
+  { symbol: 'VET/USDT', name: 'VeChain' },
+  { symbol: 'ALGO/USDT', name: 'Algorand' },
 ];
 
 // Editorial shortcuts, not a live liquidity ranking or a broker allow-list.
@@ -173,6 +178,9 @@ export const SIGNAL_QUICK_MARKETS = [
   { symbol: 'XLM/USDT', label: 'Stellar', marketType: 'crypto' },
   { symbol: 'ATOM/USDT', label: 'Cosmos', marketType: 'crypto' },
   { symbol: 'ARB/USDT', label: 'Arbitrum', marketType: 'crypto' },
+  { symbol: 'ICP/USDT', label: 'Internet Computer', marketType: 'crypto' },
+  { symbol: 'APT/USDT', label: 'Aptos', marketType: 'crypto' },
+  { symbol: 'HBAR/USDT', label: 'Hedera', marketType: 'crypto' },
 ] as const;
 
 export const ALL_SYMBOLS = [

@@ -5,7 +5,7 @@ import signal_market_bridge as bridge
 
 class BridgeTests(unittest.TestCase):
     def test_expanded_catalog_mapping_does_not_enable_symbols_or_swap_tokens(self):
-        for base in ['BCH', 'TRX', 'SUI', 'NEAR', 'UNI', 'AAVE', 'POL']:
+        for base in ['BCH', 'TRX', 'SUI', 'NEAR', 'UNI', 'AAVE', 'POL', 'ICP', 'APT', 'HBAR', 'VET', 'ALGO']:
             for suffix in ['', 'm', 'c']:
                 self.assertEqual(bridge.canonical_symbol(base + 'USD' + suffix), base + '/USDT')
         for base in ['NZDJPY', 'CADCHF', 'NZDCAD', 'NZDCHF', 'EURNZD', 'GBPNZD', 'USDCNH', 'USDNOK', 'USDSEK', 'USDPLN', 'EURNOK', 'EURSEK', 'GBPSEK']:

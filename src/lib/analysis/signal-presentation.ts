@@ -1,5 +1,11 @@
 import type { AdvancedSignal, SetupStatus } from './advanced-signals';
 
+/** Preserve fractional JPY quotes and small crypto levels; broker tick rounding happens at execution. */
+export function formatSignalPrice(value: number | null | undefined): string {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value.toLocaleString('id-ID', { maximumFractionDigits: 8 }) : '—';
+}
+
 export interface SignalReceiptClock {
   receivedAt: number;
   receivedMonotonicAt: number;

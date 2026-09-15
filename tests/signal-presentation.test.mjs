@@ -1,12 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { advanceSignalClock, assessBrokerPlan, effectiveSignalStatus, signalDisplayTime } from '../src/lib/analysis/signal-presentation.ts';
+import { advanceSignalClock, assessBrokerPlan, effectiveSignalStatus, formatSignalPrice, signalDisplayTime } from '../src/lib/analysis/signal-presentation.ts';
 
 const now = Date.parse('2026-09-09T04:00:00Z');
 const iso = time => new Date(time).toISOString();
 const closeTo = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} != ${b}`);
 const receipt = { receivedAt: 10_000, receivedMonotonicAt: 20_000, requestDurationMs: 4_000 };
+test('manual price display retains JPY points and small crypto precision', () => {
+  assert.equal(formatSignalPrice(154.123), '154,123');
+  assert.equal(formatSignalPrice(154.124), '154,124');
+  assert.equal(formatSignalPrice(.00001234), '0,00001234');
+  assert.equal(formatSignalPrice(.001), '0,001');
+  assert.equal(formatSignalPrice(NaN), '—');
+});
 function candidate(side = 'buy') {
   return { status: 'candidate', expiresAt: iso(now + 120_000),
     source: { kind: 'broker', isProxy: false, provider: 'MT5 Broker', instrument: 'BTCUSDm',
