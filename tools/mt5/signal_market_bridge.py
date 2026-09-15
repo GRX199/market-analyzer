@@ -14,7 +14,7 @@ from dotenv import dotenv_values
 
 FRAMES = {"15m": mt5.TIMEFRAME_M15, "1H": mt5.TIMEFRAME_H1, "4H": mt5.TIMEFRAME_H4, "1D": mt5.TIMEFRAME_D1}
 SECONDS = {"15m": 900, "1H": 3600, "4H": 14400, "1D": 86400}
-CRYPTO = {"BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "DOGE", "DOT", "LINK", "MATIC", "POL", "AVAX", "SHIB", "LTC", "UNI", "ATOM", "ETC", "BCH", "TRX", "SUI", "NEAR", "AAVE"}
+CRYPTO = {"BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "DOGE", "DOT", "LINK", "MATIC", "POL", "AVAX", "SHIB", "LTC", "UNI", "ATOM", "ETC", "BCH", "TRX", "SUI", "NEAR", "AAVE", "XLM", "FIL", "ARB", "OP", "INJ"}
 CURRENCIES = {"USD", "EUR", "JPY", "GBP", "CHF", "CAD", "AUD", "NZD", "SGD", "HKD", "ZAR", "MXN", "TRY", "IDR"}
 DEFAULT_BASES = ("XAUUSD", "EURUSD", "GBPUSD", "BTCUSD", "ETHUSD", "EURJPY")
 

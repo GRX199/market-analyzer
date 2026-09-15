@@ -191,7 +191,7 @@ test('expanded popular markets resolve without aliasing old tokens or changing s
   }
   const symbols = [...constants.FOREX_SYMBOLS, ...constants.CRYPTO_SYMBOLS].map(asset => asset.symbol);
   assert.equal(new Set(symbols).size, symbols.length);
-  assert.equal(constants.FOREX_SYMBOLS.length, 36); assert.equal(constants.CRYPTO_SYMBOLS.length, 19);
+  assert.equal(constants.FOREX_SYMBOLS.length, 36); assert.equal(constants.CRYPTO_SYMBOLS.length, 26);
   assert.equal(symbols.includes('MATIC/USDT'), false);
   assert.equal((await route.request('?symbol=MATICUSDT')).status, 400, 'do not silently reinterpret stored MATIC orders as POL');
   for (const item of constants.SIGNAL_QUICK_MARKETS) assert.ok(symbols.includes(item.symbol), item.symbol);
@@ -199,7 +199,7 @@ test('expanded popular markets resolve without aliasing old tokens or changing s
 
 test('new crypto CoinGecko identities are exact; old MATIC identity stays separate', () => {
   const gecko = loadModule(`${source('src/services/api/coingecko.ts')}\nexport const __ids = SYMBOL_TO_COINGECKO_ID;`, {});
-  for (const [symbol, id] of Object.entries({ BCH: 'bitcoin-cash', TRX: 'tron', SUI: 'sui', NEAR: 'near', UNI: 'uniswap', AAVE: 'aave', POL: 'polygon-ecosystem-token' })) {
+  for (const [symbol, id] of Object.entries({ BCH: 'bitcoin-cash', TRX: 'tron', SUI: 'sui', NEAR: 'near', UNI: 'uniswap', AAVE: 'aave', POL: 'polygon-ecosystem-token', ATOM: 'cosmos', ETC: 'ethereum-classic', XLM: 'stellar', FIL: 'filecoin', ARB: 'arbitrum', OP: 'optimism', INJ: 'injective-protocol' })) {
     assert.equal(gecko.__ids[`${symbol}/USDT`], id); assert.equal(gecko.isCryptoSymbol(`${symbol}/USDT`), true);
   }
   assert.equal(gecko.__ids['MATIC/USDT'], 'matic-network');

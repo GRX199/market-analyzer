@@ -140,6 +140,13 @@ export const CRYPTO_SYMBOLS = [
   { symbol: 'NEAR/USDT', name: 'NEAR Protocol' },
   { symbol: 'UNI/USDT', name: 'Uniswap' },
   { symbol: 'AAVE/USDT', name: 'Aave' },
+  { symbol: 'ATOM/USDT', name: 'Cosmos' },
+  { symbol: 'ETC/USDT', name: 'Ethereum Classic' },
+  { symbol: 'XLM/USDT', name: 'Stellar' },
+  { symbol: 'FIL/USDT', name: 'Filecoin' },
+  { symbol: 'ARB/USDT', name: 'Arbitrum' },
+  { symbol: 'OP/USDT', name: 'Optimism' },
+  { symbol: 'INJ/USDT', name: 'Injective' },
 ];
 
 // Editorial shortcuts, not a live liquidity ranking or a broker allow-list.
@@ -156,6 +163,9 @@ export const SIGNAL_QUICK_MARKETS = [
   { symbol: 'BCH/USDT', label: 'Bitcoin Cash', marketType: 'crypto' },
   { symbol: 'TRX/USDT', label: 'TRON', marketType: 'crypto' },
   { symbol: 'SUI/USDT', label: 'Sui', marketType: 'crypto' },
+  { symbol: 'XLM/USDT', label: 'Stellar', marketType: 'crypto' },
+  { symbol: 'ATOM/USDT', label: 'Cosmos', marketType: 'crypto' },
+  { symbol: 'ARB/USDT', label: 'Arbitrum', marketType: 'crypto' },
 ] as const;
 
 export const ALL_SYMBOLS = [

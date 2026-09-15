@@ -24,10 +24,12 @@ Pemindaian mencakup katalog Forex/Crypto yang sudah ada, maksimal enam instrumen
 
 ### Katalog tambahan — 16 September 2026
 
-Katalog Signals kini memuat 36 Forex/metals dan 19 crypto:
+Katalog Signals kini memuat 36 Forex/metals dan 26 crypto:
 
 - Forex tambahan: NZD/JPY, CAD/CHF, NZD/CAD, NZD/CHF, EUR/NZD, GBP/NZD.
 - Crypto tambahan: BCH/USDT, TRX/USDT, SUI/USDT, NEAR/USDT, UNI/USDT, AAVE/USDT.
+- Crypto lanjutan: ATOM/USDT, ETC/USDT, XLM/USDT, FIL/USDT, ARB/USDT,
+  OP/USDT, dan INJ/USDT.
 - Polygon aktif menggunakan POL/USDT, mengikuti [pengumuman pergantian MATIC ke POL Binance](https://www.binance.com/en/support/announcement/detail/619c4929fc3f4a0d9df7f9ae1d4519a5).
   Referensi MATIC lama tidak diubah menjadi POL diam-diam; histori/order lama tidak dimigrasikan.
 - **Market populer lainnya** menyediakan 12 tombol akses cepat. Sumber harga

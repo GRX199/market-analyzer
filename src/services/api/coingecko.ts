@@ -30,6 +30,13 @@ const SYMBOL_TO_COINGECKO_ID: Record<string, string> = {
   'NEAR/USDT': 'near',
   'UNI/USDT': 'uniswap',
   'AAVE/USDT': 'aave',
+  'ATOM/USDT': 'cosmos',
+  'ETC/USDT': 'ethereum-classic',
+  'XLM/USDT': 'stellar',
+  'FIL/USDT': 'filecoin',
+  'ARB/USDT': 'arbitrum',
+  'OP/USDT': 'optimism',
+  'INJ/USDT': 'injective-protocol',
 };
 
 const COINGECKO_ID_TO_SYMBOL: Record<string, string> = Object.fromEntries(
