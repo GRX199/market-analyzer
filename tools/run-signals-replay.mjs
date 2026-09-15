@@ -9,7 +9,7 @@ import { replayAdvancedSignals, validateReplayDataset } from './signals-replay-c
 const mode = process.argv[2];
 if (!['--mt5', '--input'].includes(mode) || mode === '--input' && !process.argv[3]) {
   console.log('Usage: node tools/run-signals-replay.mjs --mt5 | --input dataset.json');
-  console.log('Read-only retrospective Signals v3 audit. Writes exclusive timestamped files under local-reports/ (ignored Git). Never places orders.');
+  console.log('Read-only retrospective audit of the current Signals model. Writes exclusive timestamped files under local-reports/ (ignored Git). Never places orders.');
 } else {
   const policyText = readFileSync(new URL('./signals-replay-policy.json', import.meta.url), 'utf8');
   const policy = JSON.parse(policyText);

@@ -1,8 +1,8 @@
 # Signals Advanced
 
-Fitur analisis referensi Forex, logam dan Crypto di `/signals`. Model `confluence-v3-source-aware` ini terpisah dari strategi serta eksekusi robot MT5. Tidak mengirim order, mengubah lot, membuka akses akun real, atau mengubah batas risiko.
+Fitur analisis Forex, logam dan Crypto di `/signals`. Model `confluence-v4-structure-retest` terpisah dari strategi robot MT5. Mesin analisis tidak mengirim order atau mengubah risiko; tiket order manual yang sudah ada tetap memerlukan tindakan dan konfirmasi pengguna.
 
-Audit 90 hari kini tersedia di [SIGNALS_VALIDATION.md](SIGNALS_VALIDATION.md).
+Audit v3 tersedia di [SIGNALS_VALIDATION.md](SIGNALS_VALIDATION.md), dan protokol serta hasil revisi v4 di [SIGNALS_V4_VALIDATION.md](SIGNALS_V4_VALIDATION.md).
 Hasilnya **belum membuktikan profit konsisten**: sampel sangat kecil, XAU
 validation negatif dan BTC test negatif setelah asumsi biaya. Unit test yang
 lulus atau tampilnya Entry/SL/TP bukan bukti strategi profitable.
@@ -15,7 +15,8 @@ lulus atau tampilnya Entry/SL/TP bukan bukti strategi profitable.
 4. Entry, SL, TP1 dan TP2 terlihat langsung di kartu scanner. Pilih hasil untuk melihat rencana manual, syarat konfirmasi, matriks timeframe, alasan keputusan, struktur dan ATR.
 5. Periksa sumber harga, waktu candle, spread broker dan berita sebelum mempertimbangkan transaksi. Jangan menyalin level futures emas ke spot MT5.
 6. Kartu dengan prioritas tertinggi muncul lebih dahulu: kandidat dengan quote broker yang masih lolos ditempatkan di atas kandidat referensi/spot, lalu skenario tunggu. Urutan ini hanya membantu triase, bukan probabilitas menang.
-7. Pada panel level, pilih `BUY LIMIT`, `BUY STOP`, `SELL LIMIT`, atau `SELL STOP` untuk membuka tiket manual. Tiket memeriksa quote, sisi pending, volume, serta urutan SL/TP lalu menyediakan tombol **Salin template MT5**. Halaman tidak mengirim order; submit tetap dilakukan manual di terminal setelah verifikasi lot, margin, spread, komisi, swap dan slippage.
+7. Pada panel level, pilih `BUY LIMIT`, `BUY STOP`, `SELL LIMIT`, atau `SELL STOP` untuk membuka tiket manual. Tiket memeriksa quote, sisi pending, volume, serta urutan SL/TP. **Salin template MT5** tidak mengirim order. **Kirim order** dapat mengantrekan order dari snapshot broker setelah konfirmasi akun/risiko; worker manual MT5 yang sesuai harus berjalan dan tetap memvalidasi ulang. Reference/spot tidak dapat dikirim langsung.
+8. Panel **Kualitas pemicu entry** menampilkan level yang diuji, proporsi body, posisi close searah, dan jarak EMA20. Pada rencana yang memiliki penghalang, harga serta timeframe penghalang TP juga ditampilkan. Angka ini bukti aturan harga, bukan probabilitas profit.
 
 Pemindaian mencakup katalog Forex/Crypto yang sudah ada, maksimal enam instrumen per halaman. XAU, BTC, EUR, ETH, GBP dan SOL diprioritaskan di halaman pertama. Pilih halaman berikutnya untuk instrumen lain; hasil tidak mengklaim memindai seluruh market sekaligus. Scanner klasik tetap tersedia untuk kemampuan lama termasuk saham. API klasik `/api/signals` dan pemakainya tidak diganti.
 
@@ -67,16 +68,16 @@ Default horizon sekarang **Intraday (M15/H1/H4)**. Swing tetap dapat dipilih.
 - **Kandidat terkonfirmasi**: aturan ketat sebelumnya tetap berlaku. Level dihitung dari close final dan struktur; bukan harga bid/ask terkini atau instruksi order.
 - **Kandidat broker yang lolos quote**: pada sumber MT5, kartu hanya menampilkan Entry/SL/TP jika bid/ask snapshot masih segar, belum menembus perlindungan, dan R:R pada sisi quote masih minimal 1,5. Ringkasan memisahkan jumlah kandidat yang lolos pemeriksaan ini dari kandidat yang tertahan quote. Jika tertahan, level lama sengaja disembunyikan—muat ulang dan jangan mengejar harga lama.
 - **Kandidat non-broker**: level tetap bersifat referensi. Crypto Binance Spot USDT dan reference/Yahoo harus dicocokkan ulang dengan bid/ask broker Anda; angka tersebut tidak memperoleh pemeriksaan quote MT5.
-- **Tiket pending manual**: tombol order pada kartu adalah pembuat template, bukan endpoint eksekusi. Untuk BUY LIMIT/SELL LIMIT/BUY STOP/SELL STOP, quote broker wajib diisi dan entry harus berada pada sisi yang benar; SL/TP harus memenuhi geometri arah. Skenario conditional juga membutuhkan acknowledgement dan tetap harus menunggu candle konfirmasi.
+- **Tiket pending manual**: tersedia pilihan salin template atau kirim ke worker melalui `/api/trades/direct`. Quote broker wajib diisi dan entry harus berada pada sisi yang benar; SL/TP harus memenuhi geometri arah. Skenario conditional membutuhkan acknowledgement dan tetap harus menunggu candle konfirmasi + scan ulang, bukan otomatis menjadi kandidat.
 - **BUY/SELL bersyarat — belum aktif**: ketika data tiga timeframe valid/fresh tetapi kandidat belum lolos, tampilkan level breakout yang bisa dipantau. Dua arah adalah alternatif, bukan dua order sekaligus. Konflik timeframe tidak diubah menjadi kandidat.
 - Pemicu berada pada batas channel 20 bar dan pivot terdekat: BUY di atas maksimum resistance/channel/close, SELL di bawah minimum support/channel/close. Entry indikatif memakai buffer 0,1 ATR. Entry yang berjarak lebih dari 3 ATR dari close tidak ditampilkan.
-- SL skenario bersyarat berjarak 1,5 ATR; TP1 2R dan TP2 3R adalah **proyeksi aritmetis**, bukan target support/resistance yang sudah tervalidasi. Struktur setelah breakout belum dipetakan. Angka ini bukan peningkatan profitabilitas yang telah dibuktikan.
+- SL skenario bersyarat minimal 1,5 ATR di luar batas breakout. TP1 maksimal 2R, dibatasi pivot terdekat **setelah entry** dari ketiga timeframe; skenario dengan ruang kurang dari 1,5R tidak ditampilkan. TP2 3R hanya tersedia bila tidak melewati penghalang. Target tetap proyeksi; pemetaan terbatas pada jendela histori, bukan pengetahuan struktur masa depan.
 - Tunggu candle timeframe pemicu selesai melewati batas, kemudian **pindai ulang** untuk memeriksa tren timeframe lebih tinggi, momentum dan ruang target. Jangan menggunakan proyeksi lama langsung sebagai order saat harga menyentuh pemicu.
 - Rencana batal jika SL terlewati sebelum konfirmasi, feed basi, atau biaya/kondisi berita membuat risiko tidak layak. Data invalid/stale tidak menghasilkan skenario; UI juga menyembunyikannya saat kedaluwarsa.
 
-Halaman tidak lagi kosong hanya karena pemicu kandidat belum muncul, tetapi tetap tidak mengarang level ketika data gagal. Khusus XAU, semua angka tetap referensi **GC=F**, bukan level spot MT5 yang bisa langsung disalin.
+Halaman menyediakan rencana bersyarat jika pemicu belum muncul tetapi data dan ruang target memadai. XAU pada mode market/MT5 memakai data broker dari bridge; **GC=F** hanya pada mode reference dan tidak boleh disalin sebagai level MT5.
 
-Pemeriksaan feed langsung 8 September 2026: BTC intraday memiliki tiga timeframe fresh dan satu rencana bersyarat (bukan kandidat). GC=F masih diblokir: data intraday melompat dari 4 September malam UTC ke 8 September 04:00 UTC. Ini tidak diasumsikan sepenuhnya sebagai libur; rentang timestamp gap sekarang ditampilkan agar penyebab tidak adanya level jelas. Hasil pemindaian berikutnya dapat berubah. Dukungan feed spot MT5 yang kontinu belum ditambahkan pada perubahan ini.
+Catatan historis 8 September 2026: feed GC=F pernah diblokir akibat gap yang belum terverifikasi. Bridge MT5 kemudian ditambahkan; catatan tersebut bukan status feed saat ini. Gangguan data tidak diperbaiki dengan mengganti harga broker menjadi harga proxy.
 
 ## Aturan kandidat yang dapat diaudit
 
@@ -86,17 +87,19 @@ Pemeriksaan feed langsung 8 September 2026: BTC intraday memiliki tiga timeframe
 - Interval 50 bar terakhir diperiksa. Crypto diasumsikan kontinu. Forex memakai perkiraan weekend feed Yahoo bertanggal London; GC/SI memakai perkiraan sesi reguler New York, termasuk jeda pukul 17–18 dan weekend. Perbedaan durasi daily hanya diizinkan bila perubahan offset zona waktu menjelaskannya, bukan toleransi bebas satu jam. Ini **bukan kalender bursa lengkap**: libur, jeda khusus, sesi eksotik dan outage tidak dapat selalu dibedakan. Gap tak dikenal memblokir setup. Gap lebih lama tetap menjadi keterbatasan data pemanasan indikator.
 - Masa berlaku: akhir candle terakhir + satu durasi timeframe + toleransi maksimum lima menit. Tidak diperpanjang otomatis ketika pasar tutup atau cache dibaca. Status basi bisa muncul setelah weekend sampai data final baru tersedia.
 - Bias bullish: EMA50 di atas EMA200, EMA50 naik dibanding empat bar sebelumnya, close di atas EMA50. Bearish menggunakan kondisi cermin.
-- Tren harus searah pada tiga timeframe. ADX Wilder periode 14 pada timeframe pemicu minimal 25. ADX tidak menentukan arah; DI ditampilkan terpisah. Ambang ADX merupakan konvensi analisis, bukan bukti profitabilitas. [Penjelasan Fidelity tentang ADX](https://www.fidelity.com/viewpoints/active-investor/average-directional-index-ADX).
+- Tren harus searah pada tiga timeframe. ADX Wilder periode 14 pada timeframe pemicu minimal 25; +DI > −DI untuk BUY, −DI > +DI untuk SELL. Ambang ini aturan heuristik, bukan bukti profitabilitas.
 - Momentum: RSI Wilder periode 14 di antara 50–75 untuk buy, 25–50 untuk sell. Nilai datar=50, kenaikan satu arah=100, penurunan satu arah=0.
-- Pemicu: close breakout channel 20 bar sebelumnya, atau RSI melintasi 45 ke atas /55 ke bawah dengan warna candle mendukung. Recovery tetap harus memenuhi filter momentum di atas pada candle yang sama.
+- Breakout: close melewati channel 20 bar sebelumnya + buffer 0,1 ATR, body searah ≥35% rentang, posisi close searah ≥65% rentang.
+- Retest: sentuhan pertama setelah breakout berkualitas dalam enam candle final; toleransi sentuhan 0,25 ATR. Candle antara breakout dan retest tidak boleh menyentuh zona atau close kembali ke dalam. Candle retest harus kuat dan close melewati buffer; retest dalam/berulang bukan konfirmasi baru.
+- Recovery: RSI melintasi 45 ke atas /55 ke bawah dalam tiga candle terakhir, lalu candle kuat menembus high/low candle sebelumnya dan melewati EMA20 searah tren. RSI pada keputusan tetap harus memenuhi filter momentum 50–75/25–50. Crossing saja tidak cukup.
 - Tolak mengejar candle apabila jarak close terhadap EMA20 atau rentang candle lebih dari 2,5 ATR.
 - Pivot support/resistance hanya terkonfirmasi setelah dua candle di kanan selesai. Level terdekat dicari dari jendela 122 bar terakhir dengan masing-masing dua bar konfirmasi di kiri dan kanan, tanpa harga masa depan.
 
 ### Skor dan level
 
-Kesepakatan aturan = tren lintas timeframe 40 + momentum 25 + pemicu 35. BUY dan SELL menggunakan bobot yang sama. Skor 100 **bukan peluang menang 100%**. Ketiga kelompok juga bukan bukti statistik independen; semuanya berasal dari seri harga yang saling berkaitan. ADX, kualitas data, ekstensi dan ruang target adalah filter terpisah: skor tinggi belum tentu kandidat.
+Kesepakatan aturan = tren lintas timeframe 25 + RSI/DI 20 + konfirmasi entry 25 + ruang target 20 + kekuatan tren/jarak entry 10. BUY dan SELL menggunakan bobot yang sama. Skor 100 **bukan peluang menang 100%**; kelompok tersebut berasal dari data harga yang saling berkaitan. Kualitas/expiry data dan pemeriksaan quote broker tetap berlaku terpisah.
 
-Entry referensi memakai close final, bukan bid/ask yang bisa dieksekusi. SL minimal 1,5 ATR atau lebih jauh di luar pivot dengan buffer 0,2 ATR; skenario ditolak jika jarak SL lebih dari 3 ATR. Target pertama maksimal 2R, dibatasi penghalang pivot terdekat dengan buffer 0,1 ATR. Jika ruang kurang dari 1,5R, tidak ada skenario entry. Target lanjutan 3R hanya ditampilkan bila masih sebelum penghalang. R:R adalah **kotor**, belum memperhitungkan biaya, spread, slippage, lot atau margin.
+Entry kandidat memakai close final, bukan bid/ask yang bisa dieksekusi. SL minimal 1,5 ATR atau lebih jauh di luar low/high candle breakout, zona retest, atau empat candle recovery dengan buffer 0,2 ATR; jarak SL >3 ATR ditolak. Target pertama maksimal 2R, dibatasi pivot terdekat di depan entry pada **ketiga timeframe**, dengan buffer 0,1 ATR timeframe entry. Jika ruang kurang dari 1,5R, tidak ada rencana kandidat. Target lanjutan 3R hanya ditampilkan bila masih sebelum penghalang. R:R ini **kotor**; panel quote broker terpisah membandingkan entry Ask/Bid tanpa menggeser SL/TP, tetapi belum menghitung komisi, swap, slippage, lot atau margin.
 
 Tidak ada asumsi volume spot Forex terpusat. Volume relatif hanya ditampilkan jika tersedia dan positif, tidak menambah skor arah. ATR adalah ukuran volatilitas, bukan arah atau jaminan level stop akan terisi tepat. [Panduan ATR Fidelity](https://www.fidelity.com/learning-center/trading-investing/technical-analysis/technical-indicator-guide/atr).
 

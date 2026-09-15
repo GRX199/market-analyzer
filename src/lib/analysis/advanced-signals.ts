@@ -4,7 +4,7 @@ export type SignalHorizon = 'intraday' | 'swing';
 export type AnalysisTimeframe = '15m' | '1H' | '4H' | '1D';
 export type SignalBias = 'bullish' | 'bearish' | 'neutral';
 export type SetupStatus = 'candidate' | 'wait' | 'conflict' | 'stale' | 'unavailable';
-export const SIGNAL_MODEL_VERSION = 'confluence-v3-source-aware';
+export const SIGNAL_MODEL_VERSION = 'confluence-v4-structure-retest';
 export const HORIZON_FRAMES: Record<SignalHorizon, AnalysisTimeframe[]> = {
   intraday: ['15m', '1H', '4H'], swing: ['1H', '4H', '1D'],
 };
@@ -12,6 +12,7 @@ export const FRAME_SECONDS: Record<AnalysisTimeframe, number> = { '15m': 900, '1
 
 export type SignalSession = 'continuous' | 'forex' | 'metal-futures' | 'exness-metals' | 'exness-forex';
 export interface FrameInput { timeframe: AnalysisTimeframe; candles: OHLCV[]; error?: string; session?: SignalSession }
+export interface ConfirmedLevel { price: number; kind: 'high' | 'low'; confirmedAt: string }
 export interface FrameAnalysis {
   timeframe: AnalysisTimeframe; quality: 'fresh' | 'stale' | 'unavailable';
   lastClosedAt: string | null; expiresAt: string | null; bars: number; excluded: number;
@@ -20,12 +21,15 @@ export interface FrameAnalysis {
   rsi: number | null; previousRsi: number | null; atr: number | null; atrPercent: number | null;
   adx: number | null; plusDI: number | null; minusDI: number | null;
   support: number | null; resistance: number | null; channelHigh: number | null; channelLow: number | null;
-  trigger: 'breakout' | 'recovery' | null; extensionAtr: number | null; rangeAtr: number | null;
+  trigger: 'breakout' | 'retest' | 'recovery' | null; extensionAtr: number | null; rangeAtr: number | null;
+  structureLevels?: ConfirmedLevel[]; triggerLevel?: number | null; triggerStop?: number | null;
+  bodyFraction?: number | null; directionalClose?: number | null; triggerNotes?: string[];
   relativeVolume: number | null; notes: string[];
 }
 export interface ReferencePlan {
   side: 'buy' | 'sell'; entry: number; stopLoss: number; takeProfit: number; secondTarget: number | null;
   grossRiskReward: number; stopDistanceAtr: number; obstacle: number | null; basis: string;
+  obstacleTimeframe?: AnalysisTimeframe | null;
 }
 export interface ManualScenario extends ReferencePlan {
   kind: 'conditional-breakout'; triggerPrice: number; distanceAtr: number;
@@ -117,16 +121,74 @@ export function signalWilder(candles: OHLCV[], period = 14) {
   return { atr: tr / period, adx, plusDI, minusDI };
 }
 
-function structure(candles: Candle[], entry: number) {
-  const rows = candles.slice(-122), levels: number[] = [];
+function structure(candles: Candle[], entry: number, seconds: number) {
+  const rows = candles.slice(-122), levels: ConfirmedLevel[] = [];
   // A pivot is usable only after its two right-hand confirmation bars closed.
   for (let i = 2; i < rows.length - 2; i++) {
     const neighbors = [rows[i - 2], rows[i - 1], rows[i + 1], rows[i + 2]];
-    if (neighbors.every(row => rows[i].high > row.high)) levels.push(rows[i].high);
-    if (neighbors.every(row => rows[i].low < row.low)) levels.push(rows[i].low);
+    const confirmedAt = new Date((rows[i + 2].time + seconds) * 1000).toISOString();
+    if (neighbors.every(row => rows[i].high > row.high)) levels.push({ price: rows[i].high, kind: 'high', confirmedAt });
+    if (neighbors.every(row => rows[i].low < row.low)) levels.push({ price: rows[i].low, kind: 'low', confirmedAt });
   }
-  return { support: levels.filter(level => level < entry).sort((a, b) => b - a)[0] ?? null,
-    resistance: levels.filter(level => level > entry).sort((a, b) => a - b)[0] ?? null };
+  return { structureLevels: levels,
+    support: levels.map(level => level.price).filter(level => level < entry).sort((a, b) => b - a)[0] ?? null,
+    resistance: levels.map(level => level.price).filter(level => level > entry).sort((a, b) => a - b)[0] ?? null };
+}
+
+/** Only closed rows supplied by analyzeSignalFrame; no forming/future data. */
+function entryTrigger(rows: Candle[], frame: FrameAnalysis) {
+  const last = rows.at(-1)!, previous = rows.at(-2)!, atr = frame.atr!;
+  const buy = frame.bias === 'bullish', direction = buy ? 1 : -1;
+  const range = last.high - last.low;
+  frame.bodyFraction = range > 0 ? Math.abs(last.close - last.open) / range : 0;
+  frame.directionalClose = frame.bias === 'neutral' ? null : range > 0 ? (buy ? last.close - last.low : last.high - last.close) / range : 0;
+  frame.triggerNotes = []; frame.triggerLevel = null; frame.triggerStop = null;
+  if (frame.bias === 'neutral') return;
+  const strongCandle = direction * (last.close - last.open) > 0 && frame.bodyFraction >= .35 && frame.directionalClose! >= .65;
+  const channel = buy ? frame.channelHigh! : frame.channelLow!;
+  if (direction * (last.close - channel) > 0) {
+    frame.triggerLevel = channel;
+    if (strongCandle && direction * (last.close - channel) >= .1 * atr) {
+      frame.trigger = 'breakout'; frame.triggerStop = buy ? Math.min(last.low, channel) : Math.max(last.high, channel);
+    }
+    else frame.triggerNotes.push('Breakout belum kuat: perlu close melewati buffer 0,1 ATR, body ≥35%, dan close di 35% ujung candle searah.');
+    return;
+  }
+  // First retest only: an intervening touch, close back inside, or expired
+  // breakout cannot repeatedly supply a new trigger on the same level.
+  for (let i = rows.length - 2; i >= rows.length - 7; i--) {
+    const row = rows[i], prior = rows.slice(i - 20, i);
+    const level = buy ? Math.max(...prior.map(r => r.high)) : Math.min(...prior.map(r => r.low));
+    const width = row.high - row.low;
+    const closeLocation = width > 0 ? (buy ? row.close - row.low : row.high - row.close) / width : 0;
+    if (width <= 0 || direction * (row.close - level) <= 0 || direction * (row.close - row.open) <= 0
+      || Math.abs(row.close - row.open) / width < .35 || closeLocation < .65) continue;
+    const breakoutAtr = signalWilder(rows.slice(0, i + 1))!.atr;
+    if (direction * (row.close - level) < .1 * breakoutAtr) continue;
+    const held = rows.slice(i + 1, -1).every(r => direction * (r.close - level) > 0
+      && (buy ? r.low > level + .25 * atr : r.high < level - .25 * atr));
+    const touched = buy ? last.low <= level + .25 * atr && last.low >= level - .25 * atr
+      : last.high >= level - .25 * atr && last.high <= level + .25 * atr;
+    if (!held || !touched || !strongCandle || direction * (last.close - level) < .1 * atr) continue;
+    frame.trigger = 'retest'; frame.triggerLevel = level;
+    frame.triggerStop = buy ? Math.min(last.low, level) : Math.max(last.high, level);
+    frame.triggerNotes.push(`Retest pertama pada breakout ${rows.length - 1 - i} candle lalu; level bertahan pada candle final.`);
+    return;
+  }
+  const closes = rows.map(row => row.close);
+  const recovery = [1, 2, 3].some(offset => {
+    const end = closes.length - offset + 1;
+    const before = signalRSI(closes.slice(0, end - 1))!, after = signalRSI(closes.slice(0, end))!;
+    return buy ? before <= 45 && after > 45 : before >= 55 && after < 55;
+  });
+  if (recovery) {
+    const priceConfirmed = direction * (last.close - (buy ? previous.high : previous.low)) > 0
+      && direction * (last.close - frame.ema20!) > 0;
+    if (strongCandle && priceConfirmed) {
+      frame.trigger = 'recovery'; frame.triggerLevel = buy ? previous.high : previous.low;
+      frame.triggerStop = buy ? Math.min(...rows.slice(-4).map(r => r.low)) : Math.max(...rows.slice(-4).map(r => r.high));
+    } else frame.triggerNotes.push('RSI pulih dalam 3 candle; tunggu candle searah menembus candle sebelumnya dan kembali melewati EMA20.');
+  }
 }
 
 const sessionClocks = {
@@ -235,7 +297,7 @@ export function analyzeSignalFrame(input: FrameInput, now = Date.now()): FrameAn
   const closes = rows.map(row => row.close), ema20 = signalEMA(closes, 20), ema50 = signalEMA(closes, 50), ema200 = signalEMA(closes, 200);
   const wilder = signalWilder(rows)!;
   Object.assign(result, wilder, { ema20: ema20.at(-1)!, ema50: ema50.at(-1)!, ema200: ema200.at(-1)!,
-    rsi: signalRSI(closes), previousRsi: signalRSI(closes.slice(0, -1)), ...structure(rows, last.close) });
+    rsi: signalRSI(closes), previousRsi: signalRSI(closes.slice(0, -1)), ...structure(rows, last.close, seconds) });
   if (!(wilder.atr > 0)) { result.quality = 'unavailable'; result.notes.push('Volatilitas tidak cukup untuk menghitung risiko.'); return result; }
   result.atrPercent = wilder.atr / last.close * 100;
   result.bias = result.ema50! > result.ema200! && result.ema50! > ema50.at(-5)! && last.close > result.ema50!
@@ -243,10 +305,7 @@ export function analyzeSignalFrame(input: FrameInput, now = Date.now()): FrameAn
   result.regime = wilder.adx >= 25 ? 'trend' : wilder.adx < 20 ? 'range' : 'transition';
   const prior = rows.slice(-21, -1);
   result.channelHigh = Math.max(...prior.map(row => row.high)); result.channelLow = Math.min(...prior.map(row => row.low));
-  const buy = result.bias === 'bullish', sell = result.bias === 'bearish';
-  result.trigger = (buy && last.close > result.channelHigh) || (sell && last.close < result.channelLow) ? 'breakout'
-    : (buy && result.previousRsi! <= 45 && result.rsi! > 45 && last.close > last.open)
-      || (sell && result.previousRsi! >= 55 && result.rsi! < 55 && last.close < last.open) ? 'recovery' : null;
+  entryTrigger(rows, result);
   result.extensionAtr = Math.abs(last.close - result.ema20!) / wilder.atr;
   result.rangeAtr = (last.high - last.low) / wilder.atr;
   const volumes = rows.slice(-21, -1).map(row => row.volume);
@@ -254,25 +313,33 @@ export function analyzeSignalFrame(input: FrameInput, now = Date.now()): FrameAn
   return result;
 }
 
-export function referenceSignalPlan(frame: FrameAnalysis, side: 'buy' | 'sell'): { plan: ReferencePlan | null; reason: string | null } {
+function nearestObstacle(frames: FrameAnalysis[], entry: number, side: 'buy' | 'sell') {
+  const direction = side === 'buy' ? 1 : -1;
+  const levels = frames.flatMap(frame => (frame.structureLevels?.map(level => level.price) ?? [frame.support, frame.resistance])
+    .filter((price): price is number => price !== null && finitePositive(price) && direction * (price - entry) > 0)
+    .map(price => ({ price, timeframe: frame.timeframe })));
+  return levels.sort((a, b) => direction * (a.price - b.price))[0] ?? null;
+}
+
+export function referenceSignalPlan(frame: FrameAnalysis, side: 'buy' | 'sell', frames: FrameAnalysis[] = [frame]): { plan: ReferencePlan | null; reason: string | null } {
   const entry = frame.close!, atr = frame.atr!;
   if (!finitePositive(entry) || !finitePositive(atr)) return { plan: null, reason: 'Harga/ATR tidak valid.' };
   const buy = side === 'buy';
-  const structuralStop = buy ? frame.support : frame.resistance;
+  const structuralStop = frame.triggerStop ?? (buy ? frame.support : frame.resistance);
   const stop = buy ? Math.min(entry - 1.5 * atr, structuralStop === null ? Infinity : structuralStop - .2 * atr)
     : Math.max(entry + 1.5 * atr, structuralStop === null ? -Infinity : structuralStop + .2 * atr);
-  const risk = Math.abs(entry - stop), obstacle = buy ? frame.resistance : frame.support;
+  const risk = Math.abs(entry - stop), barrier = nearestObstacle(frames, entry, side), obstacle = barrier?.price ?? null;
   if (!finitePositive(stop) || risk > 3 * atr || risk <= 0) return { plan: null, reason: 'Invalidasi struktur terlalu jauh (>3 ATR) atau level tidak valid.' };
   const defaultTarget = entry + (buy ? 1 : -1) * 2 * risk;
   // Respect the first known obstacle; never skip it to manufacture a high RR.
   const target = obstacle === null ? defaultTarget : buy ? Math.min(defaultTarget, obstacle - .1 * atr) : Math.max(defaultTarget, obstacle + .1 * atr);
   const reward = buy ? target - entry : entry - target;
-  if (!finitePositive(target) || reward / risk < 1.5 - 1e-8) return { plan: null, reason: 'Ruang ke support/resistance terdekat kurang dari 1,5R; tunggu struktur lain.' };
+  if (!finitePositive(target) || reward / risk < 1.5 - 1e-8) return { plan: null, reason: `Ruang ke support/resistance ${barrier?.timeframe ?? frame.timeframe} terdekat kurang dari 1,5R; tunggu struktur lain.` };
   const second = entry + (buy ? 1 : -1) * 3 * risk;
   return { plan: { side, entry, stopLoss: stop, takeProfit: target,
     secondTarget: finitePositive(second) && (obstacle === null || (buy ? second < obstacle : second > obstacle)) ? second : null,
-    grossRiskReward: reward / risk, stopDistanceAtr: risk / atr, obstacle,
-    basis: obstacle === null ? 'Target skenario 2R/3R; belum ada penghalang pivot terkonfirmasi.' : 'Target dibatasi penghalang pivot terdekat.' }, reason: null };
+    grossRiskReward: reward / risk, stopDistanceAtr: risk / atr, obstacle, obstacleTimeframe: barrier?.timeframe ?? null,
+    basis: obstacle === null ? 'Target proyeksi 2R/3R; tidak ada penghalang pivot terkonfirmasi pada jendela tiga timeframe yang diperiksa.' : `Target dibatasi penghalang pivot terdekat pada ${barrier!.timeframe}; struktur tiga timeframe diperiksa.` }, reason: null };
 }
 
 /** Watch levels, never an actionable signal. A future breakout needs a fresh analysis. */
@@ -290,13 +357,12 @@ export function manualSignalScenarios(frames: FrameAnalysis[]): ManualScenario[]
     const direction = buy ? 1 : -1, entry = boundary + direction * .1 * atr;
     const distanceAtr = Math.abs(entry - close) / atr;
     if (distanceAtr > 3) return []; // Not a near-market watch opportunity.
-    const risk = 1.5 * atr, stopLoss = entry - direction * risk;
-    const takeProfit = entry + direction * 2 * risk, secondTarget = entry + direction * 3 * risk;
-    if (![entry, stopLoss, takeProfit, secondTarget].every(finitePositive)) return [];
-    return [{ kind: 'conditional-breakout' as const, side, entry, triggerPrice: boundary,
-      stopLoss, takeProfit, secondTarget, grossRiskReward: 2, stopDistanceAtr: 1.5,
-      obstacle: null, distanceAtr,
-      basis: 'Entry indikatif setelah breakout + buffer 0,1 ATR; SL 1,5 ATR, TP1 2R, TP2 3R adalah proyeksi, bukan target struktur terkonfirmasi. Struktur berikutnya belum dipetakan.',
+    // Re-map ALL confirmed pivots at the proposed entry, not only the pivot
+    // nearest the old close. This also checks H1/H4 (or H4/D1) obstacles.
+    const evaluated = referenceSignalPlan({ ...base, close: entry, triggerStop: boundary }, side, frames);
+    if (!evaluated.plan) return [];
+    return [{ ...evaluated.plan, kind: 'conditional-breakout' as const, triggerPrice: boundary, distanceAtr,
+      basis: `Entry indikatif setelah breakout + buffer 0,1 ATR; proyeksi belum aktif. ${evaluated.plan.basis}`,
       confirmation: `Tunggu candle ${base.timeframe} selesai ${buy ? 'di atas' : 'di bawah'} level pemicu; lalu pindai ulang. Tren ${frames.slice(1).map(frame => frame.timeframe).join('/')} harus mendukung ${side.toUpperCase()}, momentum dan ruang target harus diperiksa lagi.`,
       invalidation: 'Batal jika harga melewati SL sebelum konfirmasi, data kedaluwarsa, atau spread/berita membuat risiko tidak layak. Jangan memasang order otomatis dari skenario ini.',
     }];
@@ -312,12 +378,9 @@ export function analyzeAdvancedSignal(meta: Pick<AdvancedSignal, 'symbol' | 'dis
   const base = frames[0], bias = base.bias, buy = bias === 'bullish';
   const aligned = bias !== 'neutral' && frames.every(row => row.bias === bias);
   const conflict = bias !== 'neutral' && frames.slice(1).some(row => row.bias !== 'neutral' && row.bias !== bias);
-  const momentum = bias !== 'neutral' && base.rsi !== null && (buy ? base.rsi > 50 && base.rsi < 75 : base.rsi < 50 && base.rsi > 25);
-  const groups = [
-    { label: 'Tren lintas timeframe', points: aligned ? 40 : 0, maximum: 40, detail: aligned ? 'Tiga timeframe searah.' : 'Belum searah pada tiga timeframe.' },
-    { label: 'Momentum RSI', points: momentum ? 25 : 0, maximum: 25, detail: momentum ? 'Momentum mendukung tanpa RSI ekstrem.' : 'Momentum belum mendukung / ekstrem.' },
-    { label: 'Pemicu struktur', points: base.trigger ? 35 : 0, maximum: 35, detail: base.trigger === 'breakout' ? 'Close menembus channel 20 bar.' : base.trigger === 'recovery' ? 'RSI pulih dari pullback.' : 'Belum ada breakout atau recovery baru.' },
-  ];
+  const rsiConfirmed = bias !== 'neutral' && base.rsi !== null && (buy ? base.rsi > 50 && base.rsi < 75 : base.rsi < 50 && base.rsi > 25);
+  const diConfirmed = base.plusDI !== null && base.minusDI !== null && (buy ? base.plusDI > base.minusDI : base.minusDI > base.plusDI);
+  const momentum = rsiConfirmed && diConfirmed;
   const reasons: string[] = [], cautions = [meta.source.note, 'Spread, slippage, biaya dan jadwal berita berdampak tinggi belum diverifikasi; cek broker/kalender.',
     'Model heuristik analisis, bukan strategi robot MT5, probabilitas profit, atau perintah order.'];
   if (meta.marketType === 'forex') cautions.push('Volume provider bukan volume spot Forex terpusat; tidak dipakai sebagai suara BUY/SELL.');
@@ -328,21 +391,30 @@ export function analyzeAdvancedSignal(meta: Pick<AdvancedSignal, 'symbol' | 'dis
     if (conflict) reasons.push('Tren timeframe lebih tinggi berlawanan; jangan membaca momentum lokal sebagai konfirmasi.');
     if (!aligned) reasons.push('Tunggu bias tiga timeframe searah.');
     if (base.regime !== 'trend') reasons.push('ADX belum mencapai 25; model trend-following menunggu.');
-    if (!momentum) reasons.push('RSI belum mendukung arah atau sudah ekstrem.');
-    if (!base.trigger) reasons.push('Tunggu close breakout 20 bar atau RSI recovery 45/55.');
+    if (!rsiConfirmed) reasons.push('RSI belum melewati 50 searah tren atau sudah ekstrem; tunggu momentum yang mendukung.');
+    if (!diConfirmed) reasons.push('Arah +DI/−DI belum mendukung bias harga.');
+    if (!base.trigger) reasons.push(...(base.triggerNotes?.length ? base.triggerNotes : ['Tunggu breakout 20 bar yang kuat, retest pertama, atau recovery RSI + konfirmasi harga.']));
+    else reasons.push(...base.triggerNotes ?? []);
   }
   const extended = (base.extensionAtr ?? Infinity) > 2.5 || (base.rangeAtr ?? Infinity) > 2.5;
   if (extended && !unavailable) reasons.push('Candle terlalu jauh dari EMA20 atau rentangnya >2,5 ATR; jangan mengejar gerakan.');
+  const evaluated = !unavailable && !stale && bias !== 'neutral' ? referenceSignalPlan(base, buy ? 'buy' : 'sell', frames) : { plan: null, reason: null };
+  if (evaluated.reason) reasons.push(evaluated.reason);
   let plan: ReferencePlan | null = null;
   if (!unavailable && !stale && aligned && momentum && base.regime === 'trend' && base.trigger && !extended) {
-    const evaluated = referenceSignalPlan(base, buy ? 'buy' : 'sell');
     plan = evaluated.plan;
     if (plan) { status = 'candidate'; reasons.push('Aturan setup terpenuhi pada candle final; validasi harga dan risiko broker tetap diperlukan.'); }
-    else if (evaluated.reason) reasons.push(evaluated.reason);
   }
+  const groups = [
+    { label: 'Tren lintas timeframe', points: aligned ? 25 : 0, maximum: 25, detail: aligned ? 'Tiga timeframe searah.' : 'Belum searah pada tiga timeframe.' },
+    { label: 'Momentum RSI + DI', points: momentum ? 20 : 0, maximum: 20, detail: momentum ? 'RSI dan arah DI mendukung tanpa RSI ekstrem.' : 'RSI atau arah DI belum mendukung.' },
+    { label: 'Konfirmasi entry', points: base.trigger ? 25 : 0, maximum: 25, detail: base.trigger === 'breakout' ? 'Breakout dengan buffer dan candle kuat.' : base.trigger === 'retest' ? 'Retest pertama bertahan setelah breakout.' : base.trigger === 'recovery' ? 'RSI pulih, harga menembus candle sebelumnya dan EMA20.' : 'Belum ada pemicu harga terkonfirmasi.' },
+    { label: 'Ruang target lintas timeframe', points: evaluated.plan ? 20 : 0, maximum: 20, detail: evaluated.plan ? 'Minimal 1,5R kotor sebelum penghalang terdekat; biaya belum dihitung.' : evaluated.reason ?? 'Belum dapat menghitung rencana dari data ini.' },
+    { label: 'Kekuatan tren & jarak entry', points: base.regime === 'trend' && !extended ? 10 : 0, maximum: 10, detail: base.regime === 'trend' && !extended ? 'ADX ≥25; candle dan jarak EMA20 tidak melebihi 2,5 ATR.' : 'Tren belum kuat atau harga terlalu jauh; jangan mengejar.' },
+  ];
   const expiresAt = frames.every(row => row.expiresAt) ? new Date(Math.min(...frames.map(row => Date.parse(row.expiresAt!)))).toISOString() : null;
   return { ...meta, id: `${meta.symbol}:${horizon}:${base.lastClosedAt ?? 'none'}`, horizon, modelVersion: SIGNAL_MODEL_VERSION,
     generatedAt: new Date(validClock(now) ? now : 0).toISOString(), expiresAt, bias, status, conviction: unavailable || stale ? null : groups.reduce((sum, group) => sum + group.points, 0),
-    setup: base.trigger === 'breakout' ? 'Breakout 20 bar' : base.trigger === 'recovery' ? 'Pullback recovery' : 'Menunggu pemicu',
+    setup: base.trigger === 'breakout' ? 'Breakout terkonfirmasi' : base.trigger === 'retest' ? 'Breakout retest' : base.trigger === 'recovery' ? 'Pullback recovery terkonfirmasi' : 'Menunggu pemicu',
     frames, reasons, cautions, plan, groups, manualScenarios: unavailable || stale || plan ? [] : manualSignalScenarios(frames) };
 }

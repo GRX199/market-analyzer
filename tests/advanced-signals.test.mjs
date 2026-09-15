@@ -19,7 +19,7 @@ function candles(timeframe = '1H', count = 400, end = now) {
 }
 function breakout(timeframe = '1H') {
   const rows = candles(timeframe);
-  rows.at(-1).close += .6; rows.at(-1).high = rows.at(-1).close + .05;
+  rows.at(-1).close += .65; rows.at(-1).high = rows.at(-1).close + .05;
   return rows;
 }
 const mirror = rows => rows.map(r => ({ ...r, open: 300 - r.open, high: 300 - r.low, low: 300 - r.high, close: 300 - r.close }));
@@ -249,9 +249,10 @@ test('fresh WAIT and conflicting trends expose conditional levels without promot
     assert.match(plan.confirmation, /pindai ulang/);
     assert.match(plan.basis, /proyeksi/);
     assert.ok(plan.distanceAtr <= 3);
-    if (plan.side === 'buy') assert.ok(plan.stopLoss < plan.entry && plan.entry < plan.takeProfit && plan.takeProfit < plan.secondTarget);
-    else assert.ok(plan.stopLoss > plan.entry && plan.entry > plan.takeProfit && plan.takeProfit > plan.secondTarget);
-    closeTo(Math.abs(plan.takeProfit - plan.entry) / Math.abs(plan.entry - plan.stopLoss), 2);
+    if (plan.side === 'buy') assert.ok(plan.stopLoss < plan.entry && plan.entry < plan.takeProfit && (plan.secondTarget === null || plan.takeProfit < plan.secondTarget));
+    else assert.ok(plan.stopLoss > plan.entry && plan.entry > plan.takeProfit && (plan.secondTarget === null || plan.takeProfit > plan.secondTarget));
+    const rr = Math.abs(plan.takeProfit - plan.entry) / Math.abs(plan.entry - plan.stopLoss);
+    closeTo(rr, plan.grossRiskReward); assert.ok(rr >= 1.5 && rr <= 2 + 1e-8);
   }
 });
 
@@ -266,11 +267,12 @@ test('manual scenarios fail closed on stale/missing/invalid feeds and are absent
 
 test('conditional breakout crosses known obstacles, does not imply current confirmation', () => {
   const frames = inputs().map(frame => analyzeSignalFrame(frame, now));
+  for (const frame of frames) Object.assign(frame, { structureLevels: undefined, resistance: null, support: null });
   Object.assign(frames[0], { close: 100, atr: 2, channelHigh: 101, channelLow: 99, resistance: 102, support: 98 });
   const [buy, sell] = manualSignalScenarios(frames);
   closeTo(buy.entry, 102.2); closeTo(sell.entry, 97.8);
   closeTo(buy.stopLoss, 99.2); closeTo(sell.stopLoss, 100.8);
-  assert.match(buy.basis, /belum dipetakan/);
+  assert.match(buy.basis, /tiga timeframe/);
   assert.match(sell.invalidation, /Batal/);
   frames[0].resistance = 110;
   assert.deepEqual(manualSignalScenarios(frames).map(p => p.side), ['sell']);
@@ -288,4 +290,128 @@ test('manual UI shows entry SL TP1 TP2 and blocks expired scenario display', asy
   for (const label of ['Entry referensi', 'Stop Loss', 'Take Profit 1', 'Take Profit 2', 'Bersyarat · belum aktif']) assert.ok(page.includes(label));
   assert.match(page, /status === 'stale' \|\| status === 'unavailable' \? \[\] : row.manualScenarios/);
   assert.match(page, /useState<SignalHorizon>\('intraday'\)/);
+});
+
+test('breakout buffer, candle body and close location reject weak closes symmetrically', () => {
+  for (const sell of [false, true]) for (const weakness of ['buffer', 'body', 'close', 'direction']) {
+    const rows = breakout('15m'), last = rows.at(-1);
+    if (weakness === 'buffer') { last.close -= .05; last.high = last.close + .05; }
+    if (weakness === 'body') last.open = last.close - .01;
+    if (weakness === 'close') last.high = last.close + 1;
+    if (weakness === 'direction') { last.open = last.close + .01; last.high = last.open + .01; }
+    const frame = analyzeSignalFrame({ timeframe: '15m', candles: sell ? mirror(rows) : rows }, now);
+    assert.equal(frame.quality, 'fresh'); assert.equal(frame.trigger, null, `${sell} ${weakness}`);
+    assert.match(frame.triggerNotes.join(' '), /Breakout belum kuat/);
+  }
+});
+
+function retestFixture(intermediate = false) {
+  const rows = candles('15m'), index = rows.length - (intermediate ? 3 : 2);
+  const level = Math.max(...rows.slice(index - 20, index).map(row => row.high));
+  Object.assign(rows[index], { open: level - .2, low: level - .25, close: level + .45, high: level + .5 });
+  if (intermediate) Object.assign(rows[index + 1], { open: level + .45, low: level + .3, close: level + .4, high: level + .5 });
+  Object.assign(rows.at(-1), { open: level + .01, low: level - .03, close: level + .23, high: level + .25 });
+  return { rows, level, index };
+}
+
+test('first breakout retest is causal, directionally symmetric, and anchors SL beyond rejection', () => {
+  for (const sell of [false, true]) {
+    const { rows, level } = retestFixture();
+    const frame = analyzeSignalFrame({ timeframe: '15m', candles: sell ? mirror(rows) : rows }, now);
+    assert.equal(frame.trigger, 'retest'); closeTo(frame.triggerLevel, sell ? 300 - level : level);
+    const plan = referenceSignalPlan(frame, sell ? 'sell' : 'buy').plan;
+    assert.ok(plan); assert.ok(sell ? plan.stopLoss > frame.triggerStop : plan.stopLoss < frame.triggerStop);
+    const active = { ...rows.at(-1), time: now / 1000, high: 200 };
+    assert.deepEqual(analyzeSignalFrame({ timeframe: '15m', candles: sell ? mirror([...rows, active]) : [...rows, active] }, now), frame);
+  }
+});
+
+test('intervening touch or failed breakout cannot supply a repeat retest trigger', () => {
+  for (const sell of [false, true]) for (const failure of ['touch', 'failed-close', 'deep-retest']) {
+    const { rows, level, index } = retestFixture(true);
+    if (failure === 'touch') rows[index + 1].low = level;
+    if (failure === 'failed-close') Object.assign(rows[index + 1], { close: level - .1, low: level - .15 });
+    if (failure === 'deep-retest') rows.at(-1).low = level - 2;
+    const frame = analyzeSignalFrame({ timeframe: '15m', candles: sell ? mirror(rows) : rows }, now);
+    assert.notEqual(frame.trigger, 'retest', `${sell} ${failure}`);
+  }
+});
+
+test('confirmed retest may become a candidate, but extreme RSI still blocks it', () => {
+  for (const sell of [false, true]) {
+    const feed = inputs(sell), { rows } = retestFixture();
+    feed[0].candles = sell ? mirror(rows) : rows;
+    const candidate = analyzeAdvancedSignal(meta, 'intraday', feed, now);
+    assert.equal(candidate.frames[0].trigger, 'retest'); assert.equal(candidate.status, 'candidate');
+    assert.equal(candidate.conviction, 100);
+    rows.at(-1).close += .07; rows.at(-1).high += .07;
+    feed[0].candles = sell ? mirror(rows) : rows;
+    const extreme = analyzeAdvancedSignal(meta, 'intraday', feed, now);
+    assert.equal(extreme.frames[0].trigger, 'retest'); assert.equal(extreme.status, 'wait');
+    assert.ok(extreme.conviction < 100); assert.ok(extreme.reasons.some(reason => reason.includes('ekstrem')));
+  }
+});
+
+test('multi-candle RSI recovery requires a strong price reclaim, not only a threshold crossing', () => {
+  for (const sell of [false, true]) {
+    const rows = candles('15m');
+    for (const [i, close] of [111, 111.3, 111.5, 111.9].entries()) {
+      Object.assign(rows[396 + i], { open: close - .2, high: close + .03, low: close - .23, close });
+    }
+    const frame = analyzeSignalFrame({ timeframe: '15m', candles: sell ? mirror(rows) : rows }, now);
+    assert.equal(frame.trigger, 'recovery');
+    assert.ok(sell ? frame.previousRsi < 55 && frame.rsi < 50 : frame.previousRsi > 45 && frame.rsi > 50,
+      'recovery must survive the candle after crossing 45/55');
+    rows.at(-2).high = 112;
+    const noReclaim = analyzeSignalFrame({ timeframe: '15m', candles: sell ? mirror(rows) : rows }, now);
+    assert.equal(noReclaim.trigger, null); assert.match(noReclaim.triggerNotes.join(' '), /EMA20/);
+  }
+});
+
+test('breakout stops respect the trigger candle, not just a nearby broken pivot', () => {
+  for (const sell of [false, true]) {
+    const frame = analyzeSignalFrame({ timeframe: '15m', candles: sell ? mirror(breakout('15m')) : breakout('15m') }, now);
+    const plan = referenceSignalPlan(frame, sell ? 'sell' : 'buy').plan;
+    assert.equal(frame.trigger, 'breakout');
+    assert.ok(sell ? plan.stopLoss > frame.triggerStop : plan.stopLoss < frame.triggerStop);
+  }
+});
+
+test('targets respect higher-timeframe obstacles without moving stops to fabricate reward', () => {
+  for (const side of ['buy', 'sell']) {
+    const direction = side === 'buy' ? 1 : -1;
+    const base = { timeframe: '15m', close: 100, atr: 2, support: null, resistance: null, structureLevels: [] };
+    const higher = { timeframe: '4H', structureLevels: [{ price: 100 + direction * 4, kind: side === 'buy' ? 'high' : 'low' }] };
+    const rejected = referenceSignalPlan(base, side, [base, higher]);
+    assert.equal(rejected.plan, null); assert.match(rejected.reason, /4H.*1,5R/);
+    higher.structureLevels[0].price = 100 + direction * 5;
+    const capped = referenceSignalPlan(base, side, [base, higher]).plan;
+    closeTo(capped.takeProfit, 100 + direction * 4.8); closeTo(capped.grossRiskReward, 1.6);
+    closeTo(capped.stopLoss, 100 - direction * 3); assert.equal(capped.secondTarget, null);
+    assert.equal(capped.obstacleTimeframe, '4H');
+  }
+});
+
+test('conditional targets cannot skip the next mapped pivot beyond their entry', () => {
+  const base = { timeframe: '15m', quality: 'fresh', close: 100, atr: 2, channelHigh: 101, channelLow: 99,
+    support: 98, resistance: 102, structureLevels: [{ price: 98 }, { price: 102 }, { price: 104 }] };
+  const frames = [base, { timeframe: '1H', quality: 'fresh', structureLevels: [] }, { timeframe: '4H', quality: 'fresh', structureLevels: [] }];
+  assert.equal(manualSignalScenarios(frames).some(plan => plan.side === 'buy'), false, '104 obstructs the projected buy TP');
+  base.structureLevels.pop(); frames[2].structureLevels.push({ price: 106 });
+  assert.equal(manualSignalScenarios(frames).some(plan => plan.side === 'buy'), false, 'higher-timeframe obstacle also applies');
+  frames[2].structureLevels[0].price = 107.5;
+  const plan = manualSignalScenarios(frames).find(plan => plan.side === 'buy');
+  assert.ok(plan); assert.equal(plan.obstacleTimeframe, '4H');
+  closeTo(plan.takeProfit, 107.3); assert.ok(plan.grossRiskReward < 2); assert.equal(plan.secondTarget, null);
+});
+
+test('mapped pivots require two closed right bars, never unconfirmed extrema', () => {
+  const rows = candles('15m'); rows.at(-2).high = 130;
+  const frame = analyzeSignalFrame({ timeframe: '15m', candles: rows }, now);
+  assert.equal(frame.structureLevels.some(level => level.price === 130), false);
+  assert.ok(frame.structureLevels.every(level => Date.parse(level.confirmedAt) <= now));
+  const next = { ...rows.at(-1), time: now / 1000 };
+  const confirmed = analyzeSignalFrame({ timeframe: '15m', candles: [...rows, next] }, now + 900_000);
+  const pivot = confirmed.structureLevels.find(level => level.price === 130);
+  assert.ok(pivot); assert.equal(Date.parse(pivot.confirmedAt), now + 900_000);
 });

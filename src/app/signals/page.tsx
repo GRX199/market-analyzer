@@ -157,6 +157,7 @@ function TradeLevels({ plan, scenario, row }: { plan: ReferencePlan; scenario?: 
       {[['Entry referensi', plan.entry], ['Stop Loss', plan.stopLoss], ['Take Profit 1', plan.takeProfit], ['Take Profit 2', plan.secondTarget]].map(([label, value]) => <div key={String(label)} className="rounded-lg bg-background/70 p-3"><dt className="text-xs text-muted-foreground">{label}</dt><dd className="mt-1 break-all text-lg font-semibold">{price(value as number | null)}</dd></div>)}
     </dl>
     <p className="mt-3 text-sm">R:R kotor 1:{number(plan.grossRiskReward)} · jarak SL {number(Math.abs(plan.entry - plan.stopLoss))} ({number(Math.abs(plan.entry - plan.stopLoss) / plan.entry * 100)}%)</p>
+    {plan.obstacle !== null && <p className="mt-2 text-sm">Penghalang target {plan.obstacleTimeframe ?? row.frames[0]?.timeframe}: <strong className="tabular-nums">{price(plan.obstacle)}</strong> · TP1 ditempatkan sebelum level ini.</p>}
     <p className="mt-2 text-xs leading-5 text-muted-foreground">{plan.basis} Belum termasuk spread, swap dan slippage.</p>
     {scenario && <><p className="mt-3 text-sm leading-6">{scenario.confirmation}</p><p className="mt-2 text-xs leading-5 text-amber-700 dark:text-amber-300">{scenario.invalidation}</p></>}
     <OrderTicket row={row} plan={plan} scenario={scenario} />
@@ -199,7 +200,7 @@ function SignalDetail({ row, now }: { row: AdvancedSignal; now: number }) {
       </section>
       <section aria-label="Rencana trading manual" className="space-y-3">
         <div><h3 className="text-lg font-semibold">Entry · Stop Loss · Take Profit</h3><p className="mt-1 text-sm leading-6 text-muted-foreground">{brokerBlocked ? 'Quote broker saat ini tidak lagi mendukung geometri rencana. Level lama disembunyikan; muat ulang untuk setup baru.' : plan ? 'Kandidat lolos filter pada candle terakhir dan pemeriksaan quote broker, bukan jaminan harga masih tersedia.' : 'Rencana bersyarat untuk dipantau, bukan instruksi entry sekarang. Dua arah adalah alternatif, bukan dua order sekaligus.'}</p></div>
-        {plan ? <TradeLevels row={row} plan={plan} /> : scenarios.length ? scenarios.map(scenario => <TradeLevels key={scenario.side} row={row} plan={scenario} scenario={scenario} />) : <p className="rounded-xl border border-dashed p-4 text-sm leading-6 text-muted-foreground">{expired ? 'Level kedaluwarsa disembunyikan. Muat ulang sebelum menilai entry.' : brokerBlocked ? 'Quote broker membuat R:R di bawah batas atau harga sudah melewati level. Jangan mengejar entry lama.' : status === 'unavailable' ? 'Data belum memenuhi pemeriksaan kualitas. Alasan dan timeframe yang bermasalah tercantum di bawah; harga tidak dibuat-buat.' : 'Belum ada level dekat harga yang layak dipantau (maksimal 3 ATR). Tunggu struktur baru.'}</p>}
+        {plan ? <TradeLevels row={row} plan={plan} /> : scenarios.length ? scenarios.map(scenario => <TradeLevels key={scenario.side} row={row} plan={scenario} scenario={scenario} />) : <p className="rounded-xl border border-dashed p-4 text-sm leading-6 text-muted-foreground">{expired ? 'Level kedaluwarsa disembunyikan. Muat ulang sebelum menilai entry.' : brokerBlocked ? 'Quote broker membuat R:R di bawah batas atau harga sudah melewati level. Jangan mengejar entry lama.' : status === 'unavailable' ? 'Data belum memenuhi pemeriksaan kualitas. Alasan dan timeframe yang bermasalah tercantum di bawah; harga tidak dibuat-buat.' : 'Belum ada rencana bersyarat dengan jarak entry ≤3 ATR dan ruang target ≥1,5R setelah memeriksa struktur tiga timeframe. Pantau channel dan penghalang pada detail struktur di bawah.'}</p>}
         {status === 'candidate' && row.source.kind === 'broker' && <section aria-label="Pemeriksaan harga entry broker" className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm">
           <h4 className="font-semibold">{execution.status === 'blocked' ? 'Jangan gunakan entry lama' : 'Bandingkan dengan quote broker'}</h4>
           <p className="mt-2 leading-6">{execution.reason}</p>
@@ -208,6 +209,16 @@ function SignalDetail({ row, now }: { row: AdvancedSignal; now: number }) {
         </section>}
         <p className="text-xs leading-5 text-amber-700 dark:text-amber-300">Kandidat memakai close candle; entry skenario adalah proyeksi setelah pemicu. Tombol Kirim order hanya aktif untuk snapshot broker dan tetap divalidasi ulang oleh worker MT5. Reference/spot tidak dapat dikirim langsung. Berlaku sampai {date(row.expiresAt)}.</p>
       </section>
+      {status !== 'stale' && status !== 'unavailable' && row.frames[0] && <section aria-label="Kualitas pemicu entry" className="rounded-xl border bg-muted/20 p-4 text-sm">
+        <div className="flex flex-wrap justify-between gap-2"><h3 className="font-semibold">Kualitas pemicu entry · {row.frames[0].timeframe}</h3><Badge variant="outline">{row.frames[0].trigger ? row.setup : 'Belum terkonfirmasi'}</Badge></div>
+        <dl className="mt-3 grid grid-cols-2 gap-3 tabular-nums">
+          <div><dt className="text-muted-foreground">Level yang diuji</dt><dd>{price(row.frames[0].triggerLevel ?? null)}</dd></div>
+          <div><dt className="text-muted-foreground">Body / rentang candle</dt><dd>{number(row.frames[0].bodyFraction == null ? null : row.frames[0].bodyFraction * 100, 0)}%</dd></div>
+          <div><dt className="text-muted-foreground">Posisi close searah</dt><dd>{number(row.frames[0].directionalClose == null ? null : row.frames[0].directionalClose * 100, 0)}%</dd></div>
+          <div><dt className="text-muted-foreground">Jarak dari EMA20</dt><dd>{number(row.frames[0].extensionAtr)} ATR</dd></div>
+        </dl>
+        <p className="mt-3 text-xs leading-5 text-muted-foreground">Breakout perlu buffer 0,1 ATR, body ≥35% dan posisi close ≥65% searah bias. Retest pertama atau recovery dengan konfirmasi harga dapat menjadi pemicu alternatif. Semua memakai candle final; skor bukan peluang profit.</p>
+      </section>}
       <div className="grid grid-cols-2 gap-4">
         <div><p className="text-sm text-muted-foreground">Bias harga</p><p className="text-lg font-semibold">{biasLabel(row.bias)}</p></div>
         <div><p className="text-sm text-muted-foreground">Kesepakatan aturan</p><p className="text-lg font-semibold">{expired ? '—' : number(row.conviction, 0)} / 100</p></div>
@@ -233,7 +244,7 @@ function SignalDetail({ row, now }: { row: AdvancedSignal; now: number }) {
         <summary className="cursor-pointer font-medium">Struktur, volatilitas & kualitas data</summary>
         <div className="mt-4 space-y-4">{row.frames.map(frame => <div key={frame.timeframe} className="border-t pt-3">
           <p className="font-semibold">{frame.timeframe} · {frame.bars} candle final</p>
-          <p className="mt-1 leading-6 text-muted-foreground">Close {price(frame.close)} · ATR {price(frame.atr)} ({number(frame.atrPercent)}%)<br />Support {price(frame.support)} · Resistance {price(frame.resistance)}<br />EMA50 {price(frame.ema50)} · EMA200 {price(frame.ema200)}<br />+DI {number(frame.plusDI, 1)} · −DI {number(frame.minusDI, 1)}<br />Volume relatif {number(frame.relativeVolume)} · bukan konfirmasi spot Forex<br />Candle selesai {date(frame.lastClosedAt)}<br />Valid sampai {date(frame.expiresAt)}</p>
+          <p className="mt-1 leading-6 text-muted-foreground">Close {price(frame.close)} · ATR {price(frame.atr)} ({number(frame.atrPercent)}%)<br />Support {price(frame.support)} · Resistance {price(frame.resistance)}<br />Channel 20 bar {price(frame.channelLow)} – {price(frame.channelHigh)}<br />EMA50 {price(frame.ema50)} · EMA200 {price(frame.ema200)}<br />+DI {number(frame.plusDI, 1)} · −DI {number(frame.minusDI, 1)}<br />Volume relatif {number(frame.relativeVolume)} · bukan konfirmasi spot Forex<br />Candle selesai {date(frame.lastClosedAt)}<br />Valid sampai {date(frame.expiresAt)}</p>
           {frame.notes.map(note => <p key={note} className="mt-2 text-amber-600 dark:text-amber-400">{note}</p>)}
         </div>)}</div>
       </details>
