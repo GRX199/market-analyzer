@@ -4,6 +4,15 @@ from types import SimpleNamespace as NS
 import signal_market_bridge as bridge
 
 class BridgeTests(unittest.TestCase):
+    def test_expanded_catalog_mapping_does_not_enable_symbols_or_swap_tokens(self):
+        for base in ['BCH', 'TRX', 'SUI', 'NEAR', 'UNI', 'AAVE', 'POL']:
+            for suffix in ['', 'm', 'c']:
+                self.assertEqual(bridge.canonical_symbol(base + 'USD' + suffix), base + '/USDT')
+        for base in ['NZDJPY', 'CADCHF', 'NZDCAD', 'NZDCHF', 'EURNZD', 'GBPNZD']:
+            self.assertEqual(bridge.canonical_symbol(base + 'c'), base[:3] + '/' + base[3:])
+        self.assertEqual(bridge.canonical_symbol('MATICUSDm'), 'MATIC/USDT')
+        self.assertNotIn('SUIUSD', bridge.DEFAULT_BASES)
+
     def test_exact_symbols(self):
         for instrument, key in [('BTCUSDm', 'BTC/USDT'), ('XAUUSDc', 'XAU/USD'), ('EURJPYm', 'EUR/JPY'), ('USDIDRm', 'USD/IDR')]:
             self.assertEqual(bridge.canonical_symbol(instrument), key)

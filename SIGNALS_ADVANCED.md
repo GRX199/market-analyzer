@@ -22,6 +22,28 @@ Pemindaian mencakup katalog Forex/Crypto yang sudah ada, maksimal enam instrumen
 
 ## Arti status
 
+### Katalog tambahan — 16 September 2026
+
+Katalog Signals kini memuat 36 Forex/metals dan 19 crypto:
+
+- Forex tambahan: NZD/JPY, CAD/CHF, NZD/CAD, NZD/CHF, EUR/NZD, GBP/NZD.
+- Crypto tambahan: BCH/USDT, TRX/USDT, SUI/USDT, NEAR/USDT, UNI/USDT, AAVE/USDT.
+- Polygon aktif menggunakan POL/USDT, mengikuti [pengumuman pergantian MATIC ke POL Binance](https://www.binance.com/en/support/announcement/detail/619c4929fc3f4a0d9df7f9ae1d4519a5).
+  Referensi MATIC lama tidak diubah menjadi POL diam-diam; histori/order lama tidak dimigrasikan.
+- **Market populer lainnya** menyediakan 12 tombol akses cepat. Sumber harga
+  yang dipilih pengguna tetap dipertahankan; daftar ini bukan ranking likuiditas/profit live.
+- Pemeriksaan read-only Binance: ketujuh pair BCH/TRX/SUI/NEAR/UNI/AAVE/POL
+  berstatus TRADING, dan masing-masing mengembalikan 319 candle final fresh
+  pada M15/H1/H4. Ini pemeriksaan saat pengembangan, bukan jaminan feed selalu tersedia.
+  TON belum ditambahkan karena status exchangeInfo saat pemeriksaan adalah BREAK.
+- Instrumen Forex baru memerlukan snapshot MT5 milik pengguna, atau mode reference
+  yang dipilih eksplisit. Tidak ada penggantian feed broker secara diam-diam.
+  Belum memverifikasi bahwa setiap instrumen tersedia pada akun Exness pengguna.
+- Pembaruan pengenal simbol pada sumber bridge tidak mengubah daftar simbol aktif,
+  env, batas risiko, izin akun, atau worker yang sedang berjalan. Tidak membutuhkan migration.
+
+### Status analisis
+
 | Status | Makna |
 | --- | --- |
 | Kandidat setup | Semua aturan model terpenuhi pada candle selesai; bukan rekomendasi pasti menang atau instruksi order. |

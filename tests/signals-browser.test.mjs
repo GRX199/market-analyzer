@@ -36,6 +36,15 @@ try {
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   await page.route('**/*', route => route.request().url().startsWith(origin) ? route.continue() : route.abort());
   await page.goto(origin);
+  await page.getByText('Market populer lainnya', { exact: true }).click();
+  await page.getByRole('region', { name: 'Akses cepat crypto' }).getByRole('button', { name: 'Sui', exact: true }).click();
+  await page.getByRole('heading', { name: 'SUI/USDT', exact: true }).first().waitFor();
+  assert.equal(await page.evaluate(() => window.fixture.requests.at(-1).symbol), 'SUI/USDT');
+  assert.equal(await page.evaluate(() => window.fixture.requests.at(-1).source), 'market');
+  await page.getByRole('region', { name: 'Akses cepat forex' }).getByRole('button', { name: 'NZDJPY', exact: true }).click();
+  await page.getByRole('heading', { name: 'NZD/JPY', exact: true }).first().waitFor();
+  await page.getByRole('button', { name: 'Fokus XAUUSD', exact: true }).click();
+  await page.getByRole('heading', { name: 'XAU/USD', exact: true }).first().waitFor();
   const quality = page.getByRole('region', { name: 'Kualitas pemicu entry' });
   await quality.waitFor(); await page.getByText('Entry referensi', { exact: true }).waitFor();
   await page.getByText('Breakout terkonfirmasi', { exact: true }).waitFor();

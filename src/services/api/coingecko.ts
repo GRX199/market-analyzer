@@ -20,9 +20,16 @@ const SYMBOL_TO_COINGECKO_ID: Record<string, string> = {
   'DOT/USDT': 'polkadot',
   'LINK/USDT': 'chainlink',
   'MATIC/USDT': 'matic-network',
+  'POL/USDT': 'polygon-ecosystem-token',
   'AVAX/USDT': 'avalanche-2',
   'SHIB/USDT': 'shiba-inu',
   'LTC/USDT': 'litecoin',
+  'BCH/USDT': 'bitcoin-cash',
+  'TRX/USDT': 'tron',
+  'SUI/USDT': 'sui',
+  'NEAR/USDT': 'near',
+  'UNI/USDT': 'uniswap',
+  'AAVE/USDT': 'aave',
 };
 
 const COINGECKO_ID_TO_SYMBOL: Record<string, string> = Object.fromEntries(

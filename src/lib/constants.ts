@@ -85,6 +85,12 @@ export const FOREX_SYMBOLS = [
   { symbol: 'AUD/NZD', name: 'Australian Dollar / New Zealand Dollar' },
   { symbol: 'CAD/JPY', name: 'Canadian Dollar / Japanese Yen' },
   { symbol: 'CHF/JPY', name: 'Swiss Franc / Japanese Yen' },
+  { symbol: 'NZD/JPY', name: 'New Zealand Dollar / Japanese Yen' },
+  { symbol: 'CAD/CHF', name: 'Canadian Dollar / Swiss Franc' },
+  { symbol: 'NZD/CAD', name: 'New Zealand Dollar / Canadian Dollar' },
+  { symbol: 'NZD/CHF', name: 'New Zealand Dollar / Swiss Franc' },
+  { symbol: 'EUR/NZD', name: 'Euro / New Zealand Dollar' },
+  { symbol: 'GBP/NZD', name: 'British Pound / New Zealand Dollar' },
   // Exotics
   { symbol: 'USD/SGD', name: 'US Dollar / Singapore Dollar' },
   { symbol: 'USD/HKD', name: 'US Dollar / Hong Kong Dollar' },
@@ -124,11 +130,33 @@ export const CRYPTO_SYMBOLS = [
   { symbol: 'DOGE/USDT', name: 'Dogecoin' },
   { symbol: 'DOT/USDT', name: 'Polkadot' },
   { symbol: 'LINK/USDT', name: 'Chainlink' },
-  { symbol: 'MATIC/USDT', name: 'Polygon' },
+  { symbol: 'POL/USDT', name: 'Polygon Ecosystem Token' },
   { symbol: 'AVAX/USDT', name: 'Avalanche' },
   { symbol: 'SHIB/USDT', name: 'Shiba Inu' },
   { symbol: 'LTC/USDT', name: 'Litecoin' },
+  { symbol: 'BCH/USDT', name: 'Bitcoin Cash' },
+  { symbol: 'TRX/USDT', name: 'TRON' },
+  { symbol: 'SUI/USDT', name: 'Sui' },
+  { symbol: 'NEAR/USDT', name: 'NEAR Protocol' },
+  { symbol: 'UNI/USDT', name: 'Uniswap' },
+  { symbol: 'AAVE/USDT', name: 'Aave' },
 ];
+
+// Editorial shortcuts, not a live liquidity ranking or a broker allow-list.
+export const SIGNAL_QUICK_MARKETS = [
+  { symbol: 'EUR/USD', label: 'EURUSD', marketType: 'forex' },
+  { symbol: 'GBP/USD', label: 'GBPUSD', marketType: 'forex' },
+  { symbol: 'USD/JPY', label: 'USDJPY', marketType: 'forex' },
+  { symbol: 'GBP/JPY', label: 'GBPJPY', marketType: 'forex' },
+  { symbol: 'XAG/USD', label: 'Silver', marketType: 'forex' },
+  { symbol: 'NZD/JPY', label: 'NZDJPY', marketType: 'forex' },
+  { symbol: 'ETH/USDT', label: 'Ethereum', marketType: 'crypto' },
+  { symbol: 'SOL/USDT', label: 'Solana', marketType: 'crypto' },
+  { symbol: 'XRP/USDT', label: 'XRP', marketType: 'crypto' },
+  { symbol: 'BCH/USDT', label: 'Bitcoin Cash', marketType: 'crypto' },
+  { symbol: 'TRX/USDT', label: 'TRON', marketType: 'crypto' },
+  { symbol: 'SUI/USDT', label: 'Sui', marketType: 'crypto' },
+] as const;
 
 export const ALL_SYMBOLS = [
   ...FOREX_SYMBOLS.map(s => ({ ...s, marketType: 'forex' as MarketType })),

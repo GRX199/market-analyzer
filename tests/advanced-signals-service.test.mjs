@@ -143,7 +143,8 @@ function makeRoute({ user = { id: 'test-user' }, authError = null, authThrows = 
 
 test('advanced API rejects invalid inputs without auth or provider work', async () => {
   const route = makeRoute();
-  for (const query of ['?source=unknown', '?market=stocks', '?horizon=1H', '?page=-1', '?page=999', '?page=9', '?symbol=UNKNOWN', '?symbol=', '?market=forex&symbol=BTCUSD']) {
+  const firstInvalidPage = Math.ceil((constants.FOREX_SYMBOLS.length + constants.CRYPTO_SYMBOLS.length) / 6);
+  for (const query of ['?source=unknown', '?market=stocks', '?horizon=1H', '?page=-1', '?page=999', `?page=${firstInvalidPage}`, '?symbol=UNKNOWN', '?symbol=', '?market=forex&symbol=BTCUSD']) {
     const response = await route.request(query); assert.equal(response.status, 400, query);
     assert.match(response.headers.get('Cache-Control'), /no-store/);
   }
@@ -174,6 +175,34 @@ test('default page includes XAU/BTC, all catalog entries reachable and aliases r
     const body = await result.json(); assert.equal(body.scope.symbol, canonical); assert.equal(body.data.length, 1);
     assert.equal(body.data[0].symbol, canonical);
   }
+});
+
+test('expanded popular markets resolve without aliasing old tokens or changing source', async () => {
+  const route = makeRoute();
+  const expected = ['BCH/USDT', 'TRX/USDT', 'SUI/USDT', 'NEAR/USDT', 'UNI/USDT', 'AAVE/USDT', 'POL/USDT',
+    'NZD/JPY', 'CAD/CHF', 'NZD/CAD', 'NZD/CHF', 'EUR/NZD', 'GBP/NZD'];
+  for (const symbol of expected) {
+    const source = symbol.endsWith('/USDT') ? 'market' : 'mt5';
+    const response = await route.request(`?symbol=${encodeURIComponent(symbol)}&source=${source}`);
+    assert.equal(response.status, 200, symbol);
+    const body = await response.json();
+    assert.equal(body.scope.symbol, symbol); assert.equal(body.scope.source, source);
+    assert.equal(body.data.length, 1); assert.equal(body.data[0].symbol, symbol);
+  }
+  const symbols = [...constants.FOREX_SYMBOLS, ...constants.CRYPTO_SYMBOLS].map(asset => asset.symbol);
+  assert.equal(new Set(symbols).size, symbols.length);
+  assert.equal(constants.FOREX_SYMBOLS.length, 36); assert.equal(constants.CRYPTO_SYMBOLS.length, 19);
+  assert.equal(symbols.includes('MATIC/USDT'), false);
+  assert.equal((await route.request('?symbol=MATICUSDT')).status, 400, 'do not silently reinterpret stored MATIC orders as POL');
+  for (const item of constants.SIGNAL_QUICK_MARKETS) assert.ok(symbols.includes(item.symbol), item.symbol);
+});
+
+test('new crypto CoinGecko identities are exact; old MATIC identity stays separate', () => {
+  const gecko = loadModule(`${source('src/services/api/coingecko.ts')}\nexport const __ids = SYMBOL_TO_COINGECKO_ID;`, {});
+  for (const [symbol, id] of Object.entries({ BCH: 'bitcoin-cash', TRX: 'tron', SUI: 'sui', NEAR: 'near', UNI: 'uniswap', AAVE: 'aave', POL: 'polygon-ecosystem-token' })) {
+    assert.equal(gecko.__ids[`${symbol}/USDT`], id); assert.equal(gecko.isCryptoSymbol(`${symbol}/USDT`), true);
+  }
+  assert.equal(gecko.__ids['MATIC/USDT'], 'matic-network');
 });
 
 test('scanner exception returns non-cacheable service failure', async () => {

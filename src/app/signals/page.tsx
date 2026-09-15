@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import { SIGNAL_QUICK_MARKETS } from '@/lib/constants';
 import type { AdvancedSignal, SetupStatus, SignalHorizon, ReferencePlan, ManualScenario } from '@/lib/analysis/advanced-signals';
 import { advanceSignalClock, assessBrokerPlan, effectiveSignalStatus as effectiveStatus, signalDisplayTime, type SignalReceiptClock } from '@/lib/analysis/signal-presentation';
 import { manualOrderLabel, validateManualOrderDraft, type ManualOrderType } from '@/lib/trading/manual-order-ticket';
@@ -317,6 +318,14 @@ export default function SignalScannerPage() {
       <div className="flex gap-2"><Button variant="outline" onClick={() => setLegacy(true)}>Scanner klasik</Button><Button onClick={() => void refresh()} disabled={loading}><RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />Muat ulang</Button></div>
     </header>
     <div className="flex flex-wrap items-center gap-2"><Button variant="outline" onClick={() => focusSymbol('XAU/USD')}>Fokus XAUUSD</Button><Button variant="outline" onClick={() => focusSymbol('BTC/USDT')}>Fokus BTC</Button><Button variant="ghost" onClick={() => { setMarket('all'); setSymbol(null); setPage(0); }}>Semua Forex & Crypto</Button></div>
+    <details className="rounded-xl border bg-card p-4">
+      <summary className="cursor-pointer text-sm font-semibold">Market populer lainnya</summary>
+      <div className="mt-3 grid gap-4 sm:grid-cols-2">{(['forex', 'crypto'] as const).map(kind => <section key={kind} aria-label={`Akses cepat ${kind}`}>
+        <h2 className="mb-2 text-xs font-medium text-muted-foreground">{kind === 'forex' ? 'Forex & Silver' : 'Crypto'}</h2>
+        <div className="flex flex-wrap gap-2">{SIGNAL_QUICK_MARKETS.filter(asset => asset.marketType === kind).map(asset => <Button key={asset.symbol} variant={symbol === asset.symbol ? 'default' : 'outline'} size="sm" aria-pressed={symbol === asset.symbol} onClick={() => focusSymbol(asset.symbol)}>{asset.label}</Button>)}</div>
+      </section>)}</div>
+      <p className="mt-3 text-xs leading-5 text-muted-foreground">Akses cepat, bukan peringkat profit. Pilihan sumber harga tetap dipertahankan. Crypto spot memakai USDT; order MT5 hanya tersedia jika simbol didukung akun, snapshot bridge segar, dan worker mengizinkannya. Instrumen lain tersedia di filter Instrumen.</p>
+    </details>
     <section aria-label="Filter Signals" className="grid gap-4 rounded-xl border bg-card p-4 sm:grid-cols-4">
       <FilterSelect label="Market" value={market} options={[{ value: 'all', label: 'Forex & Crypto' }, { value: 'forex', label: 'Forex & Metals' }, { value: 'crypto', label: 'Crypto' }]} onChange={value => { if (value === 'all' || value === 'forex' || value === 'crypto') { setMarket(value); setPage(0); setSymbol(null); } }} />
       <FilterSelect label="Sumber harga" value={source} options={[{ value: 'market', label: 'MT5 Forex + Binance Spot' }, { value: 'mt5', label: 'MT5 Broker · Forex & Crypto' }, { value: 'reference', label: 'Reference / Yahoo' }]} onChange={value => { if (value === 'market' || value === 'mt5' || value === 'reference') setSource(value); }} />

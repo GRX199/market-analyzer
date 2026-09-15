@@ -9,6 +9,8 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    // Generated browser-test bundle (source fixtures remain linted in tests/).
+    "local-reports/signals-ui/**",
   ]),
   {
     rules: {
