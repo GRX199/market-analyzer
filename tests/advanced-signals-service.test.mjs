@@ -180,7 +180,7 @@ test('default page includes XAU/BTC, all catalog entries reachable and aliases r
 test('expanded popular markets resolve without aliasing old tokens or changing source', async () => {
   const route = makeRoute();
   const expected = ['BCH/USDT', 'TRX/USDT', 'SUI/USDT', 'NEAR/USDT', 'UNI/USDT', 'AAVE/USDT', 'POL/USDT',
-    'NZD/JPY', 'CAD/CHF', 'NZD/CAD', 'NZD/CHF', 'EUR/NZD', 'GBP/NZD'];
+    'NZD/JPY', 'CAD/CHF', 'NZD/CAD', 'NZD/CHF', 'EUR/NZD', 'GBP/NZD', 'USD/CNH', 'USD/NOK', 'USD/SEK', 'USD/PLN', 'EUR/NOK', 'EUR/SEK', 'GBP/SEK'];
   for (const symbol of expected) {
     const source = symbol.endsWith('/USDT') ? 'market' : 'mt5';
     const response = await route.request(`?symbol=${encodeURIComponent(symbol)}&source=${source}`);
@@ -191,7 +191,7 @@ test('expanded popular markets resolve without aliasing old tokens or changing s
   }
   const symbols = [...constants.FOREX_SYMBOLS, ...constants.CRYPTO_SYMBOLS].map(asset => asset.symbol);
   assert.equal(new Set(symbols).size, symbols.length);
-  assert.equal(constants.FOREX_SYMBOLS.length, 36); assert.equal(constants.CRYPTO_SYMBOLS.length, 26);
+  assert.equal(constants.FOREX_SYMBOLS.length, 43); assert.equal(constants.CRYPTO_SYMBOLS.length, 26);
   assert.equal(symbols.includes('MATIC/USDT'), false);
   assert.equal((await route.request('?symbol=MATICUSDT')).status, 400, 'do not silently reinterpret stored MATIC orders as POL');
   for (const item of constants.SIGNAL_QUICK_MARKETS) assert.ok(symbols.includes(item.symbol), item.symbol);

@@ -8,7 +8,7 @@ class BridgeTests(unittest.TestCase):
         for base in ['BCH', 'TRX', 'SUI', 'NEAR', 'UNI', 'AAVE', 'POL']:
             for suffix in ['', 'm', 'c']:
                 self.assertEqual(bridge.canonical_symbol(base + 'USD' + suffix), base + '/USDT')
-        for base in ['NZDJPY', 'CADCHF', 'NZDCAD', 'NZDCHF', 'EURNZD', 'GBPNZD']:
+        for base in ['NZDJPY', 'CADCHF', 'NZDCAD', 'NZDCHF', 'EURNZD', 'GBPNZD', 'USDCNH', 'USDNOK', 'USDSEK', 'USDPLN', 'EURNOK', 'EURSEK', 'GBPSEK']:
             self.assertEqual(bridge.canonical_symbol(base + 'c'), base[:3] + '/' + base[3:])
         self.assertEqual(bridge.canonical_symbol('MATICUSDm'), 'MATIC/USDT')
         self.assertNotIn('SUIUSD', bridge.DEFAULT_BASES)

@@ -24,9 +24,11 @@ Pemindaian mencakup katalog Forex/Crypto yang sudah ada, maksimal enam instrumen
 
 ### Katalog tambahan — 16 September 2026
 
-Katalog Signals kini memuat 36 Forex/metals dan 26 crypto:
+Katalog Signals kini memuat 43 Forex/metals dan 26 crypto:
 
 - Forex tambahan: NZD/JPY, CAD/CHF, NZD/CAD, NZD/CHF, EUR/NZD, GBP/NZD.
+- Forex lanjutan: USD/CNH, USD/NOK, USD/SEK, USD/PLN, EUR/NOK, EUR/SEK,
+  dan GBP/SEK.
 - Crypto tambahan: BCH/USDT, TRX/USDT, SUI/USDT, NEAR/USDT, UNI/USDT, AAVE/USDT.
 - Crypto lanjutan: ATOM/USDT, ETC/USDT, XLM/USDT, FIL/USDT, ARB/USDT,
   OP/USDT, dan INJ/USDT.

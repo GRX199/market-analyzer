@@ -91,6 +91,13 @@ export const FOREX_SYMBOLS = [
   { symbol: 'NZD/CHF', name: 'New Zealand Dollar / Swiss Franc' },
   { symbol: 'EUR/NZD', name: 'Euro / New Zealand Dollar' },
   { symbol: 'GBP/NZD', name: 'British Pound / New Zealand Dollar' },
+  { symbol: 'USD/CNH', name: 'US Dollar / Chinese Yuan Offshore' },
+  { symbol: 'USD/NOK', name: 'US Dollar / Norwegian Krone' },
+  { symbol: 'USD/SEK', name: 'US Dollar / Swedish Krona' },
+  { symbol: 'USD/PLN', name: 'US Dollar / Polish Zloty' },
+  { symbol: 'EUR/NOK', name: 'Euro / Norwegian Krone' },
+  { symbol: 'EUR/SEK', name: 'Euro / Swedish Krona' },
+  { symbol: 'GBP/SEK', name: 'British Pound / Swedish Krona' },
   // Exotics
   { symbol: 'USD/SGD', name: 'US Dollar / Singapore Dollar' },
   { symbol: 'USD/HKD', name: 'US Dollar / Hong Kong Dollar' },
