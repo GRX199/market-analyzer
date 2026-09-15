@@ -62,9 +62,16 @@ test('authenticated APIs pass through and browser redirects preserve session coo
 
 test('worker endpoints remain independent of browser auth outages', async () => {
   const { proxy, calls } = await loadProxy({ throws: true });
-  for (const [path, method] of [['/api/trades/claim', 'POST'], ['/api/trade-intelligence/ingest', 'POST'], ['/api/trading/notifications', 'POST'], ['/api/trades/id', 'PATCH']]) {
+  for (const [path, method] of [['/api/trades/claim', 'POST'], ['/api/forex-news/orders/process', 'POST'], ['/api/trade-intelligence/ingest', 'POST'], ['/api/trading/notifications', 'POST'], ['/api/trades/id', 'PATCH']]) {
     const response = await proxy(new NextRequest(`https://test${path}`, { method }));
     assert.equal(response.headers.get('x-middleware-next'), '1');
   }
   assert.equal(calls(), 0);
+});
+
+test('news calendar, schedule CRUD and GET processing do not bypass browser auth', async () => {
+  const { proxy } = await loadProxy();
+  for (const [path, method] of [['/api/forex-news', 'GET'], ['/api/forex-news/orders', 'POST'], ['/api/forex-news/orders', 'DELETE'], ['/api/forex-news/orders/process', 'GET']]) {
+    assert.equal((await proxy(new NextRequest(`https://test${path}`, { method }))).status, 401);
+  }
 });

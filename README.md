@@ -58,6 +58,15 @@ terpilih mengulang seluruh pemeriksaan dan memanggil MT5 satu kali.
 Real di UI tidak dapat membuka akun real tanpa konfigurasi server dan guard MT5
 real yang terpisah.
 
+## Kalender news forex dan order terjadwal
+
+Menu **Forex News & Orders** (`/forex-news`) menyediakan jadwal ekonomi, skenario
+dampak mata uang, serta pending order pada waktu/syarat rilis yang Anda pilih.
+Memerlukan migration `20260915000200_add_forex_news_schedules.sql` dan worker
+manual terbaru. Kalender gratis tidak memiliki angka aktual; pemicu berdasarkan
+aktual memerlukan `TRADING_ECONOMICS_API_KEY` server dengan akses kalender.
+Lihat [panduan setup dan penggunaan](docs/forex-news.md) sebelum menjadwalkan.
+
 ## Pemeriksaan wajib
 
 ```powershell

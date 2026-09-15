@@ -26,6 +26,8 @@ const CLAIM_FIELDS = [
   'stop_loss',
   'take_profit',
   'account_kind',
+  'news_valid_until',
+  'broker_account_ref',
   'status',
   'worker_id',
   'claimed_at',
@@ -33,6 +35,11 @@ const CLAIM_FIELDS = [
   'idempotency_key',
   'attempts',
 ].join(',');
+
+function needsNewsWorker(claim: unknown, ref: unknown): boolean {
+  const row = claim as { news_valid_until?: string; broker_account_ref?: string };
+  return !!row.news_valid_until && row.broker_account_ref !== ref;
+}
 
 function json(
   body: Record<string, unknown>,
@@ -96,6 +103,11 @@ export async function POST(request: Request) {
     return json({ error: validated.error }, 400);
   }
 
+  const newsAccountRef = (body as Record<string, unknown>).news_account_ref;
+  if (newsAccountRef !== undefined && (typeof newsAccountRef !== 'string' || !/^[a-f0-9]{24}$/.test(newsAccountRef))) {
+    return json({ error: 'Invalid news worker account reference' }, 400);
+  }
+
   let admin;
   try {
     admin = getSupabaseAdminClient();
@@ -120,6 +132,9 @@ export async function POST(request: Request) {
     return json({ error: 'Failed to inspect worker claim state' }, 500);
   }
   if (existingClaim) {
+    if (needsNewsWorker(existingClaim, newsAccountRef)) {
+      return json({ error: 'Updated news-capable worker on the original account is required to recover this claim' }, 409);
+    }
     return json({ trades: [existingClaim], recovered: true }, 200);
   }
 
@@ -129,6 +144,7 @@ export async function POST(request: Request) {
     owner_user_id: ownerUserId,
     limit: validated.data.limit,
     account_kind: validated.data.account_kind ?? 'demo',
+    news_account_ref: newsAccountRef ?? null,
   });
 
   if (error) {
@@ -154,6 +170,9 @@ export async function POST(request: Request) {
       return json({ error: 'Failed to inspect worker claim state' }, 500);
     }
     if (racedClaim) {
+      if (needsNewsWorker(racedClaim, newsAccountRef)) {
+        return json({ error: 'Updated news-capable worker on the original account is required' }, 409);
+      }
       return json({ trades: [racedClaim], recovered: true }, 200);
     }
   }
