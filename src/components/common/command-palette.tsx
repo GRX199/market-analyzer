@@ -22,6 +22,7 @@ const marketIcons: Record<string, string> = {
 };
 
 const quickActions = [
+  { label: 'Lihat sinyal trading', detail: 'Tinjau Entry, SL dan TP', href: '/signals', icon: Radar },
   { label: 'Cari peluang pasar', detail: 'Buka screener multi-aset', href: '/screener', icon: Radar },
   { label: 'Pantau robot forex', detail: 'Buka monitor strategi Forex M15', href: '/forex-robot', icon: Radar },
   { label: 'Periksa kesiapan robot', detail: 'Cek koneksi dan status operasional', href: '/operations', icon: ServerCog },
@@ -63,8 +64,8 @@ export function CommandPalette() {
 
   return (
     <>
-      <CommandDialog open={open} onOpenChange={setOpen}>
-        <CommandInput placeholder="Cari aset, halaman, atau perintah..." />
+      <CommandDialog title="Cari aset atau fitur" description="Ketik untuk mencari. Gunakan panah dan Enter untuk memilih." open={open} onOpenChange={setOpen}>
+        <CommandInput aria-label="Cari aset atau fitur" placeholder="Cari aset, halaman, atau perintah..." />
         <CommandList>
           <CommandEmpty>Tidak ada hasil yang cocok.</CommandEmpty>
 

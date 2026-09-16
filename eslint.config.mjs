@@ -11,6 +11,7 @@ const eslintConfig = defineConfig([
     ".next/**",
     // Generated browser-test bundle (source fixtures remain linted in tests/).
     "local-reports/signals-ui/**",
+    "local-reports/workspace-ui/**",
   ]),
   {
     rules: {

@@ -9,11 +9,10 @@ export function MarketSelector() {
 
   return (
     <Tabs value={selectedMarket} onValueChange={(value) => setSelectedMarket(value as typeof selectedMarket)}>
-      <TabsList className="bg-muted/50 w-full sm:w-auto overflow-x-auto">
+      <TabsList aria-label="Kategori pasar" className="bg-muted/50 w-full sm:w-auto">
         {MARKET_TYPES.map((mt) => (
           <TabsTrigger key={mt.value} value={mt.value} className="gap-1.5 data-[state=active]:bg-background">
-            <span>{mt.icon}</span>
-            <span>{mt.label}</span>
+            <span>{mt.value === 'all' ? 'Semua' : mt.value === 'stocks' ? 'Saham' : mt.label}</span>
           </TabsTrigger>
         ))}
       </TabsList>

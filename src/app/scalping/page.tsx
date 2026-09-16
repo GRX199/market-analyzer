@@ -229,10 +229,10 @@ export default function ScalpingDashboard() {
     <DashboardLayout>
       <div className="relative z-10 space-y-6">
         <BrokerRuntimeNotice market="crypto" />
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4 p-4 rounded-xl border bg-card shadow-sm">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="h-6 w-6 text-emerald-500" />
+        <div className="flex flex-col items-start justify-between gap-4 rounded-xl border bg-card p-4 xl:flex-row xl:items-center">
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <ShieldCheck className="h-6 w-6 shrink-0 text-emerald-500" />
               <h1 className="text-2xl font-semibold tracking-tight">Analisis M1 Binance</h1>
               <Badge variant="outline">Bukan sinyal BTC H1</Badge>
             </div>
@@ -243,9 +243,9 @@ export default function ScalpingDashboard() {
             </Badge>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex max-w-full flex-wrap items-center gap-3">
             <Select value={symbol} onValueChange={handleSymbolChange}>
-              <SelectTrigger className="w-[140px] font-bold"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-[140px] font-bold" aria-label="Pasangan Crypto"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {ALL_SYMBOLS.filter(s => s.marketType === 'crypto').map(s => (
                   <SelectItem key={s.symbol} value={s.symbol}>{s.symbol}</SelectItem>
@@ -288,7 +288,7 @@ export default function ScalpingDashboard() {
         </div>
 
         {connectionError && (
-          <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
             <span>{connectionError}</span>
             {!isConnected && (
               <Button type="button" size="sm" variant="outline" onClick={reconnect}>

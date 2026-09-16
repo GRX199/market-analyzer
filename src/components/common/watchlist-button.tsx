@@ -53,7 +53,9 @@ export function WatchlistButton({ symbol, name = symbol, marketType, className }
         className
       )}
       onClick={toggleWatchlist}
-      title={isWatched ? "Remove from watchlist" : "Add to watchlist"}
+      title={isWatched ? "Hapus dari pantauan" : "Tambah ke pantauan"}
+      aria-label={`${isWatched ? 'Hapus' : 'Tambah'} ${symbol} ${isWatched ? 'dari' : 'ke'} pantauan`}
+      aria-pressed={isWatched}
     >
       <Star
         className={cn(

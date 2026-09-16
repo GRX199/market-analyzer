@@ -76,11 +76,12 @@ test('workspace navigation is grouped and mobile-first without duplicating accou
   assert.match(dashboardLayout, /<MobileBottomNav \/>/);
   assert.match(mobileNav, /aria-label="Navigasi utama mobile"/);
   assert.match(login, /showPassword/);
-  assert.match(login, /Row Level Security aktif/);
+  assert.match(login, /Data akun hanya tersedia setelah Anda masuk/);
   assert.match(commandPalette, /Aksi cepat/);
   assert.match(commandPalette, /Periksa kesiapan robot/);
   assert.match(sidebar, /href: '\/forex-robot', label: 'Robot Forex'/);
-  assert.match(mobileNav, /href: '\/forex-robot', label: 'Forex'/);
+  assert.match(mobileNav, /href: '\/signals', label: 'Sinyal'/);
+  assert.match(mobileNav, /href: '\/operations', label: 'Status MT5'/);
   assert.match(watcher, /const shouldBootstrapAccount = pathname !== '\/login'/);
   assert.match(watcher, /\[loadFromSupabase, shouldBootstrapAccount\]/);
   assert.doesNotMatch(watcher, /\[loadFromSupabase, pathname\]/);

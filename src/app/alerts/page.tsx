@@ -9,7 +9,7 @@ import { Bell, Plus, Settings, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -94,7 +94,7 @@ export default function AlertsPage() {
 
   return (
     <DashboardLayout>
-      <div className="mb-8 flex items-center justify-between">
+      <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold mb-2">Price & Signal Alerts</h1>
           <p className="text-muted-foreground">Manage your notifications for specific market conditions.</p>
@@ -107,15 +107,17 @@ export default function AlertsPage() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Create New Alert</DialogTitle>
+              <DialogDescription>Pilih aset dan kondisi yang memicu notifikasi Anda.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium">Asset Symbol</label>
+                <label htmlFor="alert-symbol" className="text-sm font-medium">Asset Symbol</label>
                 <Popover open={openSymbol} onOpenChange={setOpenSymbol}>
                   <PopoverTrigger
                     render={(
                       <Button
                         variant="outline"
+                        id="alert-symbol"
                         role="combobox"
                         aria-expanded={openSymbol}
                         className="w-full justify-between font-normal"
@@ -127,7 +129,7 @@ export default function AlertsPage() {
                   </PopoverTrigger>
                   <PopoverContent className="w-[300px] p-0" align="start">
                     <Command>
-                      <CommandInput placeholder="Search asset (e.g., BTC/USDT)..." />
+                      <CommandInput aria-label="Cari aset untuk peringatan" placeholder="Search asset (e.g., BTC/USDT)..." />
                       <CommandList>
                         <CommandEmpty>No supported asset found.</CommandEmpty>
                         <CommandGroup>
@@ -160,9 +162,9 @@ export default function AlertsPage() {
                 </Popover>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Market Type</label>
+                <label htmlFor="alert-market" className="text-sm font-medium">Market Type</label>
                 <Select value={newAlert.marketType} disabled>
-                  <SelectTrigger>
+                  <SelectTrigger id="alert-market">
                     <SelectValue placeholder="Select market" />
                   </SelectTrigger>
                   <SelectContent>
@@ -173,7 +175,7 @@ export default function AlertsPage() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Condition</label>
+                <label htmlFor="alert-condition" className="text-sm font-medium">Condition</label>
                 <Select
                   value={newAlert.alertType}
                   onValueChange={(value) => {
@@ -184,7 +186,7 @@ export default function AlertsPage() {
                     });
                   }}
                 >
-                  <SelectTrigger><SelectValue placeholder="Select condition" /></SelectTrigger>
+                  <SelectTrigger id="alert-condition"><SelectValue placeholder="Select condition" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="price_above">Price goes above</SelectItem>
                     <SelectItem value="price_below">Price goes below</SelectItem>
@@ -196,7 +198,7 @@ export default function AlertsPage() {
               {newAlert.alertType === 'signal_change' ? (
                 <>
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">Timeframe</label>
+                    <label htmlFor="alert-timeframe" className="text-sm font-medium">Timeframe</label>
                     <Select
                       value={newAlert.timeframe}
                       onValueChange={(value) => {
@@ -207,7 +209,7 @@ export default function AlertsPage() {
                         });
                       }}
                     >
-                      <SelectTrigger><SelectValue placeholder="Select timeframe" /></SelectTrigger>
+                      <SelectTrigger id="alert-timeframe"><SelectValue placeholder="Select timeframe" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="15m">15 Minutes</SelectItem>
                         <SelectItem value="1H">1 Hour</SelectItem>
@@ -217,7 +219,7 @@ export default function AlertsPage() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">Target Signal</label>
+                    <label htmlFor="alert-signal" className="text-sm font-medium">Target Signal</label>
                     <Select
                       value={newAlert.targetSignal}
                       onValueChange={(value) => {
@@ -228,7 +230,7 @@ export default function AlertsPage() {
                         });
                       }}
                     >
-                      <SelectTrigger><SelectValue placeholder="Select target signal" /></SelectTrigger>
+                      <SelectTrigger id="alert-signal"><SelectValue placeholder="Select target signal" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="strong_buy">Strong Buy</SelectItem>
                         <SelectItem value="buy">Buy</SelectItem>
@@ -240,8 +242,9 @@ export default function AlertsPage() {
                 </>
               ) : (
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Target Price</label>
+                  <label htmlFor="alert-price" className="text-sm font-medium">Target Price</label>
                   <Input 
+                    id="alert-price"
                     type="number"
                     placeholder="e.g. 60000" 
                     value={newAlert.targetValue} 
@@ -269,6 +272,7 @@ export default function AlertsPage() {
                 
                 <div className="flex gap-2 pt-2">
                   <Input 
+                    aria-label="Telegram Chat ID"
                     placeholder="Enter Telegram Chat ID" 
                     value={tempChatId}
                     onChange={(e) => setTempChatId(e.target.value)}
@@ -343,10 +347,10 @@ export default function AlertsPage() {
                       {alert.isActive ? 'Active' : 'Paused'}
                     </Badge>
                   )}
-                  <Button variant="ghost" size="icon" onClick={() => toggleAlert(alert.id)} disabled={alert.isTriggered}>
+                  <Button variant="ghost" size="icon" onClick={() => toggleAlert(alert.id)} disabled={alert.isTriggered} aria-label={`${alert.isActive ? 'Jeda' : 'Aktifkan'} peringatan ${alert.symbol}`}>
                     <Settings className="h-4 w-4 text-muted-foreground" />
                   </Button>
-                  <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600 hover:bg-red-500/10" onClick={() => removeAlert(alert.id)}>
+                  <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600 hover:bg-red-500/10" onClick={() => removeAlert(alert.id)} aria-label={`Hapus peringatan ${alert.symbol}`}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>

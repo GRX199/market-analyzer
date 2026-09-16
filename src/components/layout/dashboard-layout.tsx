@@ -32,7 +32,7 @@ function WorkspaceBootSkeleton() {
   return (
     <div className="flex min-h-screen bg-background" role="status" aria-live="polite">
       <span className="sr-only">Memverifikasi sesi akun</span>
-      <aside className="hidden w-64 border-r border-border/70 bg-card/60 p-4 md:block">
+      <aside className="hidden w-60 border-r bg-card p-4 lg:block">
         <div className="flex items-center gap-3 border-b border-border/60 pb-4">
           <Skeleton className="h-9 w-9 rounded-xl" />
           <div className="space-y-2">
@@ -128,19 +128,20 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-transparent flex">
+    <div className="workspace-shell flex min-h-dvh bg-background">
+      <a href="#workspace-content" className="skip-link">Lewati ke konten</a>
       <DisclaimerModal />
       <CommandPalette />
       <Sidebar />
       <div 
         className={cn(
-          "flex-1 flex flex-col min-h-screen transition-all duration-300 w-full overflow-hidden",
-          sidebarCollapsed ? "md:ml-16" : "md:ml-64"
+          "flex min-w-0 flex-1 flex-col",
+          sidebarCollapsed ? "lg:ml-[72px]" : "lg:ml-60"
         )}
       >
         <Navbar />
-        <main className="flex-1 w-full max-w-full overflow-x-hidden p-4 pb-28 md:p-6">
-          <div className="mx-auto w-full max-w-[1600px]">{children}</div>
+        <main id="workspace-content" tabIndex={-1} className="workspace-content min-w-0 flex-1 px-4 pt-6 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 lg:px-8 lg:py-8">
+          <div className="mx-auto w-full min-w-0 max-w-[1440px]">{children}</div>
         </main>
         <MobileBottomNav />
       </div>

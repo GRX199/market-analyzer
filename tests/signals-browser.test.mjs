@@ -32,7 +32,7 @@ const playwright = process.env.PLAYWRIGHT_TEST_MODULE ? await import(pathToFileU
 let browser;
 try {
   browser = await playwright.chromium.launch({ headless: true, channel: 'msedge' });
-  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: 'reduce' });
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   await page.route('**/*', route => route.request().url().startsWith(origin) ? route.continue() : route.abort());
   await page.goto(origin);
@@ -46,12 +46,21 @@ try {
   await page.getByRole('button', { name: 'Fokus XAUUSD', exact: true }).click();
   await page.getByRole('heading', { name: 'XAU/USD', exact: true }).first().waitFor();
   const quality = page.getByRole('region', { name: 'Kualitas pemicu entry' });
+  await page.getByText('Lihat alasan & indikator analisis', { exact: true }).click();
   await quality.waitFor(); await page.getByText('Entry referensi', { exact: true }).waitFor();
   await page.getByText('Breakout terkonfirmasi', { exact: true }).waitFor();
   await page.getByText('Ruang target lintas timeframe', { exact: true }).waitFor();
   const levels = page.getByRole('region', { name: 'Rencana trading manual' });
   await levels.getByRole('button', { name: 'BUY LIMIT', exact: true }).click();
   await page.getByRole('dialog').waitFor();
+  for (const width of [360, 768, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.waitForTimeout(80);
+    const bounds = await page.getByRole('dialog').boundingBox();
+    await page.screenshot({ path: path.join(out, `order-dialog-${width}.png`), animations: 'disabled' });
+    assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= width && bounds.y >= 0 && bounds.y + bounds.height <= 845, `order dialog fits ${width}px: ${JSON.stringify(bounds)}`);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `order dialog overflow ${width}px`);
+  }
   assert.equal(await page.getByRole('button', { name: 'Kirim order', exact: true }).isDisabled(), true);
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Take Profit 2 · referensi opsional', { exact: true }).fill('');
@@ -80,6 +89,7 @@ try {
   // A reload keeps the same ID for the exact same parameters in this browser tab.
   await page.reload();
   await page.getByRole('heading', { name: 'XAU/USD', exact: true }).first().waitFor();
+  await page.getByText('Lihat alasan & indikator analisis', { exact: true }).click();
   await levels.getByRole('button', { name: 'BUY LIMIT', exact: true }).click();
   await dialog.getByLabel('Take Profit 2 · referensi opsional', { exact: true }).fill('');
   await confirmation.check();

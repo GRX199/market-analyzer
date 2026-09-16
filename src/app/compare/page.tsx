@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -9,38 +9,43 @@ import { ALL_SYMBOLS } from '@/lib/constants';
 import { Columns3, LayoutGrid, Square, Columns } from 'lucide-react';
 import { CandlestickChart } from '@/components/charts/candlestick-chart';
 import { OHLCV } from '@/types/market';
-import { useEffect, useState as useReactState } from 'react';
 
 // Wrapper component to fetch data and render chart for the compare grid
 function CompareChartWrapper({ symbol }: { symbol: string }) {
-  const [data, setData] = useReactState<OHLCV[]>([]);
-  const [loading, setLoading] = useReactState(true);
+  const [data, setData] = useState<OHLCV[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
+    const controller = new AbortController();
     async function loadData() {
       setLoading(true);
+      setError(false);
+      setData([]);
       try {
         const safeSymbol = encodeURIComponent(symbol.replace('/', '-'));
-        const res = await fetch(`/api/market/${safeSymbol}?chart=true&timeframe=1D`);
+        const res = await fetch(`/api/market/${safeSymbol}?chart=true&timeframe=1D`, { signal: controller.signal });
         const result = await res.json();
-        if (result.success && result.data?.chart) {
-          setData(result.data.chart);
-        }
+        if (!res.ok || !result.success || !Array.isArray(result.data?.chart) || !result.data.chart.length) throw new Error('Chart unavailable');
+        if (!controller.signal.aborted) setData(result.data.chart);
       } catch (err) {
-        console.error('Failed to load chart for', symbol);
+        if (!controller.signal.aborted) setError(true);
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     }
     loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [symbol]);
+    return () => controller.abort();
+  }, [symbol, attempt]);
 
   if (loading) {
-    return <div className="absolute inset-0 flex items-center justify-center text-muted-foreground animate-pulse text-sm">Loading chart...</div>;
+    return <div role="status" className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm">Memuat chart {symbol}…</div>;
   }
 
-  return <CandlestickChart data={data} height={typeof window !== 'undefined' ? window.innerHeight / 2 - 100 : 300} />;
+  if (error) return <div className="flex h-full flex-col items-center justify-center gap-3 p-4 text-center"><p role="alert" className="text-sm text-muted-foreground">Chart {symbol} belum dapat dimuat.</p><Button variant="outline" onClick={() => setAttempt(value => value + 1)}>Muat ulang chart</Button></div>;
+
+  return <CandlestickChart data={data} height={320} />;
 }
 
 type LayoutType = '1x1' | '2x1' | '2x2';
@@ -83,12 +88,12 @@ export default function MultiChartPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-4 h-[calc(100vh-8rem)] flex flex-col">
+      <div className="space-y-4 flex flex-col">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shrink-0">
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-3">
               <Columns3 className="w-6 h-6 text-primary" />
-              Multi-Chart Compare
+              Bandingkan chart
             </h1>
           </div>
           
@@ -98,6 +103,8 @@ export default function MultiChartPage() {
               size="icon" 
               className="h-8 w-8"
               onClick={() => setLayout('1x1')}
+              aria-label="Tampilkan satu chart"
+              aria-pressed={layout === '1x1'}
             >
               <Square className="w-4 h-4" />
             </Button>
@@ -106,6 +113,8 @@ export default function MultiChartPage() {
               size="icon" 
               className="h-8 w-8"
               onClick={() => setLayout('2x1')}
+              aria-label="Tampilkan dua chart"
+              aria-pressed={layout === '2x1'}
             >
               <Columns className="w-4 h-4" />
             </Button>
@@ -114,6 +123,8 @@ export default function MultiChartPage() {
               size="icon" 
               className="h-8 w-8"
               onClick={() => setLayout('2x2')}
+              aria-label="Tampilkan empat chart"
+              aria-pressed={layout === '2x2'}
             >
               <LayoutGrid className="w-4 h-4" />
             </Button>
@@ -122,10 +133,10 @@ export default function MultiChartPage() {
 
         <div className={`grid ${getGridClass()} gap-4 flex-1 min-h-0`}>
           {Array.from({ length: count }).map((_, i) => (
-            <Card key={i} className="flex flex-col h-full overflow-hidden border-border/50">
+            <Card key={i} className="flex flex-col overflow-hidden border-border/50">
               <div className="p-2 border-b border-border/50 bg-muted/20 shrink-0">
                 <Select value={symbols[i]} onValueChange={(v: any) => v && updateSymbol(i, v)}>
-                  <SelectTrigger className="h-8 text-xs font-semibold w-[200px] bg-background">
+                  <SelectTrigger aria-label={`Instrumen chart ${i + 1}`} className="font-semibold w-[200px] bg-background">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -137,7 +148,7 @@ export default function MultiChartPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <CardContent className="p-0 flex-1 relative bg-black/5">
+              <CardContent className="h-80 shrink-0 p-0 relative bg-black/5">
                 <div className="absolute inset-0">
                   <CompareChartWrapper symbol={symbols[i]} />
                 </div>

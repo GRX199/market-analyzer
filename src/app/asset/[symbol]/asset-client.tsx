@@ -22,6 +22,8 @@ export default function AssetClientPage({ symbol }: { symbol: string }) {
   const [candles, setCandles] = useState<OHLCV[]>([]);
   const [analysis, setAnalysis] = useState<FinalAnalysis | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const [crosshairPrice, setCrosshairPrice] = useState<number | null>(null);
   const [maOverlays, setMaOverlays] = useState([
     { period: 20, color: '#f59e0b', visible: true },
@@ -47,36 +49,42 @@ export default function AssetClientPage({ symbol }: { symbol: string }) {
   );
 
   useEffect(() => {
+    const controller = new AbortController();
     async function loadData() {
       setLoading(true);
+      setError(null);
       try {
         const safeSymbolPath = encodeURIComponent(symbol.replace('/', '-'));
         const [marketRes, analysisRes] = await Promise.all([
-          fetch(`/api/market/${safeSymbolPath}?chart=true&timeframe=${timeframe}`),
-          fetch(`/api/analysis/${safeSymbolPath}?timeframe=${timeframe}`)
+          fetch(`/api/market/${safeSymbolPath}?chart=true&timeframe=${timeframe}`, { signal: controller.signal }),
+          fetch(`/api/analysis/${safeSymbolPath}?timeframe=${timeframe}`, { signal: controller.signal })
         ]);
 
         const marketResult = await marketRes.json();
         const analysisResult = await analysisRes.json();
 
-        if (marketResult.success && marketResult.data) {
-          setAsset(marketResult.data.asset);
-          if (marketResult.data.chart) {
-            setCandles(marketResult.data.chart);
-          }
+        if (!marketRes.ok || !analysisRes.ok || !marketResult.success || !marketResult.data?.asset || !analysisResult.success || !analysisResult.data) {
+          throw new Error('Data belum tersedia');
         }
-
-        if (analysisResult.success && analysisResult.data) {
+        if (!controller.signal.aborted) {
+          setAsset(marketResult.data.asset);
+          setCandles(Array.isArray(marketResult.data.chart) ? marketResult.data.chart : []);
           setAnalysis(analysisResult.data);
         }
       } catch (error) {
-        console.error('Failed to load asset data', error);
+        if (!controller.signal.aborted) {
+          setAsset(null);
+          setAnalysis(null);
+          setCandles([]);
+          setError('Data harga atau analisis belum dapat dimuat. Periksa koneksi dan coba lagi; level lama tidak ditampilkan.');
+        }
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     }
     loadData();
-  }, [symbol, timeframe]);
+    return () => controller.abort();
+  }, [symbol, timeframe, attempt]);
 
   const getMarketStateDetails = (state: string | undefined, marketType: string | undefined) => {
     // Crypto is always open 24/7
@@ -116,8 +124,11 @@ export default function AssetClientPage({ symbol }: { symbol: string }) {
     }
   };
 
-  if (loading || !asset || !analysis) {
-    return <div className="p-8 text-center animate-pulse">Loading Analysis Engine...</div>;
+  if (loading) {
+    return <div role="status" className="rounded-xl border bg-card p-8 text-center">Memuat harga dan analisis {symbol}…</div>;
+  }
+  if (error || !asset || !analysis) {
+    return <section className="rounded-xl border bg-card p-6"><h1>{symbol}</h1><p role="alert" className="mt-3 text-sm text-muted-foreground">{error || 'Analisis belum tersedia.'}</p><div className="mt-5 flex flex-wrap items-center gap-3"><Button onClick={() => setAttempt(value => value + 1)}>Muat ulang analisis</Button><Link href="/market" className="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-primary">Kembali ke pasar</Link></div></section>;
   }
 
   return (
@@ -125,8 +136,8 @@ export default function AssetClientPage({ symbol }: { symbol: string }) {
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <Link href="/market" className="text-muted-foreground hover:text-foreground flex items-center gap-2 mb-2 text-sm">
-            <ArrowLeft className="h-4 w-4" /> Back to Market
+          <Link href="/market" className="text-muted-foreground hover:text-foreground flex min-h-11 items-center gap-2 mb-2 text-sm">
+            <ArrowLeft className="h-4 w-4" /> Kembali ke pasar
           </Link>
           <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl md:text-3xl font-bold">{asset.symbol}</h1>
@@ -134,7 +145,7 @@ export default function AssetClientPage({ symbol }: { symbol: string }) {
             <Badge variant="outline" className={`uppercase text-[10px] tracking-wider px-2 py-0.5 ${getMarketStateDetails(asset.marketState, asset.marketType).color}`}>
               {getMarketStateDetails(asset.marketState, asset.marketType).label}
             </Badge>
-            <Button variant="outline" size="icon" onClick={handleWatchlist} className="ml-2">
+            <Button variant="outline" size="icon" onClick={handleWatchlist} className="ml-2" aria-pressed={isWatched} aria-label={`${isWatched ? 'Hapus dari' : 'Tambah ke'} pantauan`}>
               <Star className={`h-4 w-4 ${isWatched ? 'fill-yellow-400 text-yellow-400' : ''}`} />
             </Button>
           </div>
@@ -152,14 +163,14 @@ export default function AssetClientPage({ symbol }: { symbol: string }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Main Chart Column */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="min-w-0 xl:col-span-2 space-y-6">
           <div className="rounded-xl border bg-card p-3 md:p-4 shadow-sm">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
-              <h3 className="font-semibold">Interactive Chart</h3>
+              <h2 className="font-semibold">Chart interaktif</h2>
               <Tabs value={timeframe} onValueChange={(v) => setTimeframe(v as Timeframe)}>
-                <TabsList className="h-8">
+                <TabsList aria-label="Timeframe chart" className="h-8">
                   {TIMEFRAMES.map(tf => (
                     <TabsTrigger key={tf.value} value={tf.value} className="text-xs px-2 h-6">
                       {tf.value}
@@ -182,6 +193,7 @@ export default function AssetClientPage({ symbol }: { symbol: string }) {
                 <button
                   key={ma.period}
                   onClick={() => toggleMA(ma.period)}
+                  aria-pressed={ma.visible}
                   className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all duration-200 ${
                     ma.visible 
                       ? 'border-transparent bg-white/10 shadow-sm' 
@@ -196,7 +208,7 @@ export default function AssetClientPage({ symbol }: { symbol: string }) {
           </div>
 
           {/* Indicators Summary */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 xl:grid-cols-5 gap-3 md:gap-4">
             <div className="bg-card p-4 rounded-xl border flex flex-col gap-1">
               <span className="text-sm text-muted-foreground">Technical Score</span>
               <p className="text-xl font-mono font-bold text-primary">{analysis.technical.score}/100</p>

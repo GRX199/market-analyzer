@@ -70,12 +70,8 @@ export default function LoginPage() {
 
   return (
     <main className="relative isolate flex min-h-screen items-center overflow-hidden px-4 py-10 sm:px-6 lg:px-8">
-      <div className="pointer-events-none absolute -left-32 top-0 -z-10 h-96 w-96 rounded-full bg-primary/20 blur-3xl" />
-      <div className="pointer-events-none absolute -right-20 bottom-0 -z-10 h-80 w-80 rounded-full bg-emerald-400/10 blur-3xl" />
-
-      <div className="mx-auto grid w-full max-w-6xl overflow-hidden rounded-[2rem] border border-border/70 bg-card/70 shadow-2xl shadow-slate-950/10 backdrop-blur-xl lg:grid-cols-[1.08fr_0.92fr]">
+      <div className="mx-auto grid w-full max-w-5xl overflow-hidden rounded-2xl border bg-card shadow-sm lg:grid-cols-2">
         <section className="relative hidden overflow-hidden bg-slate-950 p-10 text-white lg:flex lg:flex-col lg:justify-between">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(99,102,241,0.42),transparent_38%),radial-gradient(circle_at_bottom_left,rgba(16,185,129,0.22),transparent_36%)]" />
           <div className="relative">
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/15">
@@ -92,7 +88,7 @@ export default function LoginPage() {
                 <Sparkles className="h-3.5 w-3.5" />
                 Analisis, risiko, dan robot dalam satu tempat
               </div>
-              <h1 className="text-4xl font-semibold leading-tight tracking-tight">
+              <h1 className="text-3xl font-semibold leading-tight tracking-tight">
                 Kendalikan keputusan trading dengan konteks yang lebih lengkap.
               </h1>
               <p className="mt-5 max-w-md text-sm leading-6 text-slate-300">
@@ -130,14 +126,14 @@ export default function LoginPage() {
                 <LockKeyhole className="h-5 w-5" />
               </div>
               <h2 className="text-2xl font-bold tracking-tight">Selamat datang kembali</h2>
-              <p className="mt-2 text-sm text-muted-foreground">Masuk menggunakan akun Supabase yang sudah terdaftar.</p>
+              <p className="mt-2 text-sm text-muted-foreground">Gunakan email dan kata sandi akun Anda.</p>
             </div>
 
             <Card className="border-0 bg-transparent shadow-none ring-0 backdrop-blur-none">
               <form onSubmit={handleLogin}>
                 <CardHeader className="px-0 lg:hidden">
-                  <CardTitle>Akses Aman</CardTitle>
-                  <CardDescription>Masukkan akun Supabase yang sudah terdaftar.</CardDescription>
+                  <CardTitle>Masuk ke akun</CardTitle>
+                  <CardDescription>Gunakan email dan kata sandi yang sudah terdaftar.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-5 px-0">
                   {error && (
@@ -164,7 +160,7 @@ export default function LoginPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="password">Password</Label>
+                    <Label htmlFor="password">Kata sandi</Label>
                     <div className="relative">
                       <Input
                         id="password"
@@ -180,7 +176,7 @@ export default function LoginPage() {
                         type="button"
                         onClick={() => setShowPassword((visible) => !visible)}
                         className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-                        aria-label={showPassword ? 'Sembunyikan password' : 'Tampilkan password'}
+                        aria-label={showPassword ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}
                       >
                         {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </button>
@@ -188,9 +184,9 @@ export default function LoginPage() {
                   </div>
                 </CardContent>
                 <CardFooter className="mt-2 border-0 bg-transparent px-0">
-                  <Button type="submit" size="lg" className="w-full rounded-xl shadow-lg shadow-primary/20" disabled={loading}>
+                  <Button type="submit" size="lg" className="w-full" disabled={loading}>
                     {loading && <LoaderCircle className="h-4 w-4 animate-spin" />}
-                    {loading ? 'Memverifikasi…' : 'Masuk ke workspace'}
+                    {loading ? 'Memverifikasi…' : 'Masuk'}
                   </Button>
                 </CardFooter>
               </form>
@@ -198,7 +194,7 @@ export default function LoginPage() {
 
             <div className="mt-7 flex items-center justify-center gap-2 text-center text-xs text-muted-foreground">
               <ShieldCheck className="h-4 w-4 text-emerald-500" />
-              Sesi terverifikasi · Row Level Security aktif
+              Data akun hanya tersedia setelah Anda masuk.
             </div>
           </div>
         </section>

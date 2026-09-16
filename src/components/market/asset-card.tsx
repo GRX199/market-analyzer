@@ -3,10 +3,9 @@
 import Link from 'next/link';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { TrendingUp, TrendingDown, Minus, Star } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { AssetData } from '@/types/market';
 import { cn } from '@/lib/utils';
-import { TREND_COLORS } from '@/lib/constants';
 import { WatchlistButton } from '@/components/common/watchlist-button';
 import { RealtimePrice } from '@/components/market/realtime-price';
 
@@ -39,13 +38,6 @@ export function AssetCard({ asset, showWatchlistButton = true }: AssetCardProps)
 
   const marketStateInfo = getMarketStateDetails(asset.marketState, asset.marketType);
 
-  const formatPrice = (price: number | null | undefined) => {
-    if (price === null || price === undefined) return '0.00';
-    if (price > 1000) return price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    if (price > 1) return price.toFixed(4);
-    return price.toFixed(6);
-  };
-
   const formatVolume = (vol: number | null | undefined) => {
     if (vol === null || vol === undefined || vol === 0) return '0';
     if (vol >= 1e9) return (vol / 1e9).toFixed(1) + 'B';
@@ -55,17 +47,15 @@ export function AssetCard({ asset, showWatchlistButton = true }: AssetCardProps)
   };
 
   return (
-    <Link href={`/asset/${encodeURIComponent(asset.symbol)}`}>
-      <Card className="group hover:border-blue-500/30 hover:shadow-lg hover:shadow-blue-500/5 transition-all duration-300 cursor-pointer">
+      <Card className="relative h-full transition-colors hover:border-primary/50">
         <CardContent className="p-4">
           <div className="flex items-start justify-between mb-3">
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h3 className="font-bold text-sm">{asset.symbol}</h3>
+                <h3 className="font-semibold text-base"><Link href={`/asset/${encodeURIComponent(asset.symbol)}`} className="after:absolute after:inset-0 after:rounded-xl">{asset.symbol}</Link></h3>
                 <Badge
                   variant="outline"
-                  className="text-[9px] px-1.5 py-0 gap-0.5"
-                  style={{ color: TREND_COLORS[asset.trend], borderColor: TREND_COLORS[asset.trend] + '40' }}
+                  className="text-xs px-1.5 py-0 gap-1 text-muted-foreground"
                 >
                   <TrendIcon className="h-2.5 w-2.5" />
                   {asset.trend}
@@ -77,14 +67,14 @@ export function AssetCard({ asset, showWatchlistButton = true }: AssetCardProps)
               <p className="text-xs text-muted-foreground">{asset.name}</p>
             </div>
             {showWatchlistButton && (
-              <WatchlistButton 
+              <span className="relative z-10"><WatchlistButton
                 symbol={asset.symbol} 
                 name={asset.name} 
                 marketType={asset.marketType} 
-              />
+              /></span>
             )}
           </div>
-          <div className="flex items-end justify-between">
+          <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <RealtimePrice 
                 symbol={asset.symbol} 
@@ -116,6 +106,5 @@ export function AssetCard({ asset, showWatchlistButton = true }: AssetCardProps)
           </div>
         </CardContent>
       </Card>
-    </Link>
   );
 }

@@ -7,7 +7,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: "Segoe UI", Arial, sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
   --font-mono: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
   --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
@@ -49,18 +49,18 @@
 }
 
 html:root {
-  --background: oklch(0.975 0.008 255);
+  --background: #f6f8fb;
   --foreground: oklch(0.22 0.035 258);
-  --card: oklch(0.995 0.004 255);
+  --card: #ffffff;
   --card-foreground: oklch(0.22 0.035 258);
   --popover: oklch(0.995 0.004 255);
   --popover-foreground: oklch(0.22 0.035 258);
-  --primary: oklch(0.56 0.215 262);
+  --primary: #3155d9;
   --primary-foreground: oklch(0.985 0.005 255);
   --secondary: oklch(0.94 0.02 255);
   --secondary-foreground: oklch(0.27 0.045 258);
   --muted: oklch(0.945 0.012 255);
-  --muted-foreground: oklch(0.5 0.035 258);
+  --muted-foreground: #526079;
   --accent: oklch(0.93 0.035 255);
   --accent-foreground: oklch(0.3 0.08 260);
   --destructive: oklch(0.577 0.245 27.325);
@@ -72,8 +72,8 @@ html:root {
   --chart-3: oklch(0.73 0.17 70);
   --chart-4: oklch(0.62 0.21 25);
   --chart-5: oklch(0.64 0.16 310);
-  --radius: 0.875rem;
-  --sidebar: oklch(0.985 0.008 255);
+  --radius: 0.75rem;
+  --sidebar: #ffffff;
   --sidebar-foreground: oklch(0.22 0.035 258);
   --sidebar-primary: oklch(0.56 0.215 262);
   --sidebar-primary-foreground: oklch(0.985 0.005 255);
@@ -84,18 +84,18 @@ html:root {
 }
 
 html.dark {
-  --background: oklch(0.145 0.028 258);
+  --background: #101722;
   --foreground: oklch(0.955 0.012 255);
-  --card: oklch(0.19 0.03 258);
+  --card: #182230;
   --card-foreground: oklch(0.955 0.012 255);
-  --popover: oklch(0.19 0.03 258);
+  --popover: #182230;
   --popover-foreground: oklch(0.955 0.012 255);
-  --primary: oklch(0.68 0.18 258);
+  --primary: #9db4ff;
   --primary-foreground: oklch(0.15 0.035 258);
   --secondary: oklch(0.25 0.035 258);
   --secondary-foreground: oklch(0.955 0.012 255);
   --muted: oklch(0.235 0.026 258);
-  --muted-foreground: oklch(0.71 0.035 255);
+  --muted-foreground: #a8b5c9;
   --accent: oklch(0.28 0.055 258);
   --accent-foreground: oklch(0.96 0.012 255);
   --destructive: oklch(0.704 0.191 22.216);
@@ -107,7 +107,7 @@ html.dark {
   --chart-3: oklch(0.78 0.16 78);
   --chart-4: oklch(0.68 0.2 25);
   --chart-5: oklch(0.72 0.16 310);
-  --sidebar: oklch(0.175 0.03 258);
+  --sidebar: #151e2b;
   --sidebar-foreground: oklch(0.955 0.012 255);
   --sidebar-primary: oklch(0.68 0.18 258);
   --sidebar-primary-foreground: oklch(0.15 0.035 258);
@@ -123,14 +123,48 @@ html.dark {
   }
   body {
     @apply bg-background text-foreground;
-    background-image:
-      radial-gradient(circle at 12% -10%, color-mix(in oklab, var(--primary) 12%, transparent), transparent 32rem),
-      radial-gradient(circle at 92% 12%, color-mix(in oklab, var(--chart-2) 7%, transparent), transparent 28rem);
-    background-attachment: fixed;
+    line-height: 1.6;
   }
   html {
     @apply font-sans;
   }
+}
+
+/* Shared workspace rhythm; overflow is handled by the table/chart that needs it. */
+.workspace-content { container-type: inline-size; }
+.workspace-content h1 { font-size: clamp(1.5rem, 1.15rem + 1vw, 2rem); font-weight: 650; line-height: 1.25; letter-spacing: -0.025em; }
+.workspace-content :is(h1, h2, h3, p, dd) { overflow-wrap: anywhere; }
+.workspace-content :is([data-slot="card"], [data-slot="card-content"], [data-slot="tabs"], [data-slot="tabs-content"]) { min-width: 0; }
+.workspace-content [class*="text-[9px]"],
+.workspace-content [class*="text-[10px]"],
+.workspace-content [class*="text-[11px]"] { font-size: 0.75rem; line-height: 1.5; }
+
+/* Status text must remain readable on light cards, not just on dark charts. */
+html:not(.dark) .workspace-content :is(.text-green-400, .text-green-500, .text-green-600, .text-emerald-400, .text-emerald-500, .text-emerald-600) { color: #047857; }
+html:not(.dark) .workspace-content :is(.text-red-400, .text-red-500, .text-rose-400, .text-rose-500) { color: #b91c1c; }
+html:not(.dark) .workspace-content :is(.text-yellow-400, .text-yellow-500, .text-amber-400, .text-amber-500, .text-amber-600, .text-orange-400, .text-orange-500) { color: #92400e; }
+html:not(.dark) .workspace-content :is(.text-blue-400, .text-blue-500, .text-indigo-400, .text-indigo-500) { color: #3155d9; }
+
+/* Real target size, including compact controls used on older pages. */
+:is(button, [role="button"], [role="tab"], [role="combobox"], [data-slot="button"]) { min-height: 44px; min-width: 44px; }
+[data-slot="select-trigger"] { min-width: 44px; max-width: 100%; }
+[data-slot="select-value"] { min-width: 0; overflow: hidden; }
+[data-slot="select-item"], [data-slot="dropdown-menu-item"], [data-slot="command-item"] { min-height: 44px; }
+[data-slot="tabs-list"] { height: auto; min-height: 50px; max-width: 100%; flex-wrap: wrap; justify-content: flex-start; }
+[data-slot="tabs-trigger"] { flex-shrink: 0; }
+[data-slot="dialog-content"] { width: calc(100vw - 32px); max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; }
+[data-slot="dialog-footer"] { flex-wrap: wrap; }
+label:has(> input[type="checkbox"]) { min-height: 44px; }
+input[type="checkbox"] { accent-color: var(--primary); }
+[data-slot="input"], [data-slot="textarea"] { scroll-margin-top: 6rem; }
+
+:where(a, button, input, textarea, select, summary, [tabindex]):focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+summary { min-height: 44px; align-content: center; }
+.skip-link { position: fixed; top: 8px; left: 8px; z-index: 100; padding: 12px 18px; border-radius: 8px; background: var(--primary); color: var(--primary-foreground); transform: translateY(-160%); }
+.skip-link:focus { transform: translateY(0); }
+
+@media (max-width: 639px) {
+  [data-slot="select-trigger"], [data-slot="textarea"] { font-size: 1rem; }
 }
 
 ::selection {

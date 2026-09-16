@@ -196,7 +196,7 @@ export default function DashboardPage() {
     return (
       <DashboardLayout>
         <div className="mb-6">
-          <h1 className="text-3xl font-bold mb-2">Market Dashboard</h1>
+          <h1 className="text-3xl font-bold mb-2">Ringkasan pasar</h1>
           <MarketSelector />
         </div>
         <DashboardSkeleton />
@@ -208,7 +208,7 @@ export default function DashboardPage() {
     return (
       <DashboardLayout>
         <div className="mb-6">
-          <h1 className="text-3xl font-bold mb-2">Dashboard Pasar</h1>
+          <h1 className="text-3xl font-bold mb-2">Ringkasan pasar</h1>
           <MarketSelector />
         </div>
         <Card className="border-yellow-500/30 bg-yellow-500/5">
@@ -237,37 +237,34 @@ export default function DashboardPage() {
 
   return (
     <DashboardLayout>
-      <div className="mb-6 overflow-hidden rounded-3xl border border-border/70 bg-card/80 p-5 shadow-sm backdrop-blur md:mb-8 md:p-7">
+      <div className="mb-8">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-primary">
-              <span className="h-2 w-2 rounded-full bg-emerald-500 live-pulse-dot" />
-              Market intelligence
-            </div>
-            <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Dashboard Pasar</h1>
+            <p className="mb-2 text-sm font-medium text-primary">Beranda</p>
+            <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Ringkasan pasar</h1>
             <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-              Ringkasan tren lintas aset, pergerakan utama, dan kandidat sinyal dalam satu tampilan.
+              Pantau pergerakan pasar, lalu tinjau rencana trading Anda.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Link href="/screener" className={buttonVariants({ variant: 'outline', className: 'rounded-xl' })}>
-              Buka penyaring <ArrowRight className="h-4 w-4" />
+            <Link href="/signals" className={buttonVariants()}>
+              Buka sinyal <ArrowRight className="h-4 w-4" />
             </Link>
-            <Link href="/forex-robot" className={buttonVariants({ variant: 'outline', className: 'rounded-xl' })}>
-              <ServerCog className="h-4 w-4" /> Robot Forex
+            <Link href="/operations" className={buttonVariants({ variant: 'outline' })}>
+              <ServerCog className="h-4 w-4" /> Status MT5
             </Link>
             <Button
               type="button"
-              className="rounded-xl"
+              variant="ghost"
               onClick={() => void fetchData(true)}
               disabled={refreshing}
             >
               <RefreshCw className={cn('h-4 w-4', refreshing && 'animate-spin')} />
-              Perbarui
+              Perbarui data
             </Button>
           </div>
         </div>
-        <div className="mt-5 flex flex-col gap-3 border-t border-border/60 pt-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-6 flex flex-col gap-3 rounded-xl border bg-card p-3 xl:flex-row xl:items-center xl:justify-between">
           <MarketSelector />
           {lastRefresh && (
             <p className="text-xs text-muted-foreground">
@@ -288,7 +285,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Overall Trend</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Tren keseluruhan</CardTitle>
             {marketTrend === 'Neutral'
               ? <Activity className={`h-4 w-4 ${marketTrendColor}`} />
               : <TrendingUp className={`h-4 w-4 ${marketTrendColor}`} />}
@@ -296,46 +293,46 @@ export default function DashboardPage() {
           <CardContent>
             <div className={`text-2xl font-bold ${marketTrendColor}`}>{marketTrend}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              Based on {overview.totalAssets} assets
+              Dari {overview.totalAssets} aset
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Bullish Assets</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Aset menguat</CardTitle>
             <ArrowUpRight className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-500">{overview.bullishCount}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              {marketPercentage(overview.bullishCount)}% of market
+              {marketPercentage(overview.bullishCount)}% dari cakupan pasar
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Bearish Assets</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Aset melemah</CardTitle>
             <ArrowDownRight className="h-4 w-4 text-red-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-500">{overview.bearishCount}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              {marketPercentage(overview.bearishCount)}% of market
+              {marketPercentage(overview.bearishCount)}% dari cakupan pasar
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Sideways Assets</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Aset mendatar</CardTitle>
             <Activity className="h-4 w-4 text-yellow-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-yellow-500">{overview.sidewaysCount}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              {marketPercentage(overview.sidewaysCount)}% of market
+              {marketPercentage(overview.sidewaysCount)}% dari cakupan pasar
             </p>
           </CardContent>
         </Card>
@@ -346,7 +343,7 @@ export default function DashboardPage() {
         <div>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-green-500" /> Top Gainers
+              <TrendingUp className="h-5 w-5 text-green-500" /> Kenaikan terbesar
             </h2>
           </div>
           {overview.topGainers.length > 0 ? (
@@ -366,7 +363,7 @@ export default function DashboardPage() {
         <div>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold flex items-center gap-2">
-              <TrendingDown className="h-5 w-5 text-red-500" /> Top Losers
+              <TrendingDown className="h-5 w-5 text-red-500" /> Penurunan terbesar
             </h2>
           </div>
           {overview.topLosers.length > 0 ? (
@@ -387,11 +384,11 @@ export default function DashboardPage() {
         <div>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold flex items-center gap-2">
-              <Activity className="h-5 w-5 text-blue-500" /> Most Active (Volume)
+              <Activity className="h-5 w-5 text-blue-500" /> Volume paling aktif
             </h2>
           </div>
           {overview.mostActive.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
               {overview.mostActive.map(asset => (
                 <AssetCard key={asset.symbol} asset={asset} />
               ))}
@@ -407,7 +404,7 @@ export default function DashboardPage() {
         <div className="flex flex-col gap-2 mb-6">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <h2 className="text-xl md:text-2xl font-bold flex items-center gap-2">
-              <Activity className="h-5 w-5 md:h-6 md:w-6 text-primary" /> Entry Opportunities
+              <Activity className="h-5 w-5 md:h-6 md:w-6 text-primary" /> Sinyal teknikal klasik
             </h2>
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-2 bg-muted/30 p-1 rounded-lg border w-fit">
@@ -416,12 +413,12 @@ export default function DashboardPage() {
                   value={analysisMode}
                   onValueChange={(value) => setAnalysisMode(value as 'technical' | 'combined')}
                 >
-                  <SelectTrigger className="h-8 border-0 bg-transparent shadow-none text-xs w-[130px]">
+                  <SelectTrigger aria-label="Mode analisis klasik" className="border-0 bg-transparent shadow-none w-[160px]">
                     <SelectValue placeholder="Mode" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="combined">Combined (Overall)</SelectItem>
-                    <SelectItem value="technical">Technical Only</SelectItem>
+                    <SelectItem value="combined">Analisis gabungan</SelectItem>
+                    <SelectItem value="technical">Teknikal saja</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
