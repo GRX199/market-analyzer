@@ -32,7 +32,7 @@ export interface ReferencePlan {
   obstacleTimeframe?: AnalysisTimeframe | null;
 }
 export interface ManualScenario extends ReferencePlan {
-  kind: 'conditional-breakout'; triggerPrice: number; distanceAtr: number;
+  kind: 'conditional-breakout' | 'early-continuation'; triggerPrice: number; distanceAtr: number;
   confirmation: string; invalidation: string;
 }
 export interface AdvancedSignal {
@@ -343,18 +343,19 @@ export function referenceSignalPlan(frame: FrameAnalysis, side: 'buy' | 'sell', 
 }
 
 /** Watch levels, never an actionable signal. A future breakout needs a fresh analysis. */
-export function manualSignalScenarios(frames: FrameAnalysis[]): ManualScenario[] {
+export function manualSignalScenarios(frames: FrameAnalysis[], symbol?: string): ManualScenario[] {
   if (frames.length !== 3 || frames.some(frame => frame.quality !== 'fresh')) return [];
   const base = frames[0], atr = base.atr, close = base.close;
   if (atr === null || close === null || !finitePositive(atr) || !finitePositive(close)) return [];
-  return (['buy', 'sell'] as const).flatMap(side => {
+  const frequent = symbol === 'XAU/USD' || symbol === 'BTC/USDT';
+  const primary: ManualScenario[] = (['buy', 'sell'] as const).flatMap(side => {
     const buy = side === 'buy', channel = buy ? base.channelHigh : base.channelLow;
     if (channel === null || !finitePositive(channel)) return [];
     // Cross the channel and the known nearest pivot, rather than placing a TP
     // through a known obstacle. Further structure is unknown, not obstacle-free.
     const pivot = buy ? base.resistance : base.support;
     const boundary = buy ? Math.max(channel, pivot ?? channel, close) : Math.min(channel, pivot ?? channel, close);
-    const direction = buy ? 1 : -1, entry = boundary + direction * .1 * atr;
+    const direction = buy ? 1 : -1, entry = boundary + direction * (frequent ? .06 : .1) * atr;
     const distanceAtr = Math.abs(entry - close) / atr;
     if (distanceAtr > 3) return []; // Not a near-market watch opportunity.
     // Re-map ALL confirmed pivots at the proposed entry, not only the pivot
@@ -362,11 +363,28 @@ export function manualSignalScenarios(frames: FrameAnalysis[]): ManualScenario[]
     const evaluated = referenceSignalPlan({ ...base, close: entry, triggerStop: boundary }, side, frames);
     if (!evaluated.plan) return [];
     return [{ ...evaluated.plan, kind: 'conditional-breakout' as const, triggerPrice: boundary, distanceAtr,
-      basis: `Entry indikatif setelah breakout + buffer 0,1 ATR; proyeksi belum aktif. ${evaluated.plan.basis}`,
+      basis: `Entry indikatif setelah breakout + buffer ${frequent ? '0,06' : '0,1'} ATR; proyeksi belum aktif. ${evaluated.plan.basis}`,
       confirmation: `Tunggu candle ${base.timeframe} selesai ${buy ? 'di atas' : 'di bawah'} level pemicu; lalu pindai ulang. Tren ${frames.slice(1).map(frame => frame.timeframe).join('/')} harus mendukung ${side.toUpperCase()}, momentum dan ruang target harus diperiksa lagi.`,
       invalidation: 'Batal jika harga melewati SL sebelum konfirmasi, data kedaluwarsa, atau spread/berita membuat risiko tidak layak. Jangan memasang order otomatis dari skenario ini.',
     }];
   });
+  const early: ManualScenario[] = frequent && primary.length === 0 ? (['buy', 'sell'] as const).flatMap(side => {
+    const buy = side === 'buy', direction = buy ? 1 : -1;
+    const supporting = frames.slice(1).filter(frame => frame.bias === (buy ? 'bullish' : 'bearish')).length;
+    const opposing = frames.slice(1).filter(frame => frame.bias === (buy ? 'bearish' : 'bullish')).length;
+    const extended = (base.extensionAtr ?? Infinity) > 2.25 || (base.rangeAtr ?? Infinity) > 2.75;
+    if (base.bias !== (buy ? 'bullish' : 'bearish') || supporting < 1 || opposing > 0 || extended) return [];
+    const entry = close + direction * .04 * atr;
+    const boundary = close;
+    const evaluated = referenceSignalPlan({ ...base, close: entry, triggerStop: close - direction * 1.05 * atr }, side, frames);
+    if (!evaluated.plan || evaluated.plan.grossRiskReward < 1.25) return [];
+    return [{ ...evaluated.plan, kind: 'early-continuation' as const, triggerPrice: boundary, distanceAtr: .04,
+      basis: `Peluang awal ${buy ? 'BUY' : 'SELL'} khusus ${symbol}: momentum dan minimal satu timeframe pendukung searah. Ini bukan breakout terkonfirmasi. ${evaluated.plan.basis}`,
+      confirmation: `Tunggu candle ${base.timeframe} tetap ditutup searah dan quote broker masih segar. Setup ini lebih responsif (buffer 0,04 ATR, target minimal 1,25R) dan wajib diverifikasi ulang sebelum order.`,
+      invalidation: 'Batal jika candle berbalik, timeframe pendukung berubah, harga menyentuh SL, data kedaluwarsa, spread melebar, atau berita berdampak tinggi mendekat.',
+    }];
+  }) : [];
+  return primary.concat(early);
 }
 
 export function analyzeAdvancedSignal(meta: Pick<AdvancedSignal, 'symbol' | 'displaySymbol' | 'name' | 'marketType' | 'source'>,
@@ -416,5 +434,5 @@ export function analyzeAdvancedSignal(meta: Pick<AdvancedSignal, 'symbol' | 'dis
   return { ...meta, id: `${meta.symbol}:${horizon}:${base.lastClosedAt ?? 'none'}`, horizon, modelVersion: SIGNAL_MODEL_VERSION,
     generatedAt: new Date(validClock(now) ? now : 0).toISOString(), expiresAt, bias, status, conviction: unavailable || stale ? null : groups.reduce((sum, group) => sum + group.points, 0),
     setup: base.trigger === 'breakout' ? 'Breakout terkonfirmasi' : base.trigger === 'retest' ? 'Breakout retest' : base.trigger === 'recovery' ? 'Pullback recovery terkonfirmasi' : 'Menunggu pemicu',
-    frames, reasons, cautions, plan, groups, manualScenarios: unavailable || stale || plan ? [] : manualSignalScenarios(frames) };
+    frames, reasons, cautions, plan, groups, manualScenarios: unavailable || stale || plan ? [] : manualSignalScenarios(frames, meta.symbol) };
 }

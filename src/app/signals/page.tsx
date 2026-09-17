@@ -197,9 +197,10 @@ function OrderTicket({ row, plan, scenario, now, monotonicAt }: { row: AdvancedS
 }
 
 function TradeLevels({ plan, scenario, row, now, monotonicAt }: { plan: ReferencePlan; scenario?: ManualScenario; row: AdvancedSignal; now: number; monotonicAt: number }) {
+  const early = scenario?.kind === 'early-continuation';
   return <section className={cn('rounded-xl border p-4', plan.side === 'buy' ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-red-500/30 bg-red-500/5')}>
-    <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">{plan.side.toUpperCase()} · {scenario ? 'Tunggu breakout' : 'Kandidat candle'}</h3><Badge variant="outline">{scenario ? 'Bersyarat · belum aktif' : 'Candle final'}</Badge></div>
-    {scenario && <p className="mt-2 text-sm">Pemicu: close {plan.side === 'buy' ? 'di atas' : 'di bawah'} <strong className="tabular-nums">{price(scenario.triggerPrice)}</strong> · jarak entry {number(scenario.distanceAtr, 1)} ATR</p>}
+    <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">{plan.side.toUpperCase()} · {scenario ? (early ? 'Peluang awal' : 'Tunggu breakout') : 'Kandidat candle'}</h3><Badge variant="outline">{scenario ? (early ? 'Early · wajib konfirmasi' : 'Bersyarat · belum aktif') : 'Candle final'}</Badge></div>
+    {scenario && <p className="mt-2 text-sm">Pemicu: close {plan.side === 'buy' ? 'di atas' : 'di bawah'} <strong className="tabular-nums">{price(scenario.triggerPrice)}</strong> · jarak entry {number(scenario.distanceAtr, 2)} ATR</p>}
     <dl className="mt-4 grid grid-cols-2 gap-3 text-sm tabular-nums">
       {[['Entry referensi', plan.entry], ['Stop Loss', plan.stopLoss], ['Take Profit 1', plan.takeProfit], ['Take Profit 2', plan.secondTarget]].map(([label, value]) => <div key={String(label)} className="rounded-lg bg-background/70 p-3"><dt className="text-xs text-muted-foreground">{label}</dt><dd className="mt-1 break-all text-lg font-semibold">{price(value as number | null)}</dd></div>)}
     </dl>
