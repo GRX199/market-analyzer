@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { SignalType } from '@/types/analysis';
-import { getAssetList, getOHLCV, getMarketTypeForSymbol } from '@/services/market-data';
+import { getAssetList, getOHLCV, getAssetPrice, getMarketTypeForSymbol } from '@/services/market-data';
 import { getFundamentalData } from '@/services/fundamental-data';
 import { getNewsBySymbol } from '@/services/news-service';
 import { calculateTechnicalScore } from '@/lib/analysis/technical';
@@ -45,15 +45,20 @@ export async function GET(request: Request) {
     if (symbol) {
       // Analyze single symbol
       const marketType = getMarketTypeForSymbol(symbol);
-      const [ohlcv, fundamentalData, newsData] = await Promise.all([
+      const [ohlcv, fundamentalData, newsData, quote] = await Promise.all([
         getOHLCV(symbol, timeframe),
         getFundamentalData(symbol, marketType),
-        getNewsBySymbol(symbol)
+        getNewsBySymbol(symbol),
+        getAssetPrice(symbol),
       ]);
 
       if (!ohlcv || ohlcv.length === 0) return NextResponse.json({ success: true, data: [] });
       
       const technical = calculateTechnicalScore(ohlcv);
+      // The last candle close can be one full timeframe behind the live quote.
+      // Use the freshest provider quote for displayed entry and level geometry.
+      const currentPrice = quote && Number.isFinite(quote.price) && quote.price > 0
+        ? quote.price : ohlcv[ohlcv.length - 1].close;
       
       let finalScore = technical.score;
       let finalSignal = 'hold';
@@ -69,7 +74,7 @@ export async function GET(request: Request) {
         const finalAnalysis = calculateFinalScore(
           symbol,
           marketType,
-          ohlcv[ohlcv.length - 1].close,
+          currentPrice,
           technical,
           fundamental,
           sentiment
@@ -89,7 +94,7 @@ export async function GET(request: Request) {
           id: symbol,
           symbol,
           type: finalSignal,
-          priceAtSignal: ohlcv[ohlcv.length - 1].close,
+          priceAtSignal: currentPrice,
           date: new Date().toISOString(),
           score: finalScore
         }]
@@ -102,17 +107,22 @@ export async function GET(request: Request) {
 
     const signalsPromises = topAssets.map(async (asset) => {
       try {
-        const [ohlcv, fundamentalData, newsData] = await Promise.all([
+        const [ohlcv, fundamentalData, newsData, quote] = await Promise.all([
           getOHLCV(asset.symbol, timeframe),
           getFundamentalData(asset.symbol, asset.marketType),
-          getNewsBySymbol(asset.symbol)
+          getNewsBySymbol(asset.symbol),
+          getAssetPrice(asset.symbol),
         ]);
 
         if (!ohlcv || ohlcv.length === 0) return null;
         
         const technical = calculateTechnicalScore(ohlcv);
         const lastCandle = ohlcv[ohlcv.length - 1];
-        const entryPrice = lastCandle.close;
+        // Do not present a stale candle close as an actionable current entry.
+        // Quote and candle remain from the same provider; broker execution still
+        // requires a fresh MT5 quote and its own validation.
+        const entryPrice = quote && Number.isFinite(quote.price) && quote.price > 0
+          ? quote.price : lastCandle.close;
         
         let finalScore = technical.score;
         let finalSignal = 'hold';
